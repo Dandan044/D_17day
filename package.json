@@ -1,0 +1,32 @@
+{
+  "name": "seven-days",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "七日之前 / SEVEN DAYS BEFORE - 末世准备与生存文字经营 roguelite",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint:content": "tsx scripts/lint-content.ts",
+    "sim": "tsx scripts/simulate.ts"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.4.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}

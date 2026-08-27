@@ -1,0 +1,335 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', system-ui, 'Segoe UI', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+
+  /* 底层：深灰蓝，应急文件夹 + 机箱面板 */
+  --color-void: #07090b;
+  --color-ink: #0b0f13;
+  --color-panel: #121820;
+  --color-panel2: #18202a;
+  --color-panel3: #1f2933;
+  --color-line: #26313d;
+  --color-line2: #35424f;
+
+  --color-paper: #d3dbe2;
+  --color-dim: #97a4b1;
+  --color-faint: #63707c;
+
+  /* 琥珀 = 警示与关键数据 */
+  --color-amber: #e0a112;
+  --color-amberhi: #f5bd3f;
+  --color-amberdim: #7a5a12;
+
+  --color-alarm: #de4a3f;
+  --color-alarmhi: #f0655a;
+  --color-alarmdim: #6d2a25;
+
+  --color-safe: #3f9e6b;
+  --color-safehi: #55c188;
+
+  --color-info: #4a9fb5;
+  --color-infohi: #62c0d8;
+
+  --color-psyche: #8a7fd0;
+
+  --radius-panel: 3px;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-void);
+    color: var(--color-paper);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* 背景：极淡的工程网格 + 顶部渐晕，制造"档案室灯光"的感觉 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      linear-gradient(to bottom, rgba(224, 161, 18, 0.035), transparent 45%),
+      linear-gradient(to right, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+    background-size:
+      100% 100%,
+      32px 32px,
+      32px 32px;
+  }
+
+  ::selection {
+    background: var(--color-amberdim);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ink);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border: 2px solid var(--color-ink);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-line2);
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* ---- 面板 ---- */
+  .panel {
+    position: relative;
+    background: linear-gradient(180deg, var(--color-panel2), var(--color-panel));
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--color-line);
+    background: rgba(255, 255, 255, 0.022);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
+
+  /* ---- 按钮 ---- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--color-line2);
+    border-radius: var(--radius-panel);
+    background: var(--color-panel3);
+    color: var(--color-paper);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    transition:
+      background 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      transform 80ms ease;
+  }
+  .btn:hover:not(:disabled) {
+    background: #27333f;
+    border-color: var(--color-amberdim);
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .btn:disabled {
+    opacity: 0.38;
+  }
+
+  .btn-primary {
+    background: linear-gradient(180deg, #f0b52c, var(--color-amber));
+    border-color: #b8830e;
+    color: #17120a;
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #f8c748, #eaab18);
+    border-color: #d19a17;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: var(--color-line);
+    color: var(--color-dim);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-paper);
+  }
+
+  .btn-danger {
+    border-color: var(--color-alarmdim);
+    color: var(--color-alarmhi);
+    background: rgba(222, 74, 63, 0.08);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: rgba(222, 74, 63, 0.18);
+    border-color: var(--color-alarm);
+  }
+
+  /* ---- 排版 ---- */
+  .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .title-stamp {
+    font-family: var(--font-mono);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  /* 档案编号式的角标 */
+  .corner-mark::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 10px;
+    height: 10px;
+    border-top: 1px solid var(--color-amberdim);
+    border-right: 1px solid var(--color-amberdim);
+  }
+
+  /* ---- 数据条 ---- */
+  .bar {
+    position: relative;
+    height: 5px;
+    background: #0d1217;
+    border: 1px solid var(--color-line);
+    overflow: hidden;
+  }
+  .bar > i {
+    display: block;
+    height: 100%;
+    transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ---- 选项卡片 ---- */
+  .choice {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 11px 13px;
+    border: 1px solid var(--color-line);
+    border-left: 2px solid var(--color-line2);
+    border-radius: var(--radius-panel);
+    background: rgba(255, 255, 255, 0.018);
+    color: var(--color-paper);
+    font-size: 13.5px;
+    line-height: 1.55;
+    transition:
+      border-color 120ms ease,
+      background 120ms ease,
+      transform 80ms ease;
+  }
+  .choice:hover:not(:disabled) {
+    background: rgba(224, 161, 18, 0.07);
+    border-left-color: var(--color-amber);
+    border-color: var(--color-line2);
+  }
+  .choice:active:not(:disabled) {
+    transform: translateX(1px);
+  }
+  .choice:disabled {
+    opacity: 0.42;
+    border-left-color: var(--color-alarmdim);
+  }
+
+  /* ---- 标签徽记 ---- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border: 1px solid var(--color-line2);
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: var(--color-dim);
+    white-space: nowrap;
+  }
+
+  .hairline {
+    height: 1px;
+    background: linear-gradient(to right, var(--color-line), transparent);
+  }
+}
+
+@layer utilities {
+  .anim-in {
+    animation: seven-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .anim-rise {
+    animation: seven-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .anim-flash {
+    animation: seven-flash 900ms ease-out both;
+  }
+  .scroll-y {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+@keyframes seven-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes seven-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes seven-flash {
+  0% {
+    background-color: rgba(224, 161, 18, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
