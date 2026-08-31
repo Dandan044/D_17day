@@ -21,7 +21,7 @@ export const SITES: Site[] = [
     travelFuel: 0,
     travelStamina: 5,
     exposureBase: 12,
-    companionCap: 3,
+    companionCap: 0,
     waterCapMult: 0.75,
     pros: ['市中心，搜刮效率 +20%', '邻居社区已有交情', '外出不耗燃料'],
     cons: ['楼板承重有限，储水上限很低', '加固最多到 2 级', '停电后每次外出都要爬六层', '窗户太多，藏不住'],
@@ -29,6 +29,7 @@ export const SITES: Site[] = [
   {
     id: 'bungalow',
     name: '老城平房',
+    wip: true,
     codename: 'YARD-01',
     desc: '城南待拆迁的一片平房，你姑妈留下的。院子里有口废弃的压水井和一棵石榴树。墙是空心砖，一脚能踹穿，但地是你的。',
     cost: { cash: 6000, ap: 1 },
@@ -47,6 +48,7 @@ export const SITES: Site[] = [
   {
     id: 'garage',
     name: '地下车库 B2',
+    wip: true,
     codename: 'SUB-B2',
     desc: '小区地下负二层的一个角落，物业主任姓陈，抽烟。这里没有一丝自然光，常年十六度，混凝土顶板厚得能挡住很多东西——包括信号，也包括逃生的机会。',
     cost: { cash: 12000, ap: 1, requires: { skills: { negotiation: 2 }, reason: '需要谈判 2 级说服物业' } },
@@ -65,6 +67,7 @@ export const SITES: Site[] = [
   {
     id: 'farmhouse',
     name: '郊区农舍',
+    wip: true,
     codename: 'RURAL-7',
     desc: '离城四十公里，你爸的老宅。有井、有地、有个塌了一半的猪圈。最近的邻居在两公里外。这里没人会来打劫你——因为也没人会来救你。',
     cost: { cash: 20000, ap: 2, requires: { tags: { all: ['hasVehicle'] }, reason: '需要一辆车才能搬过去' } },
@@ -83,6 +86,7 @@ export const SITES: Site[] = [
   {
     id: 'bunker',
     name: '废弃人防工程',
+    wip: true,
     codename: 'CD-1971',
     desc: '七十年代挖的防空洞，入口藏在一间关了很久的修车铺后面。铁门锈住了，里面滴水，墙上还留着褪色的标语。它为一场没有发生的战争而建，现在终于要派上用场。',
     unlock: 'site_bunker',
@@ -102,6 +106,7 @@ export const SITES: Site[] = [
   {
     id: 'watertower',
     name: '山腰水塔',
+    wip: true,
     codename: 'TOWER-N',
     desc: '北山半坡上一座停用的市政水塔。爬上去要走三百级铁梯，但站在顶上，你能看见整条进城的公路——以及任何朝你走来的人。',
     unlock: 'site_watertower',

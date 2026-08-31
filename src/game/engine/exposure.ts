@@ -10,6 +10,7 @@ import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ResourceId, RunState } from '../types';
 import { effectiveModule } from './tags';
+import { computePower, loadOnline } from './power';
 
 export const TIER_NAMES = ['无人注意', '被人看见', '被盯上了', '被标记了', '被猎捕'] as const;
 export const TIER_DESC = [
@@ -41,16 +42,14 @@ export function dailyExposure(run: RunState): ExposureBreakdown {
 
   parts.push({ label: `${site.name}基础`, value: site.exposureBase * 0.25 });
 
-  if (run.modules.power > 0) {
-    const v =
-      run.powerMode === 'full'
-        ? EXPOSURE.SRC_POWER_FULL
-        : run.powerMode === 'thrifty'
-          ? EXPOSURE.SRC_POWER_THRIFTY
-          : EXPOSURE.SRC_POWER_BLACKOUT;
-    // 柴油机比太阳能吵得多
-    const noisy = run.modules.power >= 3 ? 1.6 : 1;
-    if (v > 0) parts.push({ label: run.modules.power >= 3 ? '发电机噪音' : '灯光与用电', value: v * noisy });
+  if (run.modules.power > 0 || run.world.powerGrid !== 'off') {
+    const power = computePower(run);
+    if (loadOnline(run, 'lights', power)) {
+      parts.push({ label: '灯光漏出窗外', value: EXPOSURE.SRC_LIGHTS });
+    }
+    if (power.generator > 0) {
+      parts.push({ label: '柴油机噪音', value: EXPOSURE.SRC_GENERATOR });
+    }
   }
 
   if (run.survivors.length > 0) {
@@ -203,3 +202,46 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1): RaidResu
       : '门开了。你没能拦住他们，只能记住这一晚。',
   };
 }
+
+/** 搜刮途中的真实风险：暴露、受伤、可能丢掉战利品、被人盯上 */
+export function applyScavengeDanger(
+  run: RunState,
+  haul: { items: Array<{ res: ResourceId; amount: number; weight: number }>; danger: number },
+  rng: Rng,
+): { exposure: number; hpLost: number; scheduledRaid: boolean; lostRes?: ResourceId; lostAmt?: number } {
+  const danger = haul.danger;
+  const stealthCut = run.skills.stealth * 0.4 + effectiveModule(run, 'conceal') * 0.3;
+  const expose = Math.max(0, Math.round((danger * 0.12 - stealthCut) * 10) / 10);
+  run.world.exposure = Math.max(0, Math.min(EXPOSURE.MAX, run.world.exposure + expose));
+
+  let hpLost = 0;
+  if (danger >= 40 && rng.chance(0.12 + danger / 500)) {
+    hpLost = rng.int(3, 10);
+    run.stats.hp = Math.max(1, run.stats.hp - hpLost);
+  }
+
+  let lostRes: ResourceId | undefined;
+  let lostAmt: number | undefined;
+  if (danger >= 40 && haul.items.length > 0 && rng.chance(0.1 + danger / 600)) {
+    const idx = rng.int(0, haul.items.length - 1);
+    const it = haul.items[idx]!;
+    lostRes = it.res;
+    lostAmt = Math.min(it.amount, Math.round(rng.float(0.5, Math.max(0.5, it.amount * 0.4)) * 10) / 10);
+    it.amount -= lostAmt;
+    it.weight = it.amount <= 0 ? 0 : it.weight * (it.amount / (it.amount + lostAmt));
+    if (it.amount <= 0) haul.items.splice(idx, 1);
+  }
+
+  let scheduledRaid = false;
+  if (danger >= 55 && rng.chance(0.22 + (danger - 55) / 200)) {
+    run.pending.push({
+      familyId: run.world.exposure >= EXPOSURE.TIERS[2]! ? 'raid_attempt' : 'pressure_scout',
+      dueDay: run.day + rng.int(1, 2),
+      retries: 0,
+    });
+    scheduledRaid = true;
+  }
+
+  return { exposure: expose, hpLost, scheduledRaid, lostRes, lostAmt };
+}
+

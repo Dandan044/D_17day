@@ -5,11 +5,14 @@
  * 于是"什么情况下这件事合理"这个判断就集中在了标签定义里，可以被 lint 检查。
  */
 
-import { AIR, CAPS, EXPOSURE, HEALTH, POWER, THREAT_NAMES } from '../balance';
-import { MODULE_BY_ID, MODULE_IDS, moduleSpec } from '../content/modules';
+import { AIR, CAPS, EXPOSURE, HEALTH, RAD, THREAT_NAMES } from '../balance';
+import { MODULE_BY_ID, MODULE_IDS } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { parseTag } from '../tags';
 import type { Facts, ModuleId, Requirement, RunState, TagQuery, WeatherId } from '../types';
+import { computePower, loadOnline, type PowerReport } from './power';
+
+export { computePower, loadOnline, type PowerReport } from './power';
 
 /** 能掩盖行踪的天气 */
 const COVER_WEATHER: WeatherId[] = ['snow', 'blizzard', 'fog', 'storm', 'ashfall'];
@@ -24,79 +27,8 @@ function band(value: number, cuts: number[], names: string[]): string {
 }
 
 // ============================================================
-// 电力
+// 电力（实现见 power.ts）
 // ============================================================
-
-export interface PowerReport {
-  output: number;
-  demand: number;
-  deficit: number;
-  /** 因缺电而停摆的模块 */
-  offline: ModuleId[];
-  fuelBurn: number;
-}
-
-export function computePower(run: RunState): PowerReport {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
-  const lvl = run.modules.power;
-  const solarBase = POWER.BASE_OUTPUT[lvl] ?? 0;
-  const weatherMult = POWER.SOLAR_WEATHER[run.world.weather] ?? 1;
-  const disasterMult = POWER.SOLAR_DISASTER[run.world.disaster] ?? 1;
-
-  let output = solarBase * weatherMult * disasterMult;
-
-  // 3 级发电才有柴油机组
-  let fuelBurn = 0;
-  if (lvl >= 3 && run.powerMode !== 'blackout' && run.res.fuel > 0) {
-    const need = POWER.GENERATOR_FUEL[run.powerMode];
-    fuelBurn = Math.min(need, run.res.fuel);
-    const ratio = need > 0 ? fuelBurn / need : 0;
-    output += POWER.GENERATOR_OUTPUT[run.powerMode] * ratio;
-  }
-  if (run.powerMode === 'blackout') output *= 0.35;
-  else if (run.powerMode === 'thrifty') output *= 0.75;
-
-  output += Math.max(0, run.wear.batteryCharge);
-
-  // 施工中的电路是断开的：全屋断电，不只是发电模块自己归零。
-  // 由模块的 buildPenaltyTags 声明（power 配了 power:blackout），
-  // 所以改内容就能改这个行为，不必动引擎。
-  const rewiring = run.projects.some((p) =>
-    MODULE_BY_ID[p.moduleId].buildPenaltyTags.includes('power:blackout'),
-  );
-  if (rewiring) output = 0;
-
-  let demand = 0;
-  const draws: Array<{ id: ModuleId; kwh: number }> = [];
-  for (const id of MODULE_IDS) {
-    const level = run.modules[id];
-    if (level <= 0) continue;
-    const spec = moduleSpec(id, level);
-    let kwh = spec?.power ?? 0;
-    // 无自然光的站点，农圃必须靠补光灯
-    if (id === 'garden' && level >= 2 && site.tags.includes('site:noSunlight')) kwh += 1.5;
-    // 重力供水的水塔不需要水泵
-    if (id === 'filter' && site.tags.includes('site:elevated')) kwh *= 0.3;
-    if (kwh > 0) {
-      draws.push({ id, kwh });
-      demand += kwh;
-    }
-  }
-
-  const offline: ModuleId[] = [];
-  if (demand > output) {
-    // 按优先级保底，靠后的先停
-    const priority = run.powerPriority.length ? run.powerPriority : POWER.DEFAULT_PRIORITY;
-    const ordered = draws.slice().sort((a, b) => priority.indexOf(a.id) - priority.indexOf(b.id));
-    let budget = output;
-    for (const d of ordered) {
-      if (budget >= d.kwh) budget -= d.kwh;
-      else offline.push(d.id);
-    }
-  }
-
-  return { output, demand, deficit: Math.max(0, demand - output), offline, fuelBurn };
-}
 
 /** 模块的有效等级：施工中或缺电停摆时按 0 计 */
 export function effectiveModule(run: RunState, id: ModuleId, power?: PowerReport): number {
@@ -110,15 +42,30 @@ export function effectiveModule(run: RunState, id: ModuleId, power?: PowerReport
   return level;
 }
 
-/** 辐射屏蔽等级：地下站点 + 保温密封 + 空气过滤共同折算 */
+/** 辐射屏蔽等级：地下 + 保温 + 空气过滤。1 级过滤在高楼也能至少挡到下一档。 */
 export function radiationShield(run: RunState): number {
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const air = effectiveModule(run, 'airFilter');
+  const insulate = effectiveModule(run, 'insulate');
   let shield = 0;
   if (site.tags.includes('site:underground')) shield += 2;
-  if (site.tags.includes('site:highFloor')) shield -= 1;
-  shield += Math.floor(effectiveModule(run, 'insulate') / 2);
-  shield += Math.floor(effectiveModule(run, 'airFilter') / 2);
+  if (site.tags.includes('site:highFloor') && air <= 0) shield -= 1;
+  shield += Math.ceil(insulate / 2);
+  shield += air;
+  if (air >= 1) shield = Math.max(shield, 1);
   return Math.max(0, Math.min(3, shield));
+}
+
+export function iodineActive(run: RunState): boolean {
+  if (!run.flags.includes('flag:iodine')) return false;
+  if (run.iodineUntil !== undefined && run.day >= run.iodineUntil) return false;
+  return true;
+}
+
+export function grantIodine(run: RunState, days = RAD.IODINE_DAYS): void {
+  if (!run.flags.includes('flag:iodine')) run.flags.push('flag:iodine');
+  if (!run.flags.includes('flag:sawIodineOffer')) run.flags.push('flag:sawIodineOffer');
+  run.iodineUntil = Math.max(run.iodineUntil ?? 0, run.day + days);
 }
 
 export function waterCapacity(run: RunState): number {
@@ -198,8 +145,8 @@ export function deriveFacts(run: RunState): Facts {
   if (run.flags.includes('flag:coAlarm')) add('co:alarm');
   if (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0)) add('filter:expired');
   if (power.deficit > 0) add('power:deficit');
-  if (run.powerMode === 'blackout') add('power:blackout');
-  if (run.modules.power >= 3 && run.powerMode !== 'blackout') add('power:generator');
+  if (power.generator > 0) add('power:generator');
+  if (!loadOnline(run, 'lights', power)) add('light:off');
 
   const heads = headcount(run);
   if (run.res.water < heads * 3) add('water:stored:low');
@@ -208,6 +155,8 @@ export function deriveFacts(run: RunState): Facts {
   // --- 玩家 ---
   add(run.res.ammo > 0 ? 'armed' : 'unarmed');
   if (run.stats.hp < 55) add('injured');
+  if (run.stats.hp < HEALTH.HP_CRIT) add('hp:critical');
+  if (run.stats.stamina < HEALTH.STAMINA_LOW) add('stamina:low');
   if (run.conditions.length > 0) add('sick');
   if (run.stats.sanity < HEALTH.SANITY_UNRELIABLE) add('sanity:low');
   if (run.stats.sanity < HEALTH.SANITY_BREAK) add('sanity:broken');
@@ -218,7 +167,7 @@ export function deriveFacts(run: RunState): Facts {
   if (run.hasVehicle) add('hasVehicle');
   // 几件"便宜但关键"的小物：内容里既可以查 flag:xxx，也可以查语义化标签
   if (run.flags.includes('flag:hasPet')) add('hasPet');
-  if (run.flags.includes('flag:iodine')) add('hasIodine');
+  if (iodineActive(run)) add('hasIodine');
   if (run.flags.includes('flag:geiger')) add('hasGeiger');
   if (run.flags.includes('flag:mask')) add('hasMask');
 

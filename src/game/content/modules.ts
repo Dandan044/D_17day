@@ -1,4 +1,5 @@
 import type { ModuleDef, ModuleId } from '../types';
+import { AIR, CAPS, COLD, POWER } from '../balance';
 
 /**
  * 避难所模块。
@@ -52,7 +53,7 @@ export const MODULES: ModuleDef[] = [
     // 改用「净水暂停」：水箱在清洗，净化出来的水没处存。存量不受影响。
     buildPenaltyDesc: '水箱正在排空清洗，这段时间净化出来的水没处存。',
     levels: [
-      { materials: 8, parts: 3, labor: 7, hireCash: 2200, buyCash: 2900, buyDays: 1, desc: '两个 120 L 食品级塑料桶，浴缸铺内衬蓄满。' },
+      { materials: 8, parts: 3, labor: 7, hireCash: 2200, buyCash: 2900, buyDays: 1, desc: '食品级储桶加浴缸内衬。' },
       { materials: 16, parts: 8, labor: 15, hireCash: 5800, buyCash: 7200, buyDays: 2, desc: '不锈钢水塔加浮球阀，接了雨水导流。' },
       { materials: 28, parts: 16, labor: 26, hireCash: 13000, buyCash: 16000, buyDays: 3, skill: { id: 'mechanics', level: 3 }, desc: '大容量储罐 + 循环泵 + 沉淀分层。半个月不下雨也不慌。' },
     ],
@@ -103,12 +104,12 @@ export const MODULES: ModuleDef[] = [
     id: 'airFilter',
     name: '空气过滤',
     short: '气',
-    desc: '尘、毒气、放射性微粒、飞沫。看不见的那部分威胁。',
+    desc: '挡灰、毒气、放射性微粒和飞沫。口罩不够用的时候靠它。',
     zero: '一包一次性口罩。',
     buildPenaltyTags: ['building:airFilter'],
     buildPenaltyDesc: '通风口敞开着，外面的空气正在直接进来。',
     levels: [
-      { materials: 4, parts: 6, labor: 6, hireCash: 2600, buyCash: 3400, buyDays: 1, power: 0.6, desc: 'HEPA 净化器 + 门窗密封。挡得住大颗粒。' },
+      { materials: 4, parts: 6, labor: 6, hireCash: 2600, buyCash: 3400, buyDays: 1, power: 0.6, desc: 'HEPA 净化器 + 门窗密封。挡颗粒，也开始挡放射性微粒。' },
       { materials: 8, parts: 14, labor: 15, hireCash: 7200, buyCash: 9000, buyDays: 2, power: 1.2, requiresModules: { power: 1 }, skill: { id: 'mechanics', level: 2 }, desc: '正压送风 + 活性炭箱。屋里气压高于室外，脏空气进不来。' },
       { materials: 14, parts: 26, labor: 26, hireCash: 16500, buyCash: 20000, buyDays: 3, power: 2.0, requiresModules: { power: 2 }, skill: { id: 'mechanics', level: 4 }, desc: 'NBC 级过滤机组 + 气密门斗。核生化都能挡一阵。' },
     ],
@@ -168,4 +169,37 @@ export function moduleSpec(id: ModuleId, level: number) {
   const def = MODULE_BY_ID[id];
   if (level < 1 || level > 3) return null;
   return def.levels[level - 1] ?? null;
+}
+
+/** 当前级硬效果，给建造面板对照 */
+export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1): string {
+  const lv = Math.max(0, Math.min(3, level));
+  switch (id) {
+    case 'cistern':
+      return `储水 ${Math.round((CAPS.WATER[lv] ?? 40) * waterCapMult)} L`;
+    case 'filter':
+      return `日产净水 ${CAPS.FILTER_OUTPUT[lv] ?? 0} L`;
+    case 'power':
+      return `光伏约 ${POWER.BASE_OUTPUT[lv] ?? 0} kWh/日${lv >= 3 ? '；可开柴油机补缺口' : ''}`;
+    case 'insulate':
+      return (
+        `失温下限 ${COLD.INSULATE_FLOOR[lv]}°C` +
+        (lv >= 1 ? `；烧油 ${COLD.FUEL_PER_DEGREE[lv]} L/°C` : '') +
+        (lv >= 2 ? `；电热 ${COLD.ELECTRIC_PER_DEGREE[lv]} kWh/°C` : '')
+      );
+    case 'airFilter':
+      return `挡污染至 ${AIR.FILTER_TOLERANCE[lv]}；辐射屏蔽贡献 +${lv}（停摆按 0 级计）`;
+    case 'radio':
+      return lv > 0 ? '有电时提高情报与预报准确度' : '无';
+    case 'garden':
+      return `日产生鲜 ${CAPS.GARDEN_YIELD[lv] ?? 0} 份`;
+    case 'medbay':
+      return '减轻状态每日损耗；提高自愈率';
+    case 'fortify':
+      return '降低袭击成功率';
+    case 'conceal':
+      return '降低每日暴露度';
+    default:
+      return '';
+  }
 }

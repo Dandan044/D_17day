@@ -5,14 +5,35 @@
 
 import { EXPOSURE, HEALTH } from '../balance';
 import { CONDITION_BY_ID } from '../content/conditions';
+import { LOCATION_BY_ID } from '../content/locations';
 import { MODULE_BY_ID } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { SURVIVORS, SURVIVOR_BY_ID } from '../content/survivors';
 import type { Rng } from '../rng';
-import type { ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor } from '../types';
-import { waterCapacity } from './tags';
+import type { ActionHook, ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor } from '../types';
+import { grantIodine, waterCapacity } from './tags';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+const RES_LABEL: Record<string, string> = {
+  water: '水',
+  foodStaple: '罐头',
+  foodFresh: '生鲜',
+  meds: '药品',
+  fuel: '燃料',
+  materials: '建材',
+  parts: '零件',
+  ammo: '弹药',
+  cash: '现金',
+};
+
+const STAT_LABEL: Record<string, string> = {
+  hp: '生命',
+  stamina: '体力',
+  sanity: '理智',
+  humanity: '人性',
+  reputation: '名声',
+};
 
 export function clampResources(run: RunState): void {
   const waterCap = waterCapacity(run);
@@ -22,6 +43,32 @@ export function clampResources(run: RunState): void {
     run.res[k] = Math.max(0, run.res[k]);
   }
   run.res.cash = Math.round(run.res.cash);
+}
+
+const HOOK_NAME: Record<string, string> = {
+  endDay: '过完这一天',
+  scavenge: '外出搜刮',
+  scavengeNight: '夜间搜刮',
+  buy: '采购',
+  visitShop: '进店',
+  rest: '休息',
+  build: '施工',
+  work: '动手干活',
+  maintain: '保养',
+  treat: '治疗',
+  verifyIntel: '核实情报',
+  setRation: '改口粮',
+  setWaterUse: '改用水',
+  setPowerMode: '改供电',
+  setPowerPriority: '改供电优先级',
+  setHeatMode: '改取暖',
+  raid: '遭遇袭击',
+};
+
+function waitForLabel(hooks: ActionHook | ActionHook[] | undefined): string {
+  if (!hooks) return '';
+  const list = Array.isArray(hooks) ? hooks : [hooks];
+  return list.map((h) => HOOK_NAME[h] ?? h).join(' / ');
 }
 
 export function addLog(run: RunState, text: string, tone: 'good' | 'bad' | 'neutral' | 'grim' = 'neutral'): void {
@@ -43,6 +90,7 @@ export function removeCondition(run: RunState, id: ConditionId): boolean {
 
 export function recruit(run: RunState, templateId: string, rng: Rng): Survivor | null {
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  if (site.companionCap <= 0) return null;
   if (run.survivors.length >= site.companionCap) return null;
 
   const taken = new Set(run.survivors.map((s) => s.id));
@@ -73,6 +121,8 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     for (const [k, delta] of Object.entries(eff.res)) {
       if (!delta) continue;
       run.res[k as ResourceId] += delta;
+      const shown = Math.round(delta * 10) / 10;
+      notes.push(`${RES_LABEL[k] ?? k} ${shown > 0 ? '+' : ''}${shown}`);
     }
     clampResources(run);
   }
@@ -80,6 +130,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   // 行动点不像资源那样有储量上限，只需保证不为负
   if (eff.ap) {
     run.ap = Math.max(0, run.ap + eff.ap);
+    notes.push(`行动点 ${eff.ap > 0 ? '+' : ''}${eff.ap}`);
   }
 
   if (eff.stats) {
@@ -88,6 +139,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       const key = k as StatId;
       const hi = key === 'humanity' || key === 'reputation' ? 100 : HEALTH.MAX;
       run.stats[key] = clamp(run.stats[key] + delta, 0, hi);
+      notes.push(`${STAT_LABEL[key] ?? key} ${delta > 0 ? '+' : ''}${delta}`);
     }
   }
 
@@ -137,7 +189,10 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     if (eff.world.lawOrder) w.lawOrder = clamp(w.lawOrder + eff.world.lawOrder, 0, 100);
     if (eff.world.scarcity) w.scarcity = clamp(w.scarcity + eff.world.scarcity, 0, 100);
     if (eff.world.neighborhood) w.neighborhood = clamp(w.neighborhood + eff.world.neighborhood, -100, 100);
-    if (eff.world.exposure) w.exposure = clamp(w.exposure + eff.world.exposure, 0, EXPOSURE.MAX);
+    if (eff.world.exposure) {
+      w.exposure = clamp(w.exposure + eff.world.exposure, 0, EXPOSURE.MAX);
+      notes.push(`暴露度 ${eff.world.exposure > 0 ? '+' : ''}${eff.world.exposure}`);
+    }
     if (eff.world.airPollution) w.airPollution = clamp(w.airPollution + eff.world.airPollution, 0, 100);
     if (eff.world.radiation) w.radiation = clamp(w.radiation + eff.world.radiation, 0, 100);
     if (eff.world.contagion) w.contagion = clamp(w.contagion + eff.world.contagion, 0, 100);
@@ -182,15 +237,51 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
 
   if (eff.setFlags) {
     for (const f of eff.setFlags) if (!run.flags.includes(f)) run.flags.push(f);
+    if (eff.setFlags.includes('flag:iodine')) grantIodine(run);
+    if (eff.setFlags.includes('flag:knowsNorthRoute')) notes.push('北上路线已知');
+    else if (eff.setFlags.length) notes.push('已记入日记');
   }
   if (eff.clearFlags) {
     run.flags = run.flags.filter((f) => !eff.clearFlags!.includes(f));
   }
 
-  if (eff.schedule) {
-    for (const s of eff.schedule) {
-      run.pending.push({ familyId: s.familyId, dueDay: run.day + s.inDays, tags: s.tags, unless: s.unless });
+  if (eff.locations) {
+    for (const loc of eff.locations) {
+      let st = run.locations.find((l) => l.id === loc.id);
+      if (!st) {
+        st = { id: loc.id, stock: 50 };
+        run.locations.push(st);
+      }
+      if (loc.stock !== undefined) {
+        st.stock = Math.max(0, Math.min(100, loc.stock));
+        notes.push(`${LOCATION_BY_ID[loc.id]?.name ?? loc.id} 存量变为 ${Math.round(st.stock)}%`);
+      }
+      if (loc.blocked === null) {
+        delete st.blocked;
+      } else if (loc.blocked) {
+        st.blocked = loc.blocked;
+        notes.push(`地图：${LOCATION_BY_ID[loc.id]?.name ?? loc.id} 设卡（${loc.blocked}）`);
+      }
     }
+  }
+
+  if (eff.schedule) {
+    const waitHints: string[] = [];
+    for (const s of eff.schedule) {
+      run.pending.push({
+        familyId: s.familyId,
+        dueDay: s.inDays !== undefined ? run.day + s.inDays : undefined,
+        waitFor: s.waitFor,
+        require: s.require,
+        tags: s.tags,
+        unless: s.unless,
+        retries: 0,
+      });
+      const w = waitForLabel(s.waitFor);
+      if (w) waitHints.push(w);
+    }
+    if (waitHints.length) notes.push(`续篇将在你【${waitHints.join('、')}】之后出现`);
+    else notes.push('这件事还没有结束');
   }
 
   if (eff.log) addLog(run, eff.log, eff.tone ?? 'neutral');

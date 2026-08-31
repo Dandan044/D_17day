@@ -242,8 +242,10 @@ function survivalDay(run: RunState): void {
   const df = daysOfFood(run);
   run.ration = df > 12 ? 'normal' : df > 6 ? 'half' : 'half';
   run.waterUse = dw > 12 ? 'normal' : 'limited';
-  // 暴露度高就熄灯
-  run.powerMode = run.world.exposure > 45 ? 'blackout' : 'thrifty';
+  if (!run.powerEnabled) run.powerEnabled = {};
+  run.powerEnabled.lights = run.world.exposure <= 45;
+  if (run.world.temperature < 12 && (run.modules.insulate ?? 0) >= 1) run.heatMode = 'fuel';
+  else run.heatMode = 'off';
 
   // 有药就治病
   for (const c of [...run.conditions]) {
@@ -281,12 +283,13 @@ function survivalDay(run: RunState): void {
  * （期望 6.7），于是「按站点」的通关率里混着灾难难度，两张表无法独立归因。
  * 现在每组都对齐，站点间与灾难间的差异才是真的差异。
  */
-const SEEDS_PER_CELL = Math.max(1, Math.round(N / (SITES.length * DISASTERS.length)));
+const PLAYABLE_SITES = SITES.filter((s) => !s.wip);
+const SEEDS_PER_CELL = Math.max(1, Math.round(N / (PLAYABLE_SITES.length * DISASTERS.length)));
 
-for (let si = 0; si < SITES.length; si++) {
+for (let si = 0; si < PLAYABLE_SITES.length; si++) {
   for (let di = 0; di < DISASTERS.length; di++) {
     for (let k = 0; k < SEEDS_PER_CELL; k++) {
-      const site = SITES[si]!;
+      const site = PLAYABLE_SITES[si]!;
       const disaster = DISASTERS[di]!;
       // 每格用不同的种子序列，避免各格跑出同一条世界线
       const seed = 1000 + (si * DISASTERS.length + di) * 7919 + k * 104729;
@@ -361,7 +364,7 @@ const pct = (n: number, total: number) => `${((n / Math.max(1, total)) * 100).to
 console.log('');
 console.log(`  模拟 ${outcomes.length} 局 · 难度 ${DIFFICULTY} · 策略：及格水平`);
 console.log(
-  `  全因子采样：${SITES.length} 站点 × ${DISASTERS.length} 灾难 × ${SEEDS_PER_CELL} 组种子（每格 ${SEEDS_PER_CELL} 局）`,
+  `  全因子采样：${PLAYABLE_SITES.length} 站点 × ${DISASTERS.length} 灾难 × ${SEEDS_PER_CELL} 组种子（每格 ${SEEDS_PER_CELL} 局）`,
 );
 if (SEEDS_PER_CELL < 20) {
   console.log(

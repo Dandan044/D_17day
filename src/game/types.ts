@@ -115,8 +115,55 @@ export type EventKind =
 
 export type RationLevel = 'full' | 'normal' | 'half' | 'none';
 export type WaterLevel = 'full' | 'normal' | 'limited';
+/** @deprecated 供电三档已删除，旧存档可能仍带此字段 */
 export type PowerMode = 'full' | 'thrifty' | 'blackout';
+export type HeatMode = 'off' | 'fuel' | 'electric';
+/** 供电表里的一行：建筑模块或家电 */
+export type ApplianceId = 'lights' | 'fridge' | 'heater';
+export type PowerLoadId = ModuleId | ApplianceId;
 export type Difficulty = 'story' | 'normal' | 'harsh';
+
+/**
+ * 玩家行为钩子：故事链可监听其中任意一种。
+ * 每一次有意义的操作都会 emit，pending.waitFor 命中则插入后续事件。
+ */
+export type ActionHook =
+  | 'endDay'
+  | 'collapse'
+  | 'threatUp'
+  | 'scavenge'
+  | 'scavengeDay'
+  | 'scavengeNight'
+  | 'takeHaul'
+  | 'visitShop'
+  | 'buy'
+  | 'rest'
+  | 'build'
+  | 'work'
+  | 'cancelProject'
+  | 'salvage'
+  | 'maintain'
+  | 'treat'
+  | 'verifyIntel'
+  | 'setRation'
+  | 'setWaterUse'
+  | 'setPowerMode'
+  | 'setPowerPriority'
+  | 'setHeatMode'
+  | 'raid'
+  | 'raidRepelled'
+  | 'raidFailed'
+  | 'choice'
+  | 'foodLow'
+  | 'waterLow'
+  | 'hpLow'
+  | 'sanityLow'
+  | 'staminaLow'
+  | 'humanityLow'
+  | 'repLow'
+  | 'lightsOff'
+  | 'filterExpired'
+  | 'exposureUp';
 
 // ============================================================
 // 标签系统
@@ -159,7 +206,12 @@ export interface Requirement {
 /** 往未来某天种下一个事件——因果链的骨架。 */
 export interface ScheduledSeed {
   familyId: string;
-  inDays: number;
+  /** 延期天数；可与 waitFor 并存，谁先触发谁算 */
+  inDays?: number;
+  /** 监听的玩家行为；命中时插入该家族 */
+  waitFor?: ActionHook | ActionHook[];
+  /** 钩子触发时世界还需满足 */
+  require?: TagQuery;
   /** 触发时附加的叙事标签 */
   tags?: string[];
   /** 到期时若这些条件不满足则取消 */
@@ -207,6 +259,8 @@ export interface Effect {
   /** 打上/清除叙事标签 */
   setFlags?: string[];
   clearFlags?: string[];
+  /** 改地点存量 / 封路 */
+  locations?: Array<{ id: string; stock?: number; blocked?: string | null }>;
   /** 种下延迟事件 */
   schedule?: ScheduledSeed[];
   /** 局外永久解锁 */
@@ -289,6 +343,8 @@ export interface Site {
   name: string;
   codename: string;
   desc: string;
+  /** 本切片未开放：选址界面显示「开发中」，引擎拒绝迁入 */
+  wip?: boolean;
   /** 需要的局外解锁 id，缺省为初始可用 */
   unlock?: string;
   cost: { cash?: number; ap?: number; requires?: Requirement };
@@ -376,6 +432,8 @@ export interface Location {
   id: string;
   name: string;
   desc: string;
+  /** 灾难后地图文案；缺省则沿用 desc */
+  descSurvival?: string;
   /** 距离档：影响体力与燃料 */
   distance: 1 | 2 | 3;
   /** 需要车辆 */
@@ -490,9 +548,14 @@ export interface LogEntry {
 
 export interface PendingEvent {
   familyId: string;
-  dueDay: number;
+  /** 日历到期日；仅 waitFor 的链可省略 */
+  dueDay?: number;
+  waitFor?: ActionHook | ActionHook[];
+  require?: TagQuery;
   tags?: string[];
   unless?: TagQuery;
+  /** 变体暂不可用时的重试次数，满 5 次断链 */
+  retries?: number;
 }
 
 export interface RunState {
@@ -523,16 +586,28 @@ export interface RunState {
   /** 滤芯剩余天数、发电机保养度等易耗品 */
   wear: { filterLife: number; generatorOil: number; batteryCharge: number };
   /** 连续状态计数器 */
-  streaks: { lowRation: number; noThreatDays: number };
+  streaks: { lowRation: number; noThreatDays: number; goodRation: number };
 
   ration: RationLevel;
   waterUse: WaterLevel;
-  powerMode: PowerMode;
-  /** 缺电时的模块停摆优先级，靠前的先保 */
-  powerPriority: ModuleId[];
+  heatMode: HeatMode;
+  /** 旧存档兼容，引擎不再读取 */
+  powerMode?: PowerMode;
+  /** 缺电时的停摆优先级，靠前的先保 */
+  powerPriority: PowerLoadId[];
+  /** 家电/模块是否想开着；缺省为开 */
+  powerEnabled: Partial<Record<PowerLoadId, boolean>>;
+  /** 碘片效果截止日（含当天） */
+  iodineUntil?: number;
+  /** 概率链权重加成 */
+  directorBoost: Record<string, number>;
+  /** 阈值事件上次触发日 */
+  thresholdFired: Record<string, number>;
 
   survivors: Survivor[];
   locations: LocationState[];
+  /** 今日已采购数量，限购按累计而不是单次 */
+  boughtToday: Partial<Record<ResourceId, number>>;
   /** 今天已经跑过的地点，重复进入不再消耗行动点 */
   visitedToday: string[];
   hasVehicle: boolean;
@@ -583,6 +658,8 @@ export interface PerkDef {
   desc: string;
   cost: number;
   requires?: string[];
+  /** 本切片未接线则不在商店出售 */
+  wip?: boolean;
 }
 
 export interface MetaState {
@@ -611,6 +688,8 @@ export interface EndingDef {
   kind: 'win' | 'lose' | 'neutral';
   /** 判定优先级，数字大的先判 */
   priority: number;
+  /** 同伴系统冻结期间隐藏独狼/社区等 */
+  wip?: boolean;
   require?: Requirement;
   /** 死亡结局：匹配死因 */
   cause?: string[];

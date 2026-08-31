@@ -5,27 +5,27 @@ import type { PerkDef } from '../types';
  */
 export const PERKS: PerkDef[] = [
   // ============ 生存系 ============
-  { id: 'perk_camel', tree: 'survival', tier: 1, name: '耐渴', desc: '每日饮水需求 -15%。', cost: 30 },
-  { id: 'perk_ironstomach', tree: 'survival', tier: 1, name: '铁胃', desc: '喝未净化水的患病概率减半。', cost: 30 },
-  { id: 'perk_scavenger', tree: 'survival', tier: 2, name: '拾荒直觉', desc: '搜刮产出 +15%，且能看到地点的剩余存量。', cost: 60, requires: ['perk_camel'] },
-  { id: 'perk_thickblood', tree: 'survival', tier: 2, name: '抗寒体质', desc: '失温判定的温度下限降低 4°C。', cost: 60, requires: ['perk_ironstomach'] },
+  { id: 'perk_camel', tree: 'survival', tier: 1, name: '耐渴', desc: '每日饮水需求 -15%。', cost: 30, wip: true },
+  { id: 'perk_ironstomach', tree: 'survival', tier: 1, name: '铁胃', desc: '喝未净化水的患病概率减半。', cost: 30, wip: true },
+  { id: 'perk_scavenger', tree: 'survival', tier: 2, name: '拾荒直觉', desc: '搜刮产出 +15%，且能看到地点的剩余存量。', cost: 60 },
+  { id: 'perk_thickblood', tree: 'survival', tier: 2, name: '抗寒体质', desc: '失温判定的温度下限降低 4°C。', cost: 60, requires: ['perk_ironstomach'], wip: true },
   { id: 'perk_nightowl', tree: 'survival', tier: 3, name: '夜行', desc: '夜间搜刮的危险度 -25%，产出加成提高到 1.6 倍。', cost: 110, requires: ['perk_scavenger'] },
-  { id: 'perk_ghost', tree: 'survival', tier: 3, name: '不存在的人', desc: '隐蔽的每级效果提高 50%，暴露度自然衰减 +3。', cost: 110, requires: ['perk_thickblood'] },
+  { id: 'perk_ghost', tree: 'survival', tier: 3, name: '不存在的人', desc: '隐蔽的每级效果提高 50%，暴露度自然衰减 +3。', cost: 110, requires: ['perk_thickblood'], wip: true },
 
   // ============ 建造系 ============
   { id: 'perk_builder_hands', tree: 'build', tier: 1, name: '熟练的手', desc: 'DIY 工时 -15%。', cost: 30 },
   { id: 'perk_maintainer', tree: 'build', tier: 1, name: '会保养', desc: '滤芯与发电机机油寿命 +50%。', cost: 30 },
   { id: 'perk_logistics', tree: 'build', tier: 2, name: '物流关系', desc: '买成品的到货时间 -1 天，被拦截概率显著下降。', cost: 60, requires: ['perk_builder_hands'] },
-  { id: 'perk_electrician', tree: 'build', tier: 2, name: '电工', desc: '发电产量 +20%，模块耗电 -10%。', cost: 60, requires: ['perk_maintainer'] },
-  { id: 'perk_salvager', tree: 'build', tier: 3, name: '拆解专家', desc: '拆解回收产出 +40%，且暴露度增量减半。', cost: 110, requires: ['perk_logistics'] },
-  { id: 'perk_greenthumb', tree: 'build', tier: 3, name: '会种东西', desc: '农圃产量 +30%，恶劣环境下的减产减半。', cost: 110, requires: ['perk_electrician'] },
+  { id: 'perk_electrician', tree: 'build', tier: 2, name: '电工', desc: '发电产量 +20%，模块耗电 -10%。', cost: 60, requires: ['perk_maintainer'], wip: true },
+  { id: 'perk_salvager', tree: 'build', tier: 3, name: '拆解专家', desc: '拆解回收产出 +40%，且暴露度增量减半。', cost: 110, requires: ['perk_logistics'], wip: true },
+  { id: 'perk_greenthumb', tree: 'build', tier: 3, name: '会种东西', desc: '农圃产量 +30%，恶劣环境下的减产减半。', cost: 110, requires: ['perk_electrician'], wip: true },
 
   // ============ 人际系 ============
-  { id: 'perk_haggler', tree: 'social', tier: 1, name: '会砍价', desc: '所有采购价 -12%。', cost: 30 },
+  { id: 'perk_haggler', tree: 'social', tier: 1, name: '会砍价', desc: '所有采购价 -12%。', cost: 30, wip: true },
   { id: 'perk_analyst', tree: 'social', tier: 1, name: '情报分析', desc: '真情报比例 +12%，且每天可标记一条情报进行核实。', cost: 30 },
-  { id: 'perk_contacts', tree: 'social', tier: 2, name: '人脉', desc: '雇工价格 -20%，成品价格 -12%。', cost: 60, requires: ['perk_haggler'] },
+  { id: 'perk_contacts', tree: 'social', tier: 2, name: '人脉', desc: '雇工价格 -20%，成品价格 -12%。', cost: 60 },
   { id: 'perk_reputation', tree: 'social', tier: 2, name: '街坊眼里的好人', desc: '初始名声 +20，初始社区关系 +20。', cost: 60, requires: ['perk_analyst'] },
-  { id: 'perk_leader', tree: 'social', tier: 3, name: '有人愿意跟着你', desc: '同伴士气衰减减半，收留上限 +1。', cost: 110, requires: ['perk_contacts'] },
+  { id: 'perk_leader', tree: 'social', tier: 3, name: '有人愿意跟着你', desc: '同伴士气衰减减半，收留上限 +1。', cost: 110, requires: ['perk_contacts'], wip: true },
   { id: 'perk_wellprepared', tree: 'social', tier: 3, name: '早有准备', desc: '起始行动点 +1。', cost: 110, requires: ['perk_reputation'] },
 ];
 

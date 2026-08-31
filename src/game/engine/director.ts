@@ -15,6 +15,7 @@ import { DIRECTOR } from '../balance';
 import { FAMILY_BY_ID, ALL_FAMILIES } from '../content/events';
 import type { Rng } from '../rng';
 import type { EventFamily, EventKind, EventVariant, Facts, RunState } from '../types';
+import { addLog } from './effects';
 import { deriveFacts, matchQuery } from './tags';
 
 export interface Pick {
@@ -110,7 +111,30 @@ function pacingMultiplier(f: EventFamily, run: RunState): number {
     mult *= 1 + (40 - Math.min(40, run.stats.sanity)) / 15;
   }
 
+  const boost = run.directorBoost?.[f.id];
+  if (boost && boost > 1) mult *= boost;
+
   return mult;
+}
+
+/** 选项刚满足某家族 require 时，给概率链加权 */
+export function applyDirectorBoost(run: RunState, factsBefore: Facts): void {
+  if (!run.directorBoost) run.directorBoost = {};
+  const factsAfter = deriveFacts(run);
+  for (const f of ALL_FAMILIES) {
+    if (f.baseWeight <= 0) continue;
+    if (f.require && !matchQuery(f.require, factsBefore) && matchQuery(f.require, factsAfter)) {
+      const next = Math.min(6, (run.directorBoost[f.id] ?? 1) * 3);
+      run.directorBoost[f.id] = next;
+    }
+    for (const v of f.variants) {
+      if (!v.require) continue;
+      if (!matchQuery(v.require, factsBefore) && matchQuery(v.require, factsAfter)) {
+        const next = Math.min(6, (run.directorBoost[f.id] ?? 1) * 3);
+        run.directorBoost[f.id] = next;
+      }
+    }
+  }
 }
 
 // ============================================================
@@ -149,15 +173,28 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
   // ---------- 1. 到期的因果链 ----------
   const stillPending: typeof run.pending = [];
   for (const p of run.pending) {
+    const hasWait = p.waitFor !== undefined;
+    if (p.dueDay === undefined) {
+      stillPending.push(p);
+      continue;
+    }
     if (p.dueDay > run.day) {
       stillPending.push(p);
       continue;
     }
-    // unless 命中则取消
     if (p.unless && matchQuery(p.unless, facts)) continue;
+    if (p.require && !matchQuery(p.require, facts)) {
+      const retries = (p.retries ?? 0) + 1;
+      if (retries < 5) stillPending.push({ ...p, dueDay: run.day + 1, retries });
+      else if (hasWait) stillPending.push({ ...p, dueDay: undefined, retries });
+      else addLog(run, '有件事错过了时机，没有再出现。', 'neutral');
+      continue;
+    }
     if (!tryPush(p.familyId, p.tags)) {
-      // 条件暂时不满足，往后推一天再看，最多拖 5 天
-      if (p.dueDay > run.day - 5) stillPending.push({ ...p, dueDay: run.day + 1 });
+      const retries = (p.retries ?? 0) + 1;
+      if (retries < 5) stillPending.push({ ...p, dueDay: run.day + 1, retries });
+      else if (hasWait) stillPending.push({ ...p, dueDay: undefined, retries });
+      else addLog(run, '有件事错过了时机，没有再出现。', 'neutral');
     }
   }
   run.pending = stillPending;
@@ -191,6 +228,10 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
 export function recordBeat(run: RunState, familyId: string): void {
   const f = FAMILY_BY_ID[familyId];
   run.eventHistory[familyId] = run.day;
+  if (run.directorBoost) delete run.directorBoost[familyId];
+  if (familyId.includes('iodine') && !run.flags.includes('flag:sawIodineOffer')) {
+    run.flags.push('flag:sawIodineOffer');
+  }
   if (f) {
     run.recentBeats.push({ day: run.day, kind: f.kind, intensity: f.intensity });
     if (run.recentBeats.length > 30) run.recentBeats.splice(0, run.recentBeats.length - 30);

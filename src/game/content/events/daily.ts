@@ -14,7 +14,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     baseWeight: 10,
-    cooldown: 4,
+    cooldown: 14,
     forbid: { all: ['site:isolated'] },
     variants: [
       {
@@ -183,7 +183,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     baseWeight: 9,
-    cooldown: 4,
+    cooldown: 14,
     require: { any: ['mod:power>=1', 'mod:filter>=1', 'mod:airFilter>=1'] },
     variants: [
       {
@@ -284,7 +284,7 @@ export const DAILY_EVENTS: EventFamily[] = [
       {
         id: 'it_broke',
         title: '它彻底停了',
-        body: '半夜三点，那个声音突然没有了。不是修好了，是停了。\n你打着手电过去看，轴已经卡死，外壳烫得不能碰。你早就听见它在求救了。',
+        body: '半夜三点，那个声音突然没有了。不是修好了，是停了。\n你打着手电过去看，轴已经卡死，外壳烫得不能碰。那声咔哒你早就听见了。',
         require: { any: ['flag:deferredMaintenance'] },
         choices: [
           {
@@ -323,7 +323,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 5,
+    cooldown: 14,
     variants: [
       {
         id: 'rats',
@@ -420,7 +420,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     baseWeight: 9,
-    cooldown: 5,
+    cooldown: 14,
     variants: [
       {
         id: 'rooftop_tank',
@@ -510,8 +510,8 @@ export const DAILY_EVENTS: EventFamily[] = [
     kind: 'social',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 9,
-    cooldown: 4,
+    baseWeight: 0,
+    cooldown: 14,
     require: { any: ['crew:some', 'crew:full'] },
     variants: [
       {
@@ -580,7 +580,7 @@ export const DAILY_EVENTS: EventFamily[] = [
               },
               bad: {
                 survivor: { morale: -12, trust: -8 },
-                log: '没有人承认。每个人都在看别人。从今天起这屋里有了一种不会消失的东西。',
+                log: '没有人承认。每个人都在看别人。那两份罐头没有回来。',
                 tone: 'bad',
               },
             },
@@ -617,8 +617,8 @@ export const DAILY_EVENTS: EventFamily[] = [
     kind: 'social',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 7,
-    cooldown: 7,
+    baseWeight: 0,
+    once: true,
     forbid: { all: ['crew:full'] },
     variants: [
       {
@@ -710,7 +710,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 5,
+    cooldown: 14,
     variants: [
       {
         id: 'notebook',
@@ -820,7 +820,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 4,
+    cooldown: 14,
     require: { all: ['mod:radio>=1'] },
     variants: [
       {
@@ -940,7 +940,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['temp:cold', 'temp:freezing', 'temp:extreme'] },
     variants: [
       {
@@ -991,7 +991,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['order:failing', 'order:collapsed', 'order:strained'] },
     variants: [
       {
@@ -1099,7 +1099,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     baseWeight: 7,
-    cooldown: 6,
+    cooldown: 14,
     forbid: { any: ['exposure:marked', 'exposure:hunted'] },
     variants: [
       {
@@ -1148,7 +1148,7 @@ export const DAILY_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     baseWeight: 7,
-    cooldown: 6,
+    cooldown: 14,
     require: { all: ['hasPet'] },
     variants: [
       {

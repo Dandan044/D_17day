@@ -14,12 +14,12 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['prep'],
     baseWeight: 10,
-    cooldown: 3,
+    cooldown: 14,
     variants: [
       {
         id: 'supermarket',
         title: '超市门口排到了马路上',
-        body: '晚上八点，你路过那家你每周都去的超市。队伍从生鲜区排到了马路对面。有人推着三辆购物车，有人在为最后一箱矿泉水争执。\n收银员的表情很奇怪——不是害怕，是那种"我已经不想理解今天发生了什么"的疲惫。',
+        body: '晚上八点，你路过那家你每周都去的超市。队伍从生鲜区排到了马路对面。有人推着三辆购物车，有人在为最后一箱矿泉水争执。\n收银员的脸很平，像已经不想再理解今天发生了什么。',
         choices: [
           {
             id: 'queue',
@@ -98,7 +98,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['prep'],
     baseWeight: 9,
-    cooldown: 3,
+    cooldown: 14,
     variants: [
       {
         id: 'lijie_water',
@@ -201,6 +201,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['prep', 'survival'],
     baseWeight: 0,
+    require: { any: ['flag:helpedLijie', 'flag:savedChild'] },
     variants: [
       {
         id: 'repay',
@@ -500,7 +501,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['prep'],
     baseWeight: 7,
-    cooldown: 4,
+    cooldown: 14,
     variants: [
       {
         id: 'boss',
@@ -550,7 +551,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['prep'],
     baseWeight: 6,
-    cooldown: 5,
+    cooldown: 14,
     variants: [
       {
         id: 'kit',
@@ -712,7 +713,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['prep'],
     baseWeight: 6,
-    cooldown: 6,
+    cooldown: 14,
     variants: [
       {
         id: 'generator',
@@ -773,7 +774,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['prep'],
     baseWeight: 5,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['site:urban', 'site:highFloor', 'site:underground'] },
     variants: [
       {
@@ -836,7 +837,7 @@ export const PREP_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['prep'],
     baseWeight: 8,
-    cooldown: 3,
+    cooldown: 14,
     variants: [
       {
         id: 'two_reports',

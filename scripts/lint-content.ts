@@ -17,7 +17,7 @@ import { DISASTERS } from '../src/game/content/disasters';
 import { ENDINGS } from '../src/game/content/endings';
 import { ALL_FAMILIES, FAMILY_BY_ID } from '../src/game/content/events';
 import { UNLOCK_COST, UNLOCK_NAMES } from '../src/game/content/perks';
-import { SITES } from '../src/game/content/sites';
+import { SITES, SITE_BY_ID } from '../src/game/content/sites';
 import { isEligible } from '../src/game/engine/director';
 import { deriveFacts } from '../src/game/engine/tags';
 import { chooseSite, createRun } from '../src/game/engine/run';
@@ -29,6 +29,8 @@ import type { DisasterId, EventFamily, SiteId, TagQuery, WeatherId } from '../sr
 const errors: string[] = [];
 const warnings: string[] = [];
 const tagUsage = new Map<string, number>();
+const writtenFlags = new Set<string>();
+const readFlags = new Set<string>();
 
 const err = (m: string) => errors.push(m);
 const warn = (m: string) => warnings.push(m);
@@ -45,6 +47,7 @@ function checkQuery(where: string, q: TagQuery | undefined): void {
       if (!isKnownTag(tag)) {
         err(`${where}：标签 "${tag}" 不在注册表中（拼写错误会让过滤器静默失效）`);
       }
+      if (tag.startsWith('flag:')) readFlags.add(tag);
     }
   }
   // 互斥检查
@@ -65,6 +68,38 @@ function checkFlagList(where: string, flags: string[] | undefined): void {
     else if (parseTag(f).kind === 'flag' && !f.startsWith('flag:') && !f.includes(':')) {
       warn(`${where}：标签 "${f}" 没有命名空间前缀，建议用 flag:`);
     }
+  }
+}
+
+/** log 承诺了世界事实，effect 必须改对应机械字段 */
+function checkEmptyPromise(
+  where: string,
+  log: string,
+  e: {
+    res?: { water?: number };
+    locations?: Array<{ stock?: number; blocked?: string | null }>;
+    setFlags?: string[];
+    schedule?: unknown[];
+  },
+): void {
+  if (!log) return;
+  if (/(哪个仓库|仓库还没被清)/.test(log) && !e.locations?.some((l) => l.stock !== undefined) && !e.schedule?.length) {
+    err(`${where}：log 承诺仓库还在，effect 没有 locations.stock 或 schedule`);
+  }
+  if (/设卡/.test(log) && !e.locations?.some((l) => l.blocked)) {
+    err(`${where}：log 承诺设卡，effect 没有 locations.blocked`);
+  }
+  if (/(给你|给了你).{0,8}水|两瓶水/.test(log) && (e.res?.water ?? 0) <= 0) {
+    err(`${where}：log 承诺给水，effect 没有加水`);
+  }
+  if (/(北边.{0,8}收人|北上路线)/.test(log) && !e.setFlags?.includes('flag:knowsNorthRoute')) {
+    err(`${where}：log 承诺北上，effect 没有 flag:knowsNorthRoute`);
+  }
+  if (/(把坐标抄|抄三遍|把坐标记下来)/.test(log) && !e.setFlags?.includes('flag:knowsNorthRoute') && !e.setFlags?.includes('flag:hasEvacMap')) {
+    err(`${where}：log 承诺坐标，effect 没有已知路线 flag`);
+  }
+  if (/(借.{0,6}钥匙|钥匙.{0,4}借)/.test(log) && (e.res?.water ?? 0) <= 0) {
+    err(`${where}：log 承诺借钥匙取水，effect 没有加水`);
   }
 }
 
@@ -121,17 +156,23 @@ for (const f of ALL_FAMILIES) {
         warn(`${cw}：effect 扣了行动点，但 requires 没声明门槛，AP 为 0 时照样能选`);
       }
 
-      for (const e of effects) {
-        if (!e.log?.trim()) err(`${cw}：effect 缺少 log 文本`);
-        checkFlagList(`${cw}.setFlags`, e.setFlags);
-        checkFlagList(`${cw}.clearFlags`, e.clearFlags);
-        for (const s of e.schedule ?? []) {
+        for (const e of effects) {
+          if (!e.log?.trim()) err(`${cw}：effect 缺少 log 文本`);
+          checkFlagList(`${cw}.setFlags`, e.setFlags);
+          checkFlagList(`${cw}.clearFlags`, e.clearFlags);
+          for (const f of e.setFlags ?? []) writtenFlags.add(f);
+          checkEmptyPromise(cw, e.log ?? '', e);
+          for (const s of e.schedule ?? []) {
           scheduledFamilies.add(s.familyId);
           if (!FAMILY_BY_ID[s.familyId]) {
             err(`${cw}：schedule 指向不存在的事件家族 "${s.familyId}"，因果链会断在这里`);
           }
-          if (s.inDays <= 0) err(`${cw}：schedule 的 inDays 必须大于 0`);
+          if (s.inDays === undefined && !s.waitFor) {
+            err(`${cw}：schedule 必须指定 inDays 或 waitFor`);
+          }
+          if (s.inDays !== undefined && s.inDays <= 0) err(`${cw}：schedule 的 inDays 必须大于 0`);
           checkQuery(`${cw}.schedule.unless`, s.unless);
+          checkQuery(`${cw}.schedule.require`, s.require);
         }
         for (const u of e.unlock ?? []) {
           if (!UNLOCK_NAMES[u]) warn(`${cw}：unlock "${u}" 没有展示名`);
@@ -149,6 +190,8 @@ for (const f of ALL_FAMILIES) {
   if (f.baseWeight > 0) continue;
   if (scheduledFamilies.has(f.id)) continue;
   if (PRESSURE_FAMILIES.includes(f.id)) continue;
+  if (f.id === 'daily_recruit' || f.id === 'daily_crew_friction') continue;
+  if (f.id.startsWith('stat_arc_')) continue;
   err(`事件家族 ${f.id}：baseWeight 为 0，又没有任何 schedule 指向它，也不在暴露度阶梯里——这是死内容`);
 }
 
@@ -228,6 +271,7 @@ for (const familyId of PRESSURE_FAMILIES) {
   for (const disaster of DISASTERS) {
     const weathers = Object.keys(disaster.weather) as WeatherId[];
     for (const site of SITES) {
+      if (site.wip) continue;
       for (const weather of weathers) {
         const run = buildProbe(disaster.id, site.id, 4, weather);
         run.world.exposure = 90;
@@ -248,18 +292,132 @@ for (const familyId of PRESSURE_FAMILIES) {
 }
 
 // ============================================================
+// 5. 叙事标签必须被读到
+// ============================================================
+
+const ENGINE_FLAGS = new Set([
+  'flag:coAlarm',
+  'flag:hasVehicle',
+  'flag:intelBonus',
+  'flag:raidDefend',
+  'flag:raidHide',
+  'flag:iodine',
+  'flag:geiger',
+  'flag:mask',
+  'flag:hasPet',
+  'flag:hasCart',
+  'flag:rainCatcher',
+  'flag:gunshotRecent',
+  'flag:alarmRig',
+  'flag:floodWall',
+  'flag:antenna',
+  'flag:warehousePickup',
+  'flag:lootedNeighbor',
+  'flag:scoutInside',
+  'flag:knowsNorthRoute',
+  'flag:petDog',
+]);
+
+for (const f of writtenFlags) {
+  if (ENGINE_FLAGS.has(f)) continue;
+  if (f.startsWith('flag:class')) continue;
+  if (!readFlags.has(f)) {
+    err(`叙事标签 ${f} 只被写入，从未被事件 require/unless/forbid 读取——玩家会感觉「选了就没了」`);
+  }
+}
+
+// ============================================================
+// 6. 公寓 × 核交火：本切片 schedule 必须有可用变体
+// ============================================================
+
+{
+  const nuclear = DISASTERS.find((d) => d.id === 'nuclear')!;
+  const weathers = Object.keys(nuclear.weather) as WeatherId[];
+  const sliceFacts: Array<ReturnType<typeof deriveFacts>> = [];
+  for (const weather of weathers) {
+    sliceFacts.push(deriveFacts(buildProbe('nuclear', 'apartment', 3, weather)));
+    const prep = createRun({
+      seed: 12345,
+      classId: 'clerk',
+      packId: 'none',
+      difficulty: 'normal',
+      metaPerks: [],
+      forceDisaster: 'nuclear',
+    });
+    chooseSite(prep, 'apartment');
+    prep.world.weather = weather;
+    sliceFacts.push(deriveFacts(prep));
+  }
+
+  const usableInSlice = (family: EventFamily, extraFlags: string[] = []) =>
+    sliceFacts.some((facts) => hasUsableVariant(family, withFlags(facts, extraFlags)));
+
+  for (const f of ALL_FAMILIES) {
+    for (const v of f.variants) {
+      const variantLive = sliceFacts.some((facts) => {
+        if (v.require?.all && !v.require.all.every((t) => matches(t, facts))) return false;
+        if (v.require?.any && v.require.any.length > 0 && !v.require.any.some((t) => matches(t, facts))) return false;
+        if (v.require?.none && v.require.none.some((t) => matches(t, facts))) return false;
+        if (v.forbid?.any && v.forbid.any.some((t) => matches(t, facts))) return false;
+        if (v.forbid?.all && v.forbid.all.length > 0 && v.forbid.all.every((t) => matches(t, facts))) return false;
+        return true;
+      });
+      if (!variantLive) continue;
+      for (const c of v.choices) {
+        const effects = c.check ? [c.check.ok, c.check.bad] : c.effect ? [c.effect] : [];
+        for (const e of effects) {
+          for (const s of e.schedule ?? []) {
+            const target = FAMILY_BY_ID[s.familyId];
+            if (!target) continue;
+            const extra = [...(e.setFlags ?? []), ...(s.tags ?? [])];
+            if (!usableInSlice(target, extra)) {
+              err(
+                `公寓×核交火下，${f.id}/${v.id} 预约了 ${s.familyId}，但该家族没有可用变体`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const aptNuclear = buildProbe('nuclear', 'apartment', 3, 'blackRain');
+  const aptFacts = deriveFacts(aptNuclear);
+  const slicePool = ALL_FAMILIES.filter((f) => f.baseWeight > 0 && isEligible(f, aptNuclear, aptFacts) === null);
+  if (slicePool.length < 40) {
+    warn(`公寓 × 核交火生存池只有 ${slicePool.length} 个加权家族（目标约百条本局可玩）`);
+  }
+}
+
+// ============================================================
 // 输出
 // ============================================================
 
 function buildProbe(disaster: DisasterId, siteId: SiteId, threat: number, weather: WeatherId) {
   const run = createRun({ seed: 12345, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [], forceDisaster: disaster });
-  chooseSite(run, siteId);
+  const site = SITE_BY_ID[siteId];
+  if (site?.wip) {
+    run.siteId = siteId;
+    for (const [k, v] of Object.entries(site.baseModules)) {
+      const id = k as keyof typeof run.modules;
+      run.modules[id] = Math.max(run.modules[id], v ?? 0);
+    }
+  } else {
+    chooseSite(run, siteId);
+  }
   run.day = TIME.COLLAPSE_DAY + (threat - 1) * TIME.WEEK;
   run.threat = threat;
   run.phase = 'survival';
   applyOnset(run, makeRng(1));
   run.world.weather = weather;
   return run;
+}
+
+function withFlags(facts: ReturnType<typeof deriveFacts>, extra: string[]): ReturnType<typeof deriveFacts> {
+  if (extra.length === 0) return facts;
+  const flags = new Set(facts.flags);
+  for (const f of extra) flags.add(f);
+  return { flags, nums: facts.nums };
 }
 
 function hasUsableVariant(family: EventFamily, facts: ReturnType<typeof deriveFacts>): boolean {

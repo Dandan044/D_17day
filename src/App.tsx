@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { rebuildSettlement, useGame } from './game/store';
+import { SITE_BY_ID } from './game/content/sites';
 import Game from './ui/Game';
 import MainMenu from './ui/MainMenu';
 import { CodexPanel, MetaPanel } from './ui/Meta';
@@ -9,6 +10,7 @@ import Setup from './ui/Setup';
 import Summary from './ui/Summary';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
+import { PowerPanel } from './ui/PowerPanel';
 
 export default function App() {
   const {
@@ -29,10 +31,24 @@ export default function App() {
   /**
    * 自愈二：队列里留着指向已删除家族/变体的条目时，EventCard 会渲染成 null，
    * 而「结束这一天」又被队列长度拦住。进游戏前先清一遍，别让玩家卡死。
+   * pruneQueue 只在真的丢掉条目时才 setState，否则会和本 effect 的 `run` 依赖互相踢，死循环。
    */
   useEffect(() => {
     if (run && run.queue.length > 0) pruneQueue();
   }, [run, pruneQueue]);
+
+  /**
+   * 本切片未开放的站点若出现在旧存档里，退回选址，避免偷偷改档。
+   */
+  useEffect(() => {
+    if (!run?.siteId) return;
+    const site = SITE_BY_ID[run.siteId];
+    if (!site?.wip) return;
+    useGame.setState({
+      run: { ...run, siteId: null, phase: 'siteSelect' },
+    });
+    useGame.getState().toast('这个住所还在开发中，请另选一处。', 'bad');
+  }, [run]);
 
   /**
    * 自愈一：settlement 不进存档，但下面的路由依赖它存在。
@@ -81,9 +97,12 @@ export default function App() {
 
       {/* 浮层 */}
       {run && overlay === 'shelter' && <ShelterPanel run={run} />}
+      {run && overlay === 'power' && <PowerPanel run={run} />}
       {run && overlay === 'map' && <MapPanel run={run} />}
       {run && overlay === 'intel' && <IntelPanel run={run} />}
-      {run && overlay === 'crew' && <CrewPanel run={run} />}
+      {run && overlay === 'crew' && (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) > 0 && (
+        <CrewPanel run={run} />
+      )}
       {run && overlay === 'log' && <LogPanel run={run} />}
       {overlay === 'meta' && <MetaPanel />}
       {overlay === 'codex' && <CodexPanel />}

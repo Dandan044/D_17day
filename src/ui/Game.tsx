@@ -1,17 +1,19 @@
-import { THREAT_DESC, TIME } from '../game/balance';
+import { COLD, RAD, THREAT_DESC, TIME } from '../game/balance';
 import { CONDITION_BY_ID } from '../game/content/conditions';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { RES_NAME, RES_UNIT } from '../game/content/locations';
 import { MODULES } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
+import { canElectricHeat, canFuelHeat } from '../game/engine/climate';
 import { dailyNeeds } from '../game/engine/economy';
 import { dailyExposure, exposureTier, TIER_DESC, TIER_NAMES } from '../game/engine/exposure';
-import { feltTemperature } from '../game/engine/health';
-import { computePower, effectiveModule, threatName, waterCapacity } from '../game/engine/tags';
+import { previewIndoor } from '../game/engine/health';
+import { LOAD_NAME } from '../game/engine/power';
+import { computePower, effectiveModule, iodineActive, radiationShield, threatName, waterCapacity } from '../game/engine/tags';
 import { WEATHER_DESC, WEATHER_NAME } from '../game/engine/world';
 import { formatSeed } from '../game/rng';
 import { useGame } from '../game/store';
-import type { ModuleId, ResourceId, RunState } from '../game/types';
+import type { HeatMode, ModuleId, ResourceId, RunState } from '../game/types';
 import EventCard from './EventCard';
 import { Bar, Chip, Gauge, Panel, SectionLabel, Stat } from './kit';
 
@@ -69,8 +71,13 @@ function DayHeader({ run }: { run: RunState }) {
   const { setOverlay } = useGame();
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
-  const felt = feltTemperature(run);
+  const indoor = previewIndoor(run);
   const disaster = DISASTER_BY_ID[run.world.disaster];
+  const shield = radiationShield(run);
+  const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
+  const power = computePower(run);
+  const airLv = run.modules.airFilter;
+  const airEff = effectiveModule(run, 'airFilter', power);
 
   return (
     <div className="shrink-0 border-b border-line bg-panel/90 backdrop-blur">
@@ -98,7 +105,10 @@ function DayHeader({ run }: { run: RunState }) {
         <div>
           <div className="label">天候</div>
           <div className="text-[12.5px] text-paper" title={WEATHER_DESC[run.world.weather]}>
-            {WEATHER_NAME[run.world.weather]} · <span className="num">{felt}°C</span>
+            {WEATHER_NAME[run.world.weather]} ·{' '}
+            <span className="num">
+              室外 {run.world.temperature}°C / 室内 {indoor.indoor}°C（目标 {COLD.TARGET}）
+            </span>
           </div>
         </div>
 
@@ -106,8 +116,14 @@ function DayHeader({ run }: { run: RunState }) {
         {!isPrep && (
           <div className="hidden sm:block">
             <div className="label">环境</div>
-            <div className="flex gap-1.5">
-              {run.world.radiation > 8 && <Chip tone="bad">辐射 {Math.round(run.world.radiation)}</Chip>}
+            <div className="flex flex-wrap gap-1.5">
+              {run.world.radiation > 8 && (
+                <Chip tone={run.world.radiation > tol ? 'bad' : 'warn'}>
+                  辐射 {Math.round(run.world.radiation)} / 可挡 {tol}
+                </Chip>
+              )}
+              {airLv > 0 && airEff === 0 && <Chip tone="bad">过滤停摆，按 0 级计</Chip>}
+              {iodineActive(run) && <Chip tone="good">碘片保护中</Chip>}
               {run.world.airPollution > 30 && <Chip tone="warn">空气 {Math.round(run.world.airPollution)}</Chip>}
               {run.world.contagion > 20 && <Chip tone="psyche">疫情 {Math.round(run.world.contagion)}</Chip>}
               {run.world.lawOrder < 45 && <Chip tone="bad">秩序 {Math.round(run.world.lawOrder)}</Chip>}
@@ -144,14 +160,14 @@ function DayHeader({ run }: { run: RunState }) {
             <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('shelter')}>
               避难所
             </button>
+            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('power')}>
+              供电
+            </button>
             <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('map')}>
-              {isPrep ? '采购与搜集' : '外出'}
+              {isPrep ? '采购' : '外出'}
             </button>
             <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('intel')}>
               情报
-            </button>
-            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('crew')}>
-              人
             </button>
             <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('log')}>
               日记
@@ -209,12 +225,20 @@ function BodyPanel({ run }: { run: RunState }) {
                       </button>
                     )}
                   </div>
-                  <div className="mt-0.5 text-[11px] leading-snug text-faint">{def.desc}</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-faint">
+                    {def.desc}
+                    {canTreat ? ' 用药只解除状态，不回生命。' : ''}
+                  </div>
                 </div>
               );
             })}
           </div>
         </div>
+      )}
+      {effectiveModule(run, 'medbay') > 0 && (
+        <p className="mt-3 border-t border-line pt-2 text-[11.5px] leading-snug text-faint">
+          医疗站减轻病情损耗。治疗只解除状态，不额外回血。
+        </p>
       )}
     </Panel>
   );
@@ -225,10 +249,13 @@ function BodyPanel({ run }: { run: RunState }) {
 // ============================================================
 
 function RationPanel({ run }: { run: RunState }) {
-  const { setRation, setWaterUse, setPowerMode } = useGame();
+  const { setRation, setWaterUse, setHeatMode, setOverlay } = useGame();
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const needs = dailyNeeds(run, run.difficulty);
   const power = computePower(run);
+  const indoor = previewIndoor(run);
+  const heat = run.heatMode ?? 'off';
+  const gap = Math.max(0, COLD.TARGET - indoor.unheated);
 
   if (isPrep) {
     return (
@@ -245,7 +272,7 @@ function RationPanel({ run }: { run: RunState }) {
   }
 
   return (
-    <Panel title="配给与用电" mark>
+    <Panel title="配给、取暖与用电" mark>
       <div className="space-y-3">
         <div>
           <div className="mb-1 flex items-baseline justify-between">
@@ -285,25 +312,64 @@ function RationPanel({ run }: { run: RunState }) {
 
         <div>
           <div className="mb-1 flex items-baseline justify-between">
-            <span className="label">夜间用电</span>
+            <span className="label">取暖 · 目标 {COLD.TARGET}°C</span>
+            <span className="num text-[11.5px] text-dim">
+              室内 {indoor.indoor}°C
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {(['off', 'fuel', 'electric'] as HeatMode[]).map((m) => {
+              const locked = (m === 'fuel' && !canFuelHeat(run)) || (m === 'electric' && !canElectricHeat(run));
+              return (
+                <button
+                  key={m}
+                  disabled={locked}
+                  onClick={() => setHeatMode(m)}
+                  className={`btn px-1 py-1 text-[11px] ${heat === m ? 'btn-primary' : 'btn-ghost'}`}
+                  title={
+                    locked
+                      ? m === 'fuel'
+                        ? '保温 1 级解锁烧燃料'
+                        : '保温 2 级且发电 1 级解锁电热'
+                      : undefined
+                  }
+                >
+                  {{ off: '不取暖', fuel: '烧燃料', electric: '电热' }[m]}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-faint">
+            {heat === 'off' && `不加热。室外体感 ${indoor.unheated}°C。`}
+            {heat === 'fuel' &&
+              (gap > 0
+                ? `差 ${gap.toFixed(0)}°C，预计 ${indoor.fuelCost.toFixed(1)} L 油${run.res.fuel < indoor.fuelCost ? '（油不够会按比例升温）' : ''}`
+                : '已经够暖，今晚不耗油。')}
+            {heat === 'electric' &&
+              (gap > 0
+                ? `差 ${gap.toFixed(0)}°C，预计 ${indoor.kwh.toFixed(1)} kWh，与灯光/冰箱抢配额`
+                : '已经够暖，电热不转。')}
+          </p>
+        </div>
+
+        <div>
+          <div className="mb-1 flex items-baseline justify-between">
+            <span className="label">供电</span>
             <span className="num text-[11.5px] text-dim">
               {power.output.toFixed(1)} / {power.demand.toFixed(1)} kWh
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-1">
-            {(['full', 'thrifty', 'blackout'] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setPowerMode(r)}
-                className={`btn px-1 py-1 text-[11px] ${run.powerMode === r ? 'btn-primary' : 'btn-ghost'}`}
-              >
-                {{ full: '全负荷', thrifty: '节制', blackout: '全黑' }[r]}
-              </button>
-            ))}
-          </div>
+          <button className="btn btn-ghost w-full py-1.5 text-[11.5px]" onClick={() => setOverlay('power')}>
+            家电优先级 · 关灯/冰箱/电热
+          </button>
+          <p className="mt-1.5 text-[11px] leading-snug text-faint">
+            光伏 {power.solar.toFixed(1)}（{WEATHER_NAME[run.world.weather]} ×{power.weatherMult.toFixed(2)}
+            {power.disasterMult !== 1 ? ` ×核沉降 ${power.disasterMult.toFixed(2)}` : ''}）
+            {power.generator > 0 ? ` · 柴油机补 ${power.generator.toFixed(1)}` : ''}
+          </p>
           {power.offline.length > 0 && (
             <div className="mt-1.5 text-[11px] leading-snug text-alarmhi">
-              电力不足，已停摆：{power.offline.map((m) => MODULES.find((x) => x.id === m)?.name).join('、')}
+              电力不足，已停摆：{power.offline.map((m) => LOAD_NAME[m] ?? m).join('、')}
             </div>
           )}
         </div>
@@ -323,10 +389,10 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
   const actions = [
     {
       id: 'out',
-      title: isPrep ? '出门采购与搜集' : '外出搜刮',
+      title: isPrep ? '出门采购' : '外出搜刮',
       desc: isPrep
-        ? '超市、五金店、药店、加油站、旧货市场。物价每天都在涨，而限购从第五天开始。'
-        : '外面还剩下的东西越来越少，越远的地方越危险。带得回来才算你的。',
+        ? '超市、五金店、药店、加油站、旧货市场。物价每天都在涨，限购是真的，货架会空。'
+        : '外面还剩下的东西越来越少。危险会变成暴露，夜里更高。燃料或体力不够就出不去。',
       ap: 1,
       onClick: () => setOverlay('map'),
     },
@@ -349,7 +415,7 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
     {
       id: 'rest',
       title: '休息',
-      desc: '恢复体力和一点理智。有时候什么都不做是正确的选择。',
+      desc: '恢复体力和一点理智。不回生命。有时候什么都不做是正确的选择。',
       ap: 1,
       onClick: rest,
     },

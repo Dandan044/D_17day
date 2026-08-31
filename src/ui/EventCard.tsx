@@ -1,10 +1,13 @@
 import { FAMILY_BY_ID } from '../game/content/events';
 import { RES_NAME } from '../game/content/locations';
+import { SITE_BY_ID } from '../game/content/sites';
 import { kindName } from '../game/engine/director';
+import { summarizeEffect } from '../game/engine/effects';
 import { checkRequirement, deriveFacts } from '../game/engine/tags';
 import { useGame } from '../game/store';
 import type { Choice, RunState, SkillId } from '../game/types';
 import { Chip } from './kit';
+import { scrambleText } from './scramble';
 
 const SKILL_NAME: Record<SkillId, string> = {
   medicine: '医疗',
@@ -51,6 +54,13 @@ export default function EventCard({ run }: { run: RunState }) {
 
   const facts = deriveFacts(run);
   const unreliable = run.stats.sanity < 35;
+  const hideRecruit = (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) <= 0;
+  const visibleChoices = variant.choices.filter((c) => {
+    if (!hideRecruit) return true;
+    const rec =
+      c.effect?.survivor?.recruit ?? c.check?.ok?.survivor?.recruit ?? c.check?.bad?.survivor?.recruit;
+    return !rec;
+  });
 
   return (
     <div className="panel corner-mark anim-rise">
@@ -63,11 +73,13 @@ export default function EventCard({ run }: { run: RunState }) {
       </div>
 
       <div className="p-4 sm:p-5">
-        <h3 className="mb-3 text-[17px] font-medium leading-snug text-paper">{variant.title}</h3>
+        <h3 className="mb-3 text-[17px] font-medium leading-snug text-paper">
+          {scrambleText(variant.title, run, `${item.familyId}-t`)}
+        </h3>
         <div className={`mb-5 space-y-2.5 ${unreliable ? 'text-psyche/85' : 'text-dim'}`}>
           {variant.body.split('\n').map((p, i) => (
             <p key={i} className="text-[13.5px] leading-relaxed">
-              {p}
+              {scrambleText(p, run, `${item.familyId}-b${i}`)}
             </p>
           ))}
         </div>
@@ -79,10 +91,11 @@ export default function EventCard({ run }: { run: RunState }) {
         )}
 
         <div className="space-y-2">
-          {variant.choices.map((c) => {
+          {visibleChoices.map((c) => {
             const req = checkRequirement(c.requires, run, facts);
             const chance = c.check ? successChance(c.check.dc, run.skills[c.check.skill]) : null;
             const cost = requirementCost(c);
+            const preview = summarizeEffect(c.effect, RES_NAME);
             return (
               <button
                 key={c.id}
@@ -91,7 +104,7 @@ export default function EventCard({ run }: { run: RunState }) {
                 onClick={() => resolveChoice(item.familyId, item.variantId, c.id)}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <span className="flex-1">{c.label}</span>
+                  <span className="flex-1">{scrambleText(c.label, run, `${item.familyId}-${c.id}`)}</span>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     {!req.ok && <Chip tone="bad">{req.reason}</Chip>}
                     {req.ok && chance !== null && c.check && (
@@ -103,6 +116,7 @@ export default function EventCard({ run }: { run: RunState }) {
                   </div>
                 </div>
                 {c.note && <div className="mt-1 text-[11.5px] text-faint">{c.note}</div>}
+                {req.ok && preview && <div className="mt-1 text-[11px] text-amberdim">{preview}</div>}
               </button>
             );
           })}

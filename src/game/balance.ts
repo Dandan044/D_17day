@@ -2,7 +2,7 @@
  * 全部数值旋钮集中在此。调平衡只改这个文件。
  */
 
-import type { EventKind, ModuleId, ResourceId, StatId } from './types';
+import type { EventKind, PowerLoadId, ResourceId, StatId } from './types';
 
 // ============================================================
 // 时间轴
@@ -106,6 +106,14 @@ export const HEALTH = {
   THIRST_HP: -12,
   /** 营养不良的累积阈值：连续 n 天半配给 */
   MALNOURISH_DAYS: 3,
+  /** 标准/充足口粮连续 n 天解除营养不良 */
+  MALN_CURE_DAYS: 3,
+  STAMINA_LOW: 25,
+  HP_WARN: 40,
+  HP_CRIT: 20,
+  THRESHOLD_COOLDOWN: 8,
+  LIGHTS_SANITY_ON: 1,
+  LIGHTS_SANITY_OFF: -6,
   /** 生喝未净化水的患病概率 */
   RAW_WATER_SICK: 0.42,
   /** 卫生不足（无净水且无医疗站）的额外患病概率 */
@@ -120,10 +128,14 @@ export const COLD = {
   HP_PER_DEGREE: 0.38,
   /** 触发失温状态的温差 */
   HYPOTHERMIA_GAP: 7,
-  /** 有燃料烧炉子时的体感加成，保温等级会放大它 */
+  /** 取暖目标室内温度 */
+  TARGET: 25,
+  /** 烧燃料：每升高 1°C 耗油 (L)，0 级不可烧 */
+  FUEL_PER_DEGREE: [0, 0.14, 0.09, 0.06],
+  /** 电热：每升高 1°C 耗电 (kWh)，0/1 级不可用电热 */
+  ELECTRIC_PER_DEGREE: [0, 0, 0.18, 0.1],
   HEAT_BASE: 4,
   HEAT_PER_INSULATE: 2,
-  /** 取暖每日消耗的燃料下限 */
   HEAT_FUEL: 1,
 } as const;
 
@@ -159,6 +171,8 @@ export const EXPOSURE = {
   SRC_POWER_FULL: 9,
   SRC_POWER_THRIFTY: 3,
   SRC_POWER_BLACKOUT: 0,
+  SRC_LIGHTS: 5.5,
+  SRC_GENERATOR: 7,
   SRC_PER_COMPANION: 1.5,
   SRC_GUNSHOT: 14,
   SRC_SALVAGE: 6,
@@ -229,9 +243,14 @@ export const PRICE = {
 export const POWER = {
   /** 各发电等级的基础日产量 (kWh)：0 级无、1 太阳能小阵、2 中阵+蓄电、3 柴油机+大阵 */
   BASE_OUTPUT: [0, 2.4, 5.2, 9.0],
-  /** 柴油机档位耗油 (L/日) 与额外产出 */
-  GENERATOR_FUEL: { full: 3.2, thrifty: 1.4, blackout: 0 },
-  GENERATOR_OUTPUT: { full: 6.0, thrifty: 2.4, blackout: 0 },
+  /** 市电仍在时的额外供给 */
+  GRID_ON: 6,
+  GRID_ROLLING: 2,
+  LIGHTS_KWH: 0.3,
+  FRIDGE_KWH: 0.4,
+  /** 柴油机最大补电 (kWh) 与每 kWh 耗油 */
+  GENERATOR_MAX: 6,
+  GENERATOR_L_PER_KWH: 0.42,
   /** 天气对太阳能的倍率 */
   SOLAR_WEATHER: {
     clear: 1.0,
@@ -259,16 +278,19 @@ export const POWER = {
   /** 缺电时默认的保障优先级 */
   DEFAULT_PRIORITY: [
     'filter',
-    'insulate',
     'airFilter',
     'medbay',
-    'garden',
+    'lights',
+    'fridge',
     'radio',
+    'heater',
+    'garden',
+    'insulate',
     'fortify',
     'conceal',
     'cistern',
     'power',
-  ] as ModuleId[],
+  ] as PowerLoadId[],
 } as const;
 
 /** 易耗品 */

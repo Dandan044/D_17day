@@ -44,9 +44,11 @@ export function assessCollapse(run: RunState, rng: Rng): CollapseReport {
   if (run.world.disaster === 'nuclear') {
     if (run.flags.includes('flag:iodine')) {
       moduleScore += 12;
-      hits.push('你买了碘片。接下来的三天，它会替你的甲状腺挡下大部分剂量');
-    } else {
+      hits.push('你备了碘片。接下来几天，它会替你的甲状腺挡下大部分剂量');
+    } else if (run.flags.includes('flag:sawIodineOffer')) {
       misses.push('没有碘片。药店里那两盒你没买');
+    } else {
+      misses.push('你没备碘片。核沉降对甲状腺不客气');
     }
     if (site.tags.includes('site:underground')) {
       moduleScore += 15;
@@ -87,11 +89,11 @@ export function assessCollapse(run: RunState, rng: Rng): CollapseReport {
   if (run.world.disaster === 'gridDown') {
     if (run.modules.power >= 2) {
       moduleScore += 15;
-      hits.push('你有自己的电。从今天起这是一种奢侈品');
+      hits.push('你有自己的电。从今天起，城里大多数人都没有');
     } else if (run.modules.power === 0) {
       misses.push('没有发电。所有插电的东西从此刻起全部作废');
     }
-    if (run.res.fuel >= 25) hits.push(`储了 ${Math.round(run.res.fuel)} L 燃料，它现在是新的货币`);
+    if (run.res.fuel >= 25) hits.push(`储了 ${Math.round(run.res.fuel)} L 燃料，停电之后它比现金好用`);
   }
 
   // ---------- 基础储备 ----------

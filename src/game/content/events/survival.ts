@@ -712,7 +712,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
       {
         id: 'frozen_crowd',
         title: '门口有一群冻僵的人',
-        body: '七八个，也许更多。他们没有撬棍，也没有喊话，只是挤在门廊下背着风。\n最外面那个已经不动了。有个女人抱着一个用棉被裹起来的东西，看不出是不是活的。\n他们不像是来抢的。但他们也没打算走。你屋里的温度是他们唯一的希望。',
+        body: '七八个，也许更多。他们没有撬棍，也没有喊话，只是挤在门廊下背着风。\n最外面那个已经不动了。有个女人抱着一个用棉被裹起来的东西，看不出是不是活的。\n他们是来躲冷的。你屋里有暖气，他们没打算走。',
         require: { any: ['weather:blizzard', 'temp:freezing', 'temp:extreme'] },
         choices: [
           {
@@ -765,7 +765,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 3,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 6,
+    cooldown: 14,
     require: { all: ['weather:ashfall'] },
     variants: [
       {
@@ -818,7 +818,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 4,
     phase: ['survival'],
     baseWeight: 9,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['weather:flooding', 'water:flooded'] },
     variants: [
       {
@@ -924,7 +924,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 3,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['temp:freezing', 'temp:extreme', 'weather:blizzard'] },
     variants: [
       {
@@ -986,7 +986,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 3,
     phase: ['survival'],
     baseWeight: 8,
-    cooldown: 6,
+    cooldown: 14,
     require: { any: ['contagion:high', 'contagion:low'] },
     forbid: { all: ['site:isolated'] },
     variants: [
@@ -1047,7 +1047,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 3,
     phase: ['survival'],
     baseWeight: 7,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['cond:woundInfection', 'injured'] },
     variants: [
       {
@@ -1111,7 +1111,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     baseWeight: 9,
-    cooldown: 5,
+    cooldown: 14,
     require: { any: ['faction:trader:active', 'faction:trader:dormant'] },
     variants: [
       {
@@ -1149,9 +1149,14 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             requires: { res: { meds: 1 } },
             effect: {
               res: { meds: -1 },
-              setFlags: ['flag:traderIntel'],
+              setFlags: ['flag:traderIntel', 'flag:knowsNorthRoute'],
               stance: { trader: 8 },
-              log: '他压低声音说了三个地方：哪个仓库还没被清、哪条路上有人设卡、以及北边确实在收人。',
+              locations: [
+                { id: 'warehouse', stock: 72 },
+                { id: 'school', blocked: '路上有人设卡' },
+              ],
+              schedule: [{ familyId: 'opp_trader_warehouse', inDays: 1 }],
+              log: '他压低声音说了三个地方：哪个仓库还没被清、哪条路上有人设卡、以及北边确实在收人。你把坐标写进日记。',
               tone: 'good',
             },
           },
@@ -1159,6 +1164,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             id: 'pass',
             label: '你现在没有他要的东西',
             effect: {
+              res: { water: 2 },
               stance: { trader: 3 },
               setFlags: ['flag:metTrader'],
               log: '你摇了摇头。他说没关系，问你需不需要水——他给了你两瓶，说下次记得就行。',
@@ -1186,12 +1192,44 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
   },
 
   {
+    id: 'opp_trader_warehouse',
+    kind: 'opportunity',
+    intensity: 1,
+    phase: ['survival'],
+    baseWeight: 0,
+    once: true,
+    variants: [
+      {
+        id: 'main',
+        title: '商人说的那个仓，卷帘门还虚掩着',
+        body: '你按日记上的坐标走到仓储中心外围。没有灯，但锁被撬过，又被人用铁丝随便绕上。\n设卡那条路你绕开了。北边的事还写在同一页。',
+        choices: [
+          {
+            id: 'note',
+            label: '确认还能进去，改天带包来',
+            effect: {
+              stats: { sanity: 3 },
+              log: '你没有今晚就冲。门缝里有纸箱的味道。存量还在。',
+              tone: 'good',
+            },
+          },
+          {
+            id: 'skip',
+            label: '什么都不做',
+            effect: { stats: { stamina: 4, sanity: -2 }, log: '你看了一眼就走。坐标还在日记里。', tone: 'neutral' },
+          },
+        ],
+      },
+    ],
+  },
+
+  {
     id: 'opp_supply_drop',
     kind: 'opportunity',
     intensity: 2,
     phase: ['survival'],
     baseWeight: 6,
-    cooldown: 8,
+    cooldown: 14,
     require: { any: ['faction:gov:active', 'faction:rescue:active'] },
     variants: [
       {
@@ -1396,6 +1434,34 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
           },
         ],
       },
+      {
+        id: 'stair_rumor',
+        title: '楼道里有人在传安置点的名单',
+        body: '没有收音机也传到了六楼。纸是手抄的，县名写错了一个字，但你还是认出来了。\n后面跟着两个数字。第二个比第一个大。',
+        require: { any: ['flag:familyAway', 'flag:familyLied'] },
+        choices: [
+          {
+            id: 'ask',
+            label: '追问抄纸的人',
+            effect: {
+              stats: { sanity: -6, stamina: -4 },
+              setFlags: ['flag:familyUnknown'],
+              log: '对方说名单是别人抄的。数字对不上号。你记下了那个错字。',
+              tone: 'grim',
+            },
+          },
+          {
+            id: 'keep',
+            label: '把纸带回家',
+            effect: {
+              stats: { sanity: -4 },
+              setFlags: ['flag:familyUnknown'],
+              log: '纸在桌上。两个数字你看了很多遍。',
+              tone: 'grim',
+            },
+          },
+        ],
+      },
     ],
   },
 
@@ -1476,7 +1542,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     baseWeight: 7,
-    cooldown: 4,
+    cooldown: 14,
     require: { all: ['sanity:low'] },
     variants: [
       {

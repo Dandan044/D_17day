@@ -4,7 +4,7 @@ import { TIME } from '../game/balance';
 import { DISASTERS, DISASTER_BY_ID } from '../game/content/disasters';
 import { SOURCE_NAME } from '../game/content/intel';
 import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locations';
-import { MODULES, moduleSpec } from '../game/content/modules';
+import { MODULES, moduleHardEffect, moduleSpec } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
 import {
   SALVAGE_TARGETS,
@@ -13,7 +13,8 @@ import {
   maintenanceOptions,
   nextLevel,
 } from '../game/engine/construction';
-import { buyLimit } from '../game/engine/economy';
+import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, iodineBoughtCount, remainingBuyLimit } from '../game/engine/economy';
+import { effectiveModule } from '../game/engine/tags';
 import { forecastAccuracy, WEATHER_NAME } from '../game/engine/world';
 import { useGame } from '../game/store';
 import type { BuildPath, DisasterId, ModuleId, ResourceId, RunState } from '../game/types';
@@ -94,7 +95,8 @@ export function ShelterPanel({ run }: { run: RunState }) {
                     {project && <Chip tone="warn">施工中</Chip>}
                   </div>
                   <div className="truncate text-[11.5px] text-faint">
-                    {level > 0 ? (moduleSpec(id, level)?.desc ?? m.desc) : m.zero}
+                    {moduleHardEffect(id, level, site.waterCapMult) ||
+                      (level > 0 ? (moduleSpec(id, level)?.desc ?? m.desc) : m.zero)}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-0.5">
@@ -114,6 +116,10 @@ export function ShelterPanel({ run }: { run: RunState }) {
               {isOpen && (
                 <div className="border-t border-line p-3">
                   <p className="mb-3 text-[12.5px] leading-relaxed text-dim">{m.desc}</p>
+                  <div className="mb-3 text-[12px] leading-snug text-amberhi">
+                    当前：{moduleHardEffect(id, level, site.waterCapMult) || '无'}
+                    {target ? ` → 下一级：${moduleHardEffect(id, target, site.waterCapMult)}` : ''}
+                  </div>
 
                   {project && (
                     <div className="mb-3 border-l-2 border-amber bg-amber/5 p-3">
@@ -190,6 +196,9 @@ export function ShelterPanel({ run }: { run: RunState }) {
 
       <div className="mt-4">
         <SectionLabel>维护</SectionLabel>
+        <p className="mb-2 text-[12px] leading-snug text-faint">
+          保养滤芯/机油也会推进某些还没结束的事。
+        </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {maintenanceOptions(run).map((m) => (
             <button key={m.kind} className="choice" disabled={!m.available} onClick={() => maintain(m.kind)}>
@@ -247,14 +256,16 @@ export function MapPanel({ run }: { run: RunState }) {
   const { setOverlay, scavenge, visitShop } = useGame();
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const [night, setNight] = useState(false);
+  const nightowl = run.abilities.includes('perk_nightowl');
+  const listed = isPrep ? LOCATIONS.filter((loc) => loc.prepShop) : LOCATIONS;
 
   return (
     <Modal
-      title={isPrep ? '采购与搜集' : '外出'}
+      title={isPrep ? '采购' : '外出'}
       subtitle={
         isPrep
           ? `物价指数 ${run.world.priceIndex.toFixed(2)}${run.day >= 5 ? ' · 已开始限购' : ''}`
-          : '越远的地方存量越多，也越难回来'
+          : '越远的地方存量越多，也越难回来。危险会变成暴露，高危可能被人盯上。'
       }
       onClose={() => setOverlay(null)}
       width="max-w-4xl"
@@ -272,18 +283,21 @@ export function MapPanel({ run }: { run: RunState }) {
             className={`btn px-3 py-1 text-[11.5px] ${night ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setNight(true)}
           >
-            夜间（产出 +40%，危险 ×1.8）
+            {nightowl
+              ? '夜间（产出 +60%，危险减轻，仍会增加暴露）'
+              : '夜间（产出 +40%，危险 ×1.8，暴露上升）'}
           </button>
         </div>
       )}
 
       <div className="space-y-2">
-        {LOCATIONS.map((loc) => {
+        {listed.map((loc) => {
           const st = run.locations.find((l) => l.id === loc.id);
           const stock = st?.stock ?? loc.stock;
           const visited = run.visitedToday.includes(loc.id);
           const canGo = !loc.needsVehicle || run.hasVehicle;
-          const showStock = run.abilities.includes('perk_scavenger') || visited;
+          const showStock = !isPrep || run.abilities.includes('perk_scavenger') || visited;
+          const blocked = st?.blocked;
 
           return (
             <div key={loc.id} className="panel p-3">
@@ -292,14 +306,21 @@ export function MapPanel({ run }: { run: RunState }) {
                 <Chip tone={loc.distance === 1 ? 'good' : loc.distance === 2 ? 'warn' : 'bad'}>
                   {['', '近', '中', '远'][loc.distance]}
                 </Chip>
-                <Chip tone={loc.danger < 20 ? 'good' : loc.danger < 40 ? 'warn' : 'bad'}>危险 {loc.danger}</Chip>
+                {!isPrep && (
+                  <Chip tone={loc.danger < 20 ? 'good' : loc.danger < 40 ? 'warn' : 'bad'}>危险 {loc.danger}</Chip>
+                )}
                 {loc.needsVehicle && <Chip tone={run.hasVehicle ? 'info' : 'bad'}>需要车</Chip>}
                 {showStock && (
-                  <Chip tone={stock > 60 ? 'good' : stock > 25 ? 'warn' : 'bad'}>存量 {Math.round(stock)}%</Chip>
+                  <Chip tone={stock <= 0 ? 'bad' : stock > 60 ? 'good' : stock > 25 ? 'warn' : 'bad'}>
+                    {stock <= 0 ? '已空' : `存量 ${Math.round(stock)}%`}
+                  </Chip>
                 )}
+                {blocked && <Chip tone="bad">设卡</Chip>}
                 {visited && <Chip>今日已去过</Chip>}
               </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-dim">{loc.desc}</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-dim">
+                {!isPrep && loc.descSurvival ? loc.descSurvival : loc.desc}
+              </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {loc.loot.map((l) => (
                   <Chip key={l.res}>{RES_NAME[l.res]}</Chip>
@@ -315,13 +336,15 @@ export function MapPanel({ run }: { run: RunState }) {
                     {visited ? '再看看货架' : '去采购（1 AP）'}
                   </button>
                 )}
-                <button
-                  className="btn btn-ghost px-3 py-1 text-[11.5px]"
-                  disabled={!canGo || run.ap < 1}
-                  onClick={() => scavenge(loc.id, night)}
-                >
-                  {isPrep ? '翻找一遍（1 AP）' : `搜刮（1 AP${night ? ' · 夜间' : ''}）`}
-                </button>
+                {!isPrep && (
+                  <button
+                    className="btn btn-ghost px-3 py-1 text-[11.5px]"
+                    disabled={!canGo || run.ap < 1 || stock <= 0}
+                    onClick={() => scavenge(loc.id, night)}
+                  >
+                    {stock <= 0 ? '已经空了' : `搜刮（1 AP${night ? ' · 夜间' : ''}）`}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -490,9 +513,11 @@ function RevealedIntel({ run }: { run: RunState }) {
           ))}
         </div>
         <p className="mt-2 text-[11.5px] leading-snug text-faint">
-          {run.modules.radio > 0
-            ? '无线电让预报更可靠。提前一天知道寒潮，就能提前一天囤燃料。'
-            : '没有无线电，你只能靠看天。装一台会让预报准得多。'}
+          {effectiveModule(run, 'radio') > 0
+            ? '无线电有电，预报更可靠。提前一天知道寒潮，就能提前一天囤燃料。'
+            : run.modules.radio > 0
+              ? '电台因缺电停摆，预报不准。把它排到供电表前面，或关掉别的负荷。'
+              : '没有无线电，你只能靠看天。装一台会让预报准得多。'}
         </p>
       </Panel>
 
@@ -651,31 +676,61 @@ export function LogPanel({ run }: { run: RunState }) {
 // ============================================================
 
 export function ShopModal({ run, locationId }: { run: RunState; locationId: string }) {
-  const { closeShop, buy } = useGame();
+  const { closeShop, buy, buyIodine } = useGame();
   const loc = LOCATIONS.find((l) => l.id === locationId);
   if (!loc) return null;
   const hasClerk = run.abilities.includes('clerk_network');
   const st = run.locations.find((l) => l.id === locationId);
   const sellable = Object.keys(loc.prices ?? {}) as ResourceId[];
+  const iodineLeft = IODINE_BOX_LIMIT - iodineBoughtCount(run);
+  const iodinePrice = Math.max(1, Math.round(IODINE_BOX_PRICE * run.world.priceIndex));
 
   return (
     <Modal
       title={loc.name}
-      subtitle={`物价指数 ${run.world.priceIndex.toFixed(2)} · 存量 ${Math.round(st?.stock ?? 100)}%${
+      subtitle={`物价指数 ${run.world.priceIndex.toFixed(2)} · 货架 ${Math.round(st?.stock ?? 100)}%${
         run.day >= 5 && !hasClerk ? ' · 已限购' : ''
       }`}
       onClose={closeShop}
       width="max-w-2xl"
     >
-      {sellable.length === 0 && <Empty>这里不卖东西，只能翻找。</Empty>}
+      {sellable.length === 0 && locationId !== 'pharmacy' && <Empty>这里不卖东西。</Empty>}
       <div className="space-y-2">
+        {locationId === 'pharmacy' && (
+          <div className="panel flex flex-wrap items-center gap-3 p-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[13px] text-paper">碘片</span>
+                <Chip tone="warn">不是普通药品</Chip>
+                <span className="num text-[11.5px] text-amberdim">{iodinePrice} 元 / 盒</span>
+              </div>
+              <div className="text-[11px] leading-snug text-faint">
+                限购 {IODINE_BOX_LIMIT} 盒。买下即生效，核沉降时挡甲状腺剂量。柜台剩 {iodineLeft} 盒。
+              </div>
+            </div>
+            <div>
+              {iodineLeft <= 0 ? (
+                <span className="text-[11px] text-faint">已买过了</span>
+              ) : (
+                <button
+                  className="btn px-2 py-1 text-[11px]"
+                  disabled={run.res.cash < iodinePrice}
+                  onClick={() => buyIodine(locationId)}
+                >
+                  买 1 盒
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {sellable.map((res) => {
           const price = Math.max(
             1,
             Math.round(BASE_PRICE[res] * run.world.priceIndex * (loc.prices?.[res] ?? 1) * (hasClerk ? 0.9 : 1)),
           );
-          const limit = buyLimit(run, res, hasClerk);
+          const limit = remainingBuyLimit(run, res, hasClerk);
           const amounts = [1, 5, 10, limit].filter((n, i, a) => n <= limit && a.indexOf(n) === i && n > 0);
+          const empty = (st?.stock ?? 100) <= 0 || limit <= 0;
           return (
             <div key={res} className="panel flex flex-wrap items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
@@ -686,20 +741,24 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
                   </span>
                 </div>
                 <div className="text-[11px] text-faint">
-                  今日可买 {limit} {RES_UNIT[res]} · 现有 {Math.round(run.res[res] * 10) / 10}
+                  今日剩余 {limit} {RES_UNIT[res]} · 现有 {Math.round(run.res[res] * 10) / 10}
                 </div>
               </div>
               <div className="flex gap-1">
-                {amounts.map((n) => (
-                  <button
-                    key={n}
-                    className="btn px-2 py-1 text-[11px]"
-                    disabled={run.res.cash < price * n}
-                    onClick={() => buy(locationId, res, n)}
-                  >
-                    +{n}
-                  </button>
-                ))}
+                {empty ? (
+                  <span className="text-[11px] text-faint">{limit <= 0 ? '今日已买满' : '货架空了'}</span>
+                ) : (
+                  amounts.map((n) => (
+                    <button
+                      key={n}
+                      className="btn px-2 py-1 text-[11px]"
+                      disabled={run.res.cash < price * n}
+                      onClick={() => buy(locationId, res, n)}
+                    >
+                      +{n}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           );

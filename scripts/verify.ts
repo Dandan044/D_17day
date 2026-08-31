@@ -199,7 +199,10 @@ console.log('\n  P1-2  站点出行成本：travelFuel / travelStamina 生效');
     if (site.cost.requires?.res?.parts) r.res.parts += site.cost.requires.res.parts;
     if (site.cost.requires?.tags?.all?.includes('hasVehicle')) r.hasVehicle = true;
     const ok = chooseSite(r, siteId);
-    if (!ok.ok) throw new Error(`测试台无法迁入 ${siteId}：${ok.reason}`);
+    if (!ok.ok) {
+      // WIP 站点拒绝迁入，但出行成本仍按站点表结算，测试台直接写入 siteId
+      r.siteId = siteId;
+    }
     return travelCost(r, LOCATION_BY_ID['supermarket']!);
   };
   const apt = costOf('apartment');
@@ -208,6 +211,11 @@ console.log('\n  P1-2  站点出行成本：travelFuel / travelStamina 生效');
   check('农舍每趟要烧油（文案承诺「每趟烧 2.5 L」）', farm.fuel >= 2.5, `fuel=${farm.fuel}`);
   check('农舍出行体力高于公寓', farm.stamina > apt.stamina, `${apt.stamina} vs ${farm.stamina}`);
   check('站点间出行成本确有差异', farm.fuel !== apt.fuel && farm.stamina !== apt.stamina);
+  {
+    const blocked = createRun({ seed: 9, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    const r = chooseSite(blocked, 'farmhouse');
+    check('WIP 站点不可迁入', !r.ok && (r.reason ?? '').includes('开发中'), r.reason);
+  }
 }
 
 console.log(`\n  结果：${pass} 通过 · ${fail} 失败\n`);

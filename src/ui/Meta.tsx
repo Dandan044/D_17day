@@ -20,15 +20,16 @@ export function MetaPanel() {
   const [tab, setTab] = useState<'perks' | 'unlocks'>('perks');
 
   const canBuy = (p: PerkDef) =>
+    !p.wip &&
     !meta.perks.includes(p.id) &&
     meta.relics >= p.cost &&
     (!p.requires || p.requires.every((r) => meta.perks.includes(r)));
 
+  const shopPerks = PERKS.filter((p) => !p.wip);
   const unlockGroups = [
     { label: '职业', ids: CLASSES.filter((c) => c.unlock).map((c) => c.unlock!) },
-    { label: '站点', ids: SITES.filter((s) => s.unlock).map((s) => s.unlock!) },
+    { label: '站点', ids: SITES.filter((s) => s.unlock && !s.wip).map((s) => s.unlock!) },
     { label: '起手物资包', ids: SUPPLY_PACKS.filter((p) => p.unlock).map((p) => p.unlock!) },
-    { label: '图纸', ids: ['blueprint_hydroponics', 'blueprint_ventilation'] },
   ];
 
   return (
@@ -43,7 +44,7 @@ export function MetaPanel() {
           className={`btn px-4 py-1.5 text-[12px] ${tab === 'perks' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setTab('perks')}
         >
-          天赋树（{meta.perks.length}/{PERKS.length}）
+          天赋树（{meta.perks.filter((id) => shopPerks.some((p) => p.id === id)).length}/{shopPerks.length}）
         </button>
         <button
           className={`btn px-4 py-1.5 text-[12px] ${tab === 'unlocks' ? 'btn-primary' : 'btn-ghost'}`}
@@ -62,7 +63,8 @@ export function MetaPanel() {
           {(['survival', 'build', 'social'] as const).map((tree) => (
             <Panel key={tree} title={TREE_NAMES[tree]} mark>
               <div className="space-y-2">
-                {PERKS.filter((p) => p.tree === tree)
+                {shopPerks
+                  .filter((p) => p.tree === tree)
                   .sort((a, b) => a.tier - b.tier)
                   .map((p) => {
                     const owned = meta.perks.includes(p.id);
@@ -180,7 +182,7 @@ export function CodexPanel() {
                   <p className="mt-1.5 whitespace-pre-line text-[12.5px] leading-relaxed text-dim">{e.text}</p>
                 ) : (
                   <p className="mt-1.5 text-[12px] text-faint">
-                    {e.kind === 'win' ? '还有一种活下去的方式你没找到。' : '还有一种死法你没遇到。'}
+                    {e.kind === 'win' ? '还有一条活路你没走到。' : '还有一种死法你没遇到。'}
                   </p>
                 )}
               </div>

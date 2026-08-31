@@ -9,6 +9,7 @@ import { EXPOSURE, TIME, threatOfDay } from '../balance';
 import { DISASTER_BY_ID } from '../content/disasters';
 import type { Rng } from '../rng';
 import type { DisasterId, FactionId, RunState, WeatherId, WorldState } from '../types';
+import { effectiveModule } from './tags';
 
 const PREP_WEATHER: WeatherId[] = ['clear', 'clear', 'overcast', 'rain', 'fog', 'overcast'];
 
@@ -185,7 +186,7 @@ export function advanceWorldSurvival(run: RunState, rng: Rng): void {
  * 让寒潮和尘暴从"随机砸脸"变成"可以提前囤燃料"。
  */
 export function forecastAccuracy(run: RunState): number {
-  const radio = run.modules.radio;
+  const radio = effectiveModule(run, 'radio');
   const base = run.world.powerGrid === 'on' ? 0.9 : 0.45;
   return Math.min(0.95, base + radio * 0.13 - run.threat * 0.04);
 }

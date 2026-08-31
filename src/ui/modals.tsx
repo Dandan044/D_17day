@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { THREAT_DESC, TIME } from '../game/balance';
+import { COLD, THREAT_DESC, TIME } from '../game/balance';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { LOCATION_BY_ID, RES_NAME, RES_UNIT } from '../game/content/locations';
 import type { HaulItem } from '../game/engine/economy';
@@ -176,6 +176,30 @@ export function NightReportModal({ run }: { run: RunState }) {
       )}
 
       {!isPrepNight && (
+        <div className="mb-3 space-y-1 border-t border-line pt-3 text-[12.5px] leading-snug text-dim">
+          {r.hpAfter !== undefined && (
+            <div>
+              生命 {r.hpAfter}
+              {r.hpParts && r.hpParts.length > 0 && (
+                <span>
+                  （
+                  {r.hpParts
+                    .map((p) => `${p.value > 0 ? '+' : ''}${p.value} ${p.label}`)
+                    .join('，')}
+                  ）
+                </span>
+              )}
+            </div>
+          )}
+          {r.indoor !== undefined && r.outdoor !== undefined && (
+            <div>
+              室外 {r.outdoor}°C / 室内 {r.indoor}°C / 目标 {COLD.TARGET}°C
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isPrepNight && (
         <div className="grid grid-cols-3 gap-3 border-t border-line pt-3">
           <div>
             <div className="label">生命</div>
@@ -333,9 +357,13 @@ export function HaulModal({ run }: { run: RunState }) {
             })}
           </div>
 
-          {haul.danger > 35 && (
+          {haul.danger > 0 && (
             <p className="mt-3 border-l-2 border-alarmdim bg-alarm/5 px-3 py-2 text-[12px] leading-snug text-alarmhi">
-              回来的路上你听见了不止一次脚步声。这个地方的危险度是 {haul.danger}——下次也许该换个时段。
+              这一趟的危险度是 {haul.danger}
+              {haul.night ? '（夜间更高）' : ''}
+              。暴露已经结算进你的档案
+              {haul.danger >= 40 ? '；路上可能受伤或丢掉东西' : ''}
+              {haul.danger >= 55 ? '，高危地段还有人会跟着你回家。' : '。'}
             </p>
           )}
         </>
@@ -418,11 +446,22 @@ export function ChoiceResultModal() {
       )}
 
       {notes.length > 0 && (
-        <div className="space-y-1 border-t border-line pt-3">
+        <div className="flex flex-wrap gap-1.5 border-t border-line pt-3">
           {notes.map((n, i) => (
-            <div key={i} className="text-[12.5px] text-amberhi">
-              · {n}
-            </div>
+            <Chip
+              key={i}
+              tone={
+                n.includes('还没有结束') || n.includes('续篇将在你')
+                  ? 'info'
+                  : n.includes('-') || n.includes('受损') || n.includes('失去')
+                    ? 'bad'
+                    : n.includes('+')
+                      ? 'good'
+                      : 'default'
+              }
+            >
+              {n}
+            </Chip>
           ))}
         </div>
       )}

@@ -1,0 +1,34 @@
+---
+description: 写或改玩家可见中文时，贴地、禁八股与意识流。细则见 docs/content-voice.md
+globs: src/game/content/**/*.ts,src/ui/**/*.{ts,tsx},src/game/balance.ts,src/game/engine/world.ts,src/game/engine/exposure.ts,src/game/engine/collapse.ts,src/game/engine/director.ts,src/game/engine/health.ts,src/game/engine/economy.ts,src/game/engine/construction.ts
+alwaysApply: false
+---
+
+# 玩家文案：贴地，不要 AI 味
+
+写 `title` / `body` / `label` / `log` / `desc` / `text` 之前读 [docs/content-voice.md](docs/content-voice.md)。只改字符串，不动 `id`、数值、`effect`、`flags`、`requires`、`schedule`。
+
+## 必须
+
+- 先写场面：谁、在哪、手上是什么、发出什么声。揭晓文要让人说出发生了什么（核爆、断电、洪水），不要「不像声音的声音」「所有人都明白了」。
+- 选项写动作，日志写结果。
+- 比喻必须能摸到（黄纸、门缝、盆底细灰）。
+- 对齐旧样本：`intel.ts`、`sites.ts`、`prep.ts` 邻居要水、`daily.ts` 问日期的老人。
+
+## 禁止
+
+```
+不是全部推翻。是缝。缝里能看见另一种天气。
+停不等于否。停是一种更长的句子。
+选择也是一种关。 / 原处也是一种藏。
+屋子承认你来过。 / 呼号在纸上睡觉。
+```
+
+- 不要把「不是 X。是 Y。」当默认开头（Y 是具体物件、且真意外时可以）。
+- 不要「X 也是一种 Y」收尾。
+- 抽象词不当主语：缝、空白、层次、节奏、版本、法庭、葬礼、许可、形状。
+- 不要同一套标题/正文复制给几十个旗标。
+
+## 自检
+
+不看选项，只读正文，玩家能说出发生了什么吗？不能就重写。

@@ -11,7 +11,7 @@ export default function SiteSelect() {
   const [selected, setSelected] = useState<Site | null>(null);
   if (!run) return null;
 
-  const unlocked = (s: Site) => !s.unlock || meta.unlocked.includes(s.unlock);
+  const unlocked = (s: Site) => !s.wip && (!s.unlock || meta.unlocked.includes(s.unlock));
 
   const costText = (s: Site) => {
     const parts: string[] = [];
@@ -53,14 +53,20 @@ export default function SiteSelect() {
             return (
               <div
                 key={s.id}
-                className={`panel corner-mark cursor-pointer transition-colors ${
-                  isSel ? 'border-amber/70' : 'hover:border-line2'
-                } ${!ok ? 'opacity-45' : ''}`}
+                className={`panel corner-mark transition-colors ${
+                  s.wip ? 'opacity-50' : 'cursor-pointer'
+                } ${isSel ? 'border-amber/70' : s.wip ? '' : 'hover:border-line2'} ${!ok && !s.wip ? 'opacity-45' : ''}`}
                 onClick={() => ok && setSelected(s)}
               >
                 <div className="panel-head">
                   <span>{s.codename}</span>
-                  {!ok ? <Chip tone="bad">未解锁</Chip> : !can ? <Chip tone="warn">条件不足</Chip> : null}
+                  {s.wip ? (
+                    <Chip tone="warn">开发中</Chip>
+                  ) : !ok ? (
+                    <Chip tone="bad">未解锁</Chip>
+                  ) : !can ? (
+                    <Chip tone="warn">条件不足</Chip>
+                  ) : null}
                 </div>
                 <div className="p-3">
                   <div className="mb-1 flex items-baseline justify-between gap-2">

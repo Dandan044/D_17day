@@ -2,12 +2,14 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { CAPS, DIFFICULTY, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
+import { CAPS, COLD, DIFFICULTY, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { Difficulty, Location, ResourceId, RunState, WeatherId } from '../types';
-import { effectiveModule, headcount } from './tags';
+import { canElectricHeat, canFuelHeat, fuelHeatCost, unheatedFelt } from './climate';
+import { computePower, LOAD_NAME, loadOnline } from './power';
+import { effectiveModule, grantIodine, headcount } from './tags';
 
 /** 每日采购上限，防止第一天把全城搬空 */
 const DAILY_BUY_CAP: Record<ResourceId, number> = {
@@ -53,6 +55,9 @@ export interface ConsumeResult {
   waterRatio: number;
   foodRatio: number;
   drankRaw: boolean;
+  heated: boolean;
+  heatKind?: 'fuel' | 'electric';
+  indoor: number;
   notes: string[];
 }
 
@@ -153,15 +158,18 @@ export function revealSecrets(run: RunState): string[] {
   return notes;
 }
 
-/** 生鲜腐败：三天内吃完，否则就是垃圾 */
+/** 生鲜腐败：冰箱有电则慢，没电则快 */
 export function spoilFood(run: RunState): string[] {
   if (run.res.foodFresh <= 0) return [];
   const cold = run.world.temperature < 4;
-  const rate = cold ? 0.15 : 0.34;
+  let rate = cold ? 0.15 : 0.34;
+  if (loadOnline(run, 'fridge')) rate *= 0.4;
+  else rate *= 1.45;
   const lost = run.res.foodFresh * rate;
   if (lost < 0.1) return [];
   run.res.foodFresh = Math.max(0, run.res.foodFresh - lost);
-  return [`${lost.toFixed(1)} 份生鲜食物变质`];
+  const fridge = loadOnline(run, 'fridge') ? '（冰箱还在转）' : '（冰箱没电）';
+  return [`${lost.toFixed(1)} 份生鲜食物变质${fridge}`];
 }
 
 export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = 'normal'): ConsumeResult {
@@ -194,23 +202,58 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
   if (waterRatio < 0.99) notes.push(`饮水缺口 ${((1 - waterRatio) * 100).toFixed(0)}%`);
   if (foodRatio < 0.99) notes.push(`食物缺口 ${((1 - foodRatio) * 100).toFixed(0)}%`);
 
-  // 发电机烧油
-  if (run.modules.power >= 3 && run.powerMode !== 'blackout') {
-    const burn = Math.min(run.res.fuel, run.powerMode === 'full' ? 3.2 : 1.4);
-    run.res.fuel -= burn;
+  const power = computePower(run);
+  notes.push(
+    `光伏 ${power.solar.toFixed(1)} kWh（天气 ×${power.weatherMult.toFixed(2)}）` +
+      (power.grid > 0 ? ` · 市电 ${power.grid.toFixed(1)}` : '') +
+      (power.generator > 0 ? ` · 柴油机补 ${power.generator.toFixed(1)}` : ''),
+  );
+  if (power.offline.length > 0) {
+    notes.push(`缺电停摆：${power.offline.map((id) => LOAD_NAME[id] ?? id).join('、')}`);
+  }
+
+  if (power.fuelBurn > 0) {
+    run.res.fuel = Math.max(0, run.res.fuel - power.fuelBurn);
     run.wear.generatorOil -= 1;
+    notes.push(`柴油机烧了 ${power.fuelBurn.toFixed(1)} L 补电`);
     if (run.wear.generatorOil <= 0 && rng.chance(0.3)) {
       notes.push('发电机开始异响：需要保养');
     }
   }
 
-  // 严寒烧燃料取暖
-  if (run.world.temperature < 6 && run.res.fuel > 0) {
-    const heat = Math.min(run.res.fuel, 1 + Math.max(0, (6 - run.world.temperature) * 0.12));
-    run.res.fuel -= heat;
+  const unheated = unheatedFelt(run);
+  let heated = false;
+  let heatKind: ConsumeResult['heatKind'];
+  let indoor = unheated;
+  const mode = run.heatMode ?? 'off';
+
+  if (mode === 'fuel' && canFuelHeat(run)) {
+    const needFuel = fuelHeatCost(run);
+    if (needFuel > 0 && run.res.fuel > 0) {
+      const spent = Math.min(run.res.fuel, needFuel);
+      run.res.fuel -= spent;
+      const rise = (COLD.TARGET - unheated) * (spent / needFuel);
+      indoor = Math.round(Math.min(COLD.TARGET, unheated + rise) * 10) / 10;
+      heated = spent > 0;
+      heatKind = 'fuel';
+      notes.push(`烧了 ${spent.toFixed(1)} L 燃料取暖（目标 ${COLD.TARGET}°C，室内 ${indoor}°C）`);
+    } else {
+      notes.push(`想烧燃料取暖，但${needFuel <= 0 ? '保温还不够装炉子' : '没有油了'}。室内 ${indoor}°C`);
+    }
+  } else if (mode === 'electric' && canElectricHeat(run)) {
+    if (loadOnline(run, 'heater', power)) {
+      indoor = COLD.TARGET;
+      heated = true;
+      heatKind = 'electric';
+      notes.push(`电热开了一夜。室内 ${indoor}°C`);
+    } else {
+      notes.push(`电热排在供电表后面或没电，室内仍是 ${indoor}°C`);
+    }
+  } else if (mode === 'off') {
+    notes.push(`不取暖。室外体感 ${unheated}°C，室内相同`);
   }
 
-  return { waterRatio, foodRatio, drankRaw, notes };
+  return { waterRatio, foodRatio, drankRaw, heated, heatKind, indoor, notes };
 }
 
 // ============================================================
@@ -225,9 +268,14 @@ export function unitPrice(run: RunState, res: ResourceId, locationId?: string): 
 
 export function buyLimit(run: RunState, res: ResourceId, hasClerkPerk: boolean): number {
   const base = DAILY_BUY_CAP[res];
-  if (hasClerkPerk) return base;
-  if (run.day >= PRICE.RATION_FROM_DAY) return Math.ceil(base * PRICE.RATION_CAP);
-  return base;
+  const cap = hasClerkPerk ? base : run.day >= PRICE.RATION_FROM_DAY ? Math.ceil(base * PRICE.RATION_CAP) : base;
+  return cap;
+}
+
+/** 今日还能买多少：累计限购，不是单次上限 */
+export function remainingBuyLimit(run: RunState, res: ResourceId, hasClerkPerk: boolean): number {
+  const already = run.boughtToday?.[res] ?? 0;
+  return Math.max(0, buyLimit(run, res, hasClerkPerk) - already);
 }
 
 export interface PurchaseResult {
@@ -235,6 +283,13 @@ export interface PurchaseResult {
   reason?: string;
   spent: number;
   got: number;
+}
+
+function recordPurchase(run: RunState, res: ResourceId, got: number, locationId: string): void {
+  if (!run.boughtToday) run.boughtToday = {};
+  run.boughtToday[res] = (run.boughtToday[res] ?? 0) + got;
+  const st = run.locations.find((l) => l.id === locationId);
+  if (st) st.stock = Math.max(0, st.stock - Math.ceil(got * 0.8));
 }
 
 export function purchase(
@@ -247,12 +302,14 @@ export function purchase(
   const loc = LOCATION_BY_ID[locationId];
   if (!loc || !loc.prepShop) return { ok: false, reason: '这里不能采购', spent: 0, got: 0 };
 
-  const limit = buyLimit(run, res, hasClerkPerk);
-  const want = Math.min(qty, limit);
+  const remaining = remainingBuyLimit(run, res, hasClerkPerk);
+  const want = Math.min(qty, remaining);
   if (want <= 0) return { ok: false, reason: '已达今日限购', spent: 0, got: 0 };
 
-  const stockFactor = Math.max(0, loc.stock / 100);
-  const available = Math.floor(want * Math.max(0.2, stockFactor));
+  const st = run.locations.find((l) => l.id === locationId);
+  const shelf = st?.stock ?? loc.stock;
+  const stockFactor = Math.max(0, shelf / 100);
+  const available = Math.floor(want * Math.max(0.15, stockFactor));
   if (available <= 0) return { ok: false, reason: '货架已经空了', spent: 0, got: 0 };
 
   let price = unitPrice(run, res, locationId);
@@ -263,12 +320,39 @@ export function purchase(
     if (afford <= 0) return { ok: false, reason: '现金不够', spent: 0, got: 0 };
     run.res.cash -= price * afford;
     run.res[res] += afford;
+    recordPurchase(run, res, afford, locationId);
     return { ok: true, spent: price * afford, got: afford };
   }
 
   run.res.cash -= cost;
   run.res[res] += available;
+  recordPurchase(run, res, available, locationId);
   return { ok: true, spent: cost, got: available };
+}
+
+export const IODINE_BOX_PRICE = 220;
+export const IODINE_BOX_LIMIT = 2;
+
+export function iodineBoughtCount(run: RunState): number {
+  if (run.flags.includes('flag:iodineStock2')) return 2;
+  if (run.flags.includes('flag:iodineStock1')) return 1;
+  return 0;
+}
+
+export function buyIodine(run: RunState, locationId: string): { ok: boolean; reason?: string; spent: number } {
+  if (locationId !== 'pharmacy') return { ok: false, reason: '只有药店卖碘片', spent: 0 };
+  const bought = iodineBoughtCount(run);
+  if (bought >= IODINE_BOX_LIMIT) return { ok: false, reason: '柜台只剩这两盒，你已经买过了', spent: 0 };
+  const price = Math.max(1, Math.round(IODINE_BOX_PRICE * run.world.priceIndex));
+  if (run.res.cash < price) return { ok: false, reason: '现金不够', spent: 0 };
+  run.res.cash -= price;
+  if (bought === 0) run.flags.push('flag:iodineStock1');
+  else {
+    run.flags = run.flags.filter((f) => f !== 'flag:iodineStock1');
+    run.flags.push('flag:iodineStock2');
+  }
+  grantIodine(run);
+  return { ok: true, spent: price };
 }
 
 // ============================================================
@@ -320,12 +404,24 @@ export function rollHaul(run: RunState, locationId: string, night: boolean, rng:
   const loc = LOCATION_BY_ID[locationId]!;
   const st = run.locations.find((l) => l.id === locationId);
   const stock = st?.stock ?? loc.stock;
+  if (stock <= 0) {
+    return { locationId, night, items: [], danger: loc.danger };
+  }
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
 
-  const stockMult = Math.max(LOOT.MIN_STOCK_MULT, stock / 100);
+  const stockMult = stock / 100;
   const threatMult = LOOT.THREAT_MULT[Math.min(LOOT.THREAT_MULT.length - 1, run.threat)] ?? 1;
+
+  const nightYield = night
+    ? run.abilities.includes('perk_nightowl')
+      ? 1.6
+      : LOOT.NIGHT_YIELD
+    : 1;
+  let nightDanger = night ? LOOT.NIGHT_DANGER : 1;
+  if (night && run.abilities.includes('perk_nightowl')) nightDanger *= 0.75;
+  const scavBonus = run.abilities.includes('perk_scavenger') ? 1.15 : 1;
   const mult =
-    stockMult * threatMult * site.lootMult * DIFFICULTY[difficulty].lootMult * (night ? LOOT.NIGHT_YIELD : 1);
+    stockMult * threatMult * site.lootMult * DIFFICULTY[difficulty].lootMult * nightYield * scavBonus;
 
   const items: HaulItem[] = [];
   for (const entry of loc.loot) {
@@ -336,7 +432,7 @@ export function rollHaul(run: RunState, locationId: string, night: boolean, rng:
     items.push({ res: entry.res, amount, weight: amount * (RES_WEIGHT[entry.res] ?? 1) });
   }
 
-  let danger = loc.danger * (night ? LOOT.NIGHT_DANGER : 1);
+  let danger = loc.danger * nightDanger;
   danger += (100 - run.world.lawOrder) * 0.35;
   danger -= run.skills.stealth * 5;
   danger -= effectiveModule(run, 'conceal') * 2;

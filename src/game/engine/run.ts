@@ -4,7 +4,7 @@
 
 import { AP, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, threatOfDay } from '../balance';
 import { CLASS_BY_ID, PACK_BY_ID } from '../content/classes';
-import { DISASTERS, DISASTER_BY_ID } from '../content/disasters';
+import { DISASTER_BY_ID } from '../content/disasters';
 import { FAMILY_BY_ID } from '../content/events';
 import { INTEL_POOL } from '../content/intel';
 import { LOCATIONS } from '../content/locations';
@@ -24,12 +24,14 @@ import type {
 } from '../types';
 import { assessCollapse } from './collapse';
 import { advanceProjects } from './construction';
-import { recordBeat, selectEvents } from './director';
+import { recordBeat, selectEvents, applyDirectorBoost } from './director';
 import { addLog, applyEffect, clampResources } from './effects';
 import { applyProduction, consumeDaily, revealSecrets, spoilFood } from './economy';
 import { resolveEnding } from './endings';
+import { emitHook, emitThresholdHooks, collectThresholdForced } from './hooks';
 import { applyDailyExposure, pickPressureFamily, resolveRaid, type RaidResult } from './exposure';
 import { resolveHealth } from './health';
+import { checkRequirement, deriveFacts, effectiveModule } from './tags';
 import { advanceWorldPrep, advanceWorldSurvival, applyOnset, createWorld } from './world';
 
 export interface CreateRunOptions {
@@ -44,7 +46,7 @@ export interface CreateRunOptions {
 
 export function createRun(opts: CreateRunOptions): RunState {
   const rng = makeRng(opts.seed);
-  const disaster = opts.forceDisaster ?? rng.pick(DISASTERS).id;
+  const disaster = opts.forceDisaster ?? 'nuclear';
   const cls = CLASS_BY_ID[opts.classId] ?? CLASS_BY_ID['clerk']!;
   const pack = PACK_BY_ID[opts.packId] ?? PACK_BY_ID['none']!;
 
@@ -97,14 +99,18 @@ export function createRun(opts: CreateRunOptions): RunState {
     modules,
     projects: [],
     wear: { filterLife: 20, generatorOil: 24, batteryCharge: 0 },
-    streaks: { lowRation: 0, noThreatDays: 0 },
+    streaks: { lowRation: 0, noThreatDays: 0, goodRation: 0 },
     ration: 'normal',
     waterUse: 'normal',
-    powerMode: 'thrifty',
+    heatMode: 'off',
     powerPriority: [...POWER.DEFAULT_PRIORITY],
+    powerEnabled: {},
+    directorBoost: {},
+    thresholdFired: {},
     survivors: [],
     locations: LOCATIONS.map((l) => ({ id: l.id, stock: l.stock })),
     visitedToday: [],
+    boughtToday: {},
     hasVehicle: cls.perk === 'trucker_vehicle',
     world,
     intel: [],
@@ -133,6 +139,7 @@ export function createRun(opts: CreateRunOptions): RunState {
 export function chooseSite(run: RunState, siteId: SiteId): { ok: boolean; reason?: string } {
   const site = SITE_BY_ID[siteId];
   if (!site) return { ok: false, reason: '没有这个站点' };
+  if (site.wip) return { ok: false, reason: '这个住所还在开发中' };
 
   if (site.cost.cash && run.res.cash < site.cost.cash) {
     return { ok: false, reason: `需要 ${site.cost.cash} 元` };
@@ -172,7 +179,8 @@ export function chooseSite(run: RunState, siteId: SiteId): { ok: boolean; reason
 
 export function generateIntel(run: RunState, rng: Rng): void {
   const actual = run.world.disaster;
-  let truthRatio = INTEL.TRUTH_RATIO + run.modules.radio * INTEL.RADIO_BONUS + run.day * INTEL.DAY_BONUS;
+  let truthRatio =
+    INTEL.TRUTH_RATIO + effectiveModule(run, 'radio') * INTEL.RADIO_BONUS + run.day * INTEL.DAY_BONUS;
   if (run.abilities.includes('hacker_analysis')) truthRatio += 0.2;
   if (run.abilities.includes('perk_analyst')) truthRatio += INTEL.PERK_BONUS;
   if (run.flags.includes('flag:intelBonus')) truthRatio += 0.12;
@@ -216,6 +224,11 @@ export interface NightReport {
   day: number;
   notes: string[];
   healthNotes: string[];
+  hpDelta?: number;
+  hpParts?: Array<{ label: string; value: number }>;
+  hpAfter?: number;
+  indoor?: number;
+  outdoor?: number;
   exposureAdded: number;
   died: boolean;
   cause?: string;
@@ -266,8 +279,13 @@ export function endDay(run: RunState): NightReport {
     }
     const consume = consumeDaily(run, rng, run.difficulty);
     report.notes.push(...consume.notes);
+    report.indoor = consume.indoor;
+    report.outdoor = run.world.temperature;
     const health = resolveHealth(run, consume, rng);
     report.healthNotes = health.notes;
+    report.hpDelta = health.hpDelta;
+    report.hpParts = health.hpParts.filter((p) => p.value !== 0);
+    report.hpAfter = Math.round(run.stats.hp);
     report.notes.push(...advanceProjects(run, rng));
 
     const exposure = applyDailyExposure(run);
@@ -299,6 +317,10 @@ export function endDay(run: RunState): NightReport {
 
   // ---------- 进入下一天 ----------
   run.day += 1;
+  if (run.flags.includes('flag:iodine') && run.iodineUntil !== undefined && run.day >= run.iodineUntil) {
+    run.flags = run.flags.filter((f) => f !== 'flag:iodine');
+    addLog(run, '碘片的保护过期了。甲状腺又暴露在外面。', 'bad');
+  }
   const newThreat = threatOfDay(run.day);
   if (newThreat > run.threat && run.day > TIME.COLLAPSE_DAY) report.weekly = true;
   run.threat = newThreat;
@@ -316,6 +338,7 @@ export function endDay(run: RunState): NightReport {
   run.ap = run.apMax;
   run.queue = [];
   run.visitedToday = [];
+  run.boughtToday = {};
 
   // ---------- 崩溃日 ----------
   if (run.day === TIME.COLLAPSE_DAY) {
@@ -337,10 +360,14 @@ export function endDay(run: RunState): NightReport {
     const forced: string[] = [];
     const pressure = pickPressureFamily(run, rng);
     if (pressure) forced.push(pressure);
+    forced.push(...collectThresholdForced(run));
     const count = rng.int(DIRECTOR.EVENTS_PER_DAY[0], DIRECTOR.EVENTS_PER_DAY[1]);
     const { picks } = selectEvents(run, rng, Math.max(count, forced.length), forced);
     run.queue = picks;
   }
+  emitHook(run, 'endDay', rng);
+  if (report.weekly) emitHook(run, 'threatUp', rng);
+  if (!isPrep) emitThresholdHooks(run, rng);
 
   run.rngCursor = rng.cursor();
   return report;
@@ -358,6 +385,7 @@ export function acknowledgeCollapse(run: RunState): void {
   if (pressure) forced.push(pressure);
   const { picks } = selectEvents(run, rng, 1, forced);
   run.queue = picks;
+  emitHook(run, 'collapse', rng);
   run.rngCursor = rng.cursor();
 }
 
@@ -383,6 +411,13 @@ export function resolveChoice(
   const choice = variant?.choices.find((c) => c.id === choiceId);
   if (!family || !variant || !choice) return out;
 
+  const req = checkRequirement(choice.requires, run, deriveFacts(run));
+  if (!req.ok) {
+    out.notes.push(req.reason ?? '现在做不到这一步');
+    return out;
+  }
+
+  const factsBefore = deriveFacts(run);
   if (choice.check) {
     const roll = rng.d20();
     const skillVal = run.skills[choice.check.skill];
@@ -393,6 +428,8 @@ export function resolveChoice(
   } else if (choice.effect) {
     out.notes.push(...applyEffect(run, choice.effect, rng));
   }
+
+  applyDirectorBoost(run, factsBefore);
 
   // 车辆与宠物这类由标签驱动的状态需要同步到结构化字段
   if (run.flags.includes('flag:hasVehicle')) run.hasVehicle = true;
@@ -415,17 +452,25 @@ export function resolveChoice(
     }
     if (raid.usedAmmo > 0) out.notes.push(`消耗弹药 ${raid.usedAmmo} 发`);
     if (raid.moduleDamaged) out.notes.push(`${raid.moduleDamaged}被破坏，等级下降`);
+    emitHook(run, raid.repelled ? 'raidRepelled' : 'raidFailed', rng);
+    emitHook(run, 'raid', rng);
     if (run.stats.hp <= 0) {
-      const ending = resolveEnding(run, '袭击');
-      run.endingId = ending.id;
-      run.phase = 'ended';
-      run.stats_meta.daysSurvived = run.day;
-      out.died = true;
+      if (run.difficulty === 'story') {
+        run.stats.hp = 20;
+        out.notes.push('（叙事模式）袭击本可以要了你的命。');
+      } else {
+        const ending = resolveEnding(run, '袭击');
+        run.endingId = ending.id;
+        run.phase = 'ended';
+        run.stats_meta.daysSurvived = run.day;
+        out.died = true;
+      }
     }
   }
 
   recordBeat(run, familyId);
   run.queue = run.queue.filter((q) => !(q.familyId === familyId && q.variantId === variantId));
+  emitHook(run, 'choice', rng);
   clampResources(run);
   run.rngCursor = rng.cursor();
   return out;

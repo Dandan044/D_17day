@@ -24,11 +24,15 @@ import {
   purchase as enginePurchase,
   rollHaul,
   travelCost,
+  buyIodine as engineBuyIodine,
   type Haul,
   type HaulItem,
 } from './engine/economy';
 import { settle, resolveEnding, type Settlement } from './engine/endings';
+import { applyScavengeDanger } from './engine/exposure';
 import { treatCondition } from './engine/health';
+import { emitHook } from './engine/hooks';
+import { ensureRunDefaults } from './engine/power';
 import {
   acknowledgeCollapse as engineAckCollapse,
   chooseSite as engineChooseSite,
@@ -44,8 +48,10 @@ import type {
   BuildPath,
   ConditionId,
   Difficulty,
+  HeatMode,
   MetaState,
   ModuleId,
+  PowerLoadId,
   PowerMode,
   RationLevel,
   ResourceId,
@@ -113,6 +119,7 @@ interface GameState {
   visitShop: (locationId: string) => void;
   closeShop: () => void;
   buy: (locationId: string, res: ResourceId, qty: number) => void;
+  buyIodine: (locationId: string) => void;
   rest: () => void;
   build: (moduleId: ModuleId, path: BuildPath) => void;
   work: (moduleId: ModuleId) => void;
@@ -125,8 +132,10 @@ interface GameState {
   // --- 设置 ---
   setRation: (r: RationLevel) => void;
   setWaterUse: (w: WaterLevel) => void;
+  setHeatMode: (h: HeatMode) => void;
   setPowerMode: (p: PowerMode) => void;
-  setPowerPriority: (order: ModuleId[]) => void;
+  setPowerPriority: (order: PowerLoadId[]) => void;
+  togglePowerLoad: (id: PowerLoadId, on: boolean) => void;
   setDifficulty: (d: Difficulty) => void;
 
   // --- 局外 ---
@@ -185,6 +194,7 @@ export const useGame = create<GameState>()(
             difficulty,
             metaPerks: meta.perks,
           });
+          ensureRunDefaults(run);
           set({
             run,
             screen: 'game',
@@ -246,7 +256,13 @@ export const useGame = create<GameState>()(
          * 改过内容再载入旧存档就会撞上，所以每次进入游戏前先扫一遍。
          */
         pruneQueue: () => {
-          mutate((r) => void pruneOrphanQueue(r));
+          const run = get().run;
+          if (!run) return;
+          const next = structuredClone(run) as RunState;
+          const dropped = pruneOrphanQueue(next);
+          // 没丢掉任何条目就不要 set：App 里有个依赖 `run` 的 effect 会再调这里，
+          // 每次 set 新引用就会死循环，点「结束这一天」后整页空白。
+          if (dropped > 0) set({ run: next });
         },
 
         dismissNight: () => {
@@ -306,6 +322,10 @@ export const useGame = create<GameState>()(
         scavenge: (locationId, night) => {
           const run = get().run;
           if (!run) return;
+          if (run.day < TIME.COLLAPSE_DAY) {
+            pushToast('商店还开着，没必要翻别人的东西', 'bad');
+            return;
+          }
           const loc = LOCATION_BY_ID[locationId];
           if (!loc) return;
           if (run.ap < 1) {
@@ -316,18 +336,38 @@ export const useGame = create<GameState>()(
             pushToast('太远了，没有车去不了', 'bad');
             return;
           }
+          const shelf = run.locations.find((l) => l.id === locationId)?.stock ?? loc.stock;
+          if (shelf <= 0) {
+            pushToast('这里已经被翻空了', 'bad');
+            return;
+          }
+          const cost = travelCost(run, loc);
+          if (cost.fuel > 0 && run.res.fuel < cost.fuel) {
+            pushToast(`这一趟要 ${cost.fuel} L 燃料，你不够`, 'bad');
+            return;
+          }
+          if (run.stats.stamina < Math.min(12, cost.stamina * 0.5)) {
+            pushToast('你累得走不出门', 'bad');
+            return;
+          }
           const next = structuredClone(run) as RunState;
           const rng = makeRng(next.seed, next.rngCursor);
-          const cost = travelCost(next, loc);
           next.ap -= 1;
           next.stats.stamina = Math.max(0, next.stats.stamina - cost.stamina);
           next.res.fuel = Math.max(0, next.res.fuel - cost.fuel);
           const haul = rollHaul(next, locationId, night, rng, next.difficulty);
+          const risk = applyScavengeDanger(next, haul, rng);
           drainLocation(next, locationId);
           next.stats_meta.scavengeRuns += 1;
           if (!next.visitedToday.includes(locationId)) next.visitedToday.push(locationId);
+          emitHook(next, 'scavenge', rng);
+          emitHook(next, night ? 'scavengeNight' : 'scavengeDay', rng);
           next.rngCursor = rng.cursor();
           set({ run: next, haul });
+          if (risk.exposure > 0) pushToast(`暴露度 +${risk.exposure}`, risk.exposure >= 6 ? 'bad' : 'neutral');
+          if (risk.hpLost > 0) pushToast(`路上受了伤，生命 -${risk.hpLost}`, 'bad');
+          if (risk.lostRes && risk.lostAmt) pushToast(`跑的时候掉了战利品`, 'bad');
+          if (risk.scheduledRaid) pushToast('你觉得有人跟了你一段。', 'bad');
         },
 
         takeHaul: (picked) => {
@@ -337,6 +377,9 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           commitHaul(next, picked);
           clampResources(next);
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'takeHaul', rng);
+          next.rngCursor = rng.cursor();
           const total = picked.reduce((s, p) => s + p.amount, 0);
           if (total > 0) {
             addLog(
@@ -354,6 +397,11 @@ export const useGame = create<GameState>()(
           const run = get().run;
           if (!run) return;
           if (run.visitedToday.includes(locationId)) {
+            if (locationId === 'pharmacy' && !run.flags.includes('flag:sawIodineOffer')) {
+              mutate((r) => {
+                if (!r.flags.includes('flag:sawIodineOffer')) r.flags.push('flag:sawIodineOffer');
+              });
+            }
             set({ openShop: locationId });
             return;
           }
@@ -365,6 +413,12 @@ export const useGame = create<GameState>()(
           next.ap -= 1;
           next.stats.stamina = Math.max(0, next.stats.stamina - STAMINA.CHORE);
           next.visitedToday.push(locationId);
+          if (locationId === 'pharmacy' && !next.flags.includes('flag:sawIodineOffer')) {
+            next.flags.push('flag:sawIodineOffer');
+          }
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'visitShop', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next, openShop: locationId });
         },
 
@@ -380,11 +434,29 @@ export const useGame = create<GameState>()(
             pushToast(r.reason ?? '买不到', 'bad');
             return;
           }
-          const st = next.locations.find((l) => l.id === locationId);
-          if (st) st.stock = Math.max(0, st.stock - 6);
           clampResources(next);
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'buy', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next });
           pushToast(`买到 ${r.got}，花了 ${r.spent} 元`, 'good');
+        },
+
+        buyIodine: (locationId) => {
+          const run = get().run;
+          if (!run) return;
+          const next = structuredClone(run) as RunState;
+          const r = engineBuyIodine(next, locationId);
+          if (!r.ok) {
+            pushToast(r.reason ?? '买不到碘片', 'bad');
+            return;
+          }
+          clampResources(next);
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'buy', rng);
+          next.rngCursor = rng.cursor();
+          set({ run: next });
+          pushToast(`买到一盒碘片（不是普通药品），花了 ${r.spent} 元`, 'good');
         },
 
         rest: () => {
@@ -397,8 +469,11 @@ export const useGame = create<GameState>()(
             r.ap -= 1;
             r.stats.stamina = Math.min(100, r.stats.stamina + STAMINA.REST_ACTION);
             r.stats.sanity = Math.min(100, r.stats.sanity + 4);
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'rest', rng);
+            r.rngCursor = rng.cursor();
           });
-          pushToast('你歇了一会儿', 'good');
+          pushToast('歇了一会儿。体力与理智回了一些，生命不会因为躺着涨回来', 'good');
         },
 
         build: (moduleId, path) => {
@@ -410,6 +485,9 @@ export const useGame = create<GameState>()(
             pushToast(r.reason ?? '无法开工', 'bad');
             return;
           }
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'build', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next });
         },
 
@@ -426,6 +504,7 @@ export const useGame = create<GameState>()(
           }
           // 立刻检查是否完工
           const done = advanceProjects(next, rng);
+          emitHook(next, 'work', rng);
           next.rngCursor = rng.cursor();
           set({ run: next });
           if (r.note) pushToast(r.note, r.note.includes('浪费') ? 'bad' : 'neutral');
@@ -433,7 +512,12 @@ export const useGame = create<GameState>()(
         },
 
         cancelProject: (moduleId) => {
-          mutate((r) => engineCancelProject(r, moduleId));
+          mutate((r) => {
+            engineCancelProject(r, moduleId);
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'cancelProject', rng);
+            r.rngCursor = rng.cursor();
+          });
         },
 
         salvage: (targetId) => {
@@ -447,6 +531,8 @@ export const useGame = create<GameState>()(
             pushToast(r.reason ?? '不能这么做', 'bad');
             return;
           }
+          emitHook(next, 'salvage', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next });
           if (r.note) pushToast(r.note, 'neutral');
         },
@@ -460,6 +546,9 @@ export const useGame = create<GameState>()(
             pushToast(r.reason ?? '现在不能做', 'bad');
             return;
           }
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'maintain', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next });
           if (r.note) pushToast(r.note, 'good');
         },
@@ -473,6 +562,9 @@ export const useGame = create<GameState>()(
             pushToast(r.reason ?? '治不了', 'bad');
             return;
           }
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'treat', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next });
           pushToast('处理完了', 'good');
         },
@@ -486,14 +578,59 @@ export const useGame = create<GameState>()(
             pushToast(r.reason ?? '无法核实', 'bad');
             return;
           }
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'verifyIntel', rng);
+          next.rngCursor = rng.cursor();
           set({ run: next });
         },
 
         // ============================================================
-        setRation: (ration) => mutate((r) => void (r.ration = ration)),
-        setWaterUse: (waterUse) => mutate((r) => void (r.waterUse = waterUse)),
-        setPowerMode: (powerMode) => mutate((r) => void (r.powerMode = powerMode)),
-        setPowerPriority: (order) => mutate((r) => void (r.powerPriority = order)),
+        setRation: (ration) =>
+          mutate((r) => {
+            r.ration = ration;
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'setRation', rng);
+            r.rngCursor = rng.cursor();
+          }),
+        setWaterUse: (waterUse) =>
+          mutate((r) => {
+            r.waterUse = waterUse;
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'setWaterUse', rng);
+            r.rngCursor = rng.cursor();
+          }),
+        setPowerMode: (powerMode) =>
+          mutate((r) => {
+            r.powerMode = powerMode;
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'setPowerMode', rng);
+            emitHook(r, 'setPowerPriority', rng);
+            r.rngCursor = rng.cursor();
+          }),
+        setHeatMode: (heatMode) =>
+          mutate((r) => {
+            r.heatMode = heatMode;
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'setHeatMode', rng);
+            r.rngCursor = rng.cursor();
+          }),
+        setPowerPriority: (order) =>
+          mutate((r) => {
+            r.powerPriority = order;
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'setPowerPriority', rng);
+            emitHook(r, 'setPowerMode', rng);
+            r.rngCursor = rng.cursor();
+          }),
+        togglePowerLoad: (id, on) =>
+          mutate((r) => {
+            if (!r.powerEnabled) r.powerEnabled = {};
+            r.powerEnabled[id] = on;
+            const rng = makeRng(r.seed, r.rngCursor);
+            emitHook(r, 'setPowerPriority', rng);
+            emitHook(r, 'setPowerMode', rng);
+            r.rngCursor = rng.cursor();
+          }),
         setDifficulty: (difficulty) => set({ meta: { ...get().meta, difficulty } }),
 
         // ============================================================
@@ -512,7 +649,7 @@ export const useGame = create<GameState>()(
         buyPerk: (id) => {
           const meta = get().meta;
           const perk = PERK_BY_ID[id];
-          if (!perk || meta.perks.includes(id)) return;
+          if (!perk || perk.wip || meta.perks.includes(id)) return;
           if (perk.requires && !perk.requires.every((r) => meta.perks.includes(r))) {
             pushToast('需要先点前置天赋', 'bad');
             return;
@@ -536,6 +673,11 @@ export const useGame = create<GameState>()(
     {
       name: 'seven-days-save-v1',
       partialize: (s) => ({ run: s.run, meta: s.meta, screen: s.screen }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<GameState>;
+        if (p.run) ensureRunDefaults(p.run);
+        return { ...current, ...p };
+      },
     },
   ),
 );

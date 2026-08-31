@@ -18,7 +18,7 @@ export function resolveEnding(run: RunState, cause?: string): EndingDef {
     return ENDING_BY_ID['death_generic']!;
   }
 
-  const wins = ENDINGS.filter((e) => e.kind === 'win' && !e.cause)
+  const wins = ENDINGS.filter((e) => e.kind === 'win' && !e.cause && !e.wip)
     .sort((a, b) => b.priority - a.priority)
     .filter((e) => checkRequirement(e.require, run, facts).ok);
 

@@ -40,6 +40,8 @@ export const CONDITIONS: ConditionDef[] = [
     desc: '牙龈在出血，伤口不愈合。你还站得住，但身体已经在慢慢关掉一些功能。',
     daily: { hp: -1, stamina: -7, sanity: -1 },
     selfHeal: 0.1,
+    medsCure: 2,
+    autoCure: 'food',
   },
   {
     id: 'dysentery',
