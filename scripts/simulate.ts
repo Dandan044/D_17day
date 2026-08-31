@@ -8,7 +8,7 @@
  */
 
 import { TIME } from '../src/game/balance';
-import { DISASTER_BY_ID } from '../src/game/content/disasters';
+import { DISASTERS, DISASTER_BY_ID } from '../src/game/content/disasters';
 import { ENDING_BY_ID } from '../src/game/content/endings';
 import { FAMILY_BY_ID } from '../src/game/content/events';
 import { LOCATIONS } from '../src/game/content/locations';
@@ -22,7 +22,7 @@ import {
   nextLevel,
   startProject,
 } from '../src/game/engine/construction';
-import { commitHaul, dailyNeeds, drainLocation, purchase, rollHaul } from '../src/game/engine/economy';
+import { commitHaul, dailyNeeds, drainLocation, purchase, rollHaul, travelCost } from '../src/game/engine/economy';
 import { treatCondition } from '../src/game/engine/health';
 import {
   acknowledgeCollapse,
@@ -101,6 +101,9 @@ const BASE_ORDER: ModuleId[] = [
   'radio',
 ];
 
+/** 需要电才转得起来的模块 */
+const ELECTRIC: ModuleId[] = ['airFilter', 'filter', 'medbay', 'garden', 'radio'];
+
 /**
  * 灾难揭晓后按它的关键模块重排建造顺序。
  * 这条策略本身就是对"猜灾难"机制的验证：如果适配之后通关率没有明显提升，
@@ -111,7 +114,15 @@ function buildOrder(run: RunState): ModuleId[] {
   const key = DISASTER_BY_ID[run.world.disaster].keyModules;
   // 水永远排第一，其余按灾难需要提前
   const head: ModuleId[] = ['cistern', 'filter'];
-  const rest = [...key.filter((m) => !head.includes(m)), ...BASE_ORDER.filter((m) => !head.includes(m) && !key.includes(m))];
+  const rest = [
+    ...key.filter((m) => !head.includes(m)),
+    ...BASE_ORDER.filter((m) => !head.includes(m) && !key.includes(m)),
+  ];
+  // 发电要排在耗电模块前面。火山冬天的 keyModules 是 insulate/airFilter/garden/power，
+  // 按原顺序会先把 airFilter 建起来，可它没电就转不动——等于白建。
+  if (rest.includes('power') && rest.some((m) => ELECTRIC.includes(m))) {
+    return [...head, 'power', ...rest.filter((m) => m !== 'power')];
+  }
   return [...head, ...rest];
 }
 
@@ -135,7 +146,10 @@ function goScavenge(run: RunState, prefer: ResourceId[]): boolean {
   if (!loc) return false;
 
   run.ap -= 1;
-  run.stats.stamina = Math.max(0, run.stats.stamina - 16 - loc.distance * 3);
+  // 与 store.scavenge 共用同一份成本：原来这里连燃料都没扣，模拟出来的平衡偏乐观
+  const cost = travelCost(run, loc);
+  run.stats.stamina = Math.max(0, run.stats.stamina - cost.stamina);
+  run.res.fuel = Math.max(0, run.res.fuel - cost.fuel);
   const rng = makeRng(run.seed, run.rngCursor);
   const haul = rollHaul(run, loc.id, false, rng, run.difficulty);
   run.rngCursor = rng.cursor();
@@ -203,8 +217,13 @@ function prepDay(run: RunState): void {
     purchase(run, 'supermarket', 'foodStaple', 20, false);
     if (daysOfWater(run) < 30) purchase(run, 'supermarket', 'water', 40, false);
   }
-  // 最后一两天有余钱就换成燃料，过冬要用
-  if (run.ap > 0 && daysLeft <= 2 && run.res.cash > 1500 && run.res.fuel < 30) {
+  /**
+   * 燃料：过冬要用，而物价一天比一天贵，所以每天都补一点，别拖到最后两天。
+   *
+   * 原来只在最后两天买一次 25 L，结果火山冬天那种长期低温局必然断燃料——
+   * 取暖每日都要烧油，25 L 撑不过严冬期。这不是游戏不平衡，是机器人不会过冬。
+   */
+  if (run.ap > 0 && run.res.fuel < 80 && run.res.cash > 1200) {
     run.ap -= 1;
     purchase(run, 'gasstation', 'fuel', 25, false);
   }
@@ -242,7 +261,8 @@ function survivalDay(run: RunState): void {
       if (goScavenge(run, ['water', 'foodStaple', 'meds'])) continue;
     }
     if (tryBuild(run)) continue;
-    if (goScavenge(run, ['materials', 'parts', 'water', 'foodStaple', 'meds'])) continue;
+    // 燃料也要捡：取暖、发电都要烧它，低温局断油就是失温
+    if (goScavenge(run, ['materials', 'parts', 'water', 'foodStaple', 'meds', 'fuel'])) continue;
     // 没事干就休息
     run.ap -= 1;
     run.stats.stamina = Math.min(100, run.stats.stamina + 18);
@@ -253,55 +273,78 @@ function survivalDay(run: RunState): void {
 // 主循环
 // ============================================================
 
-for (let i = 0; i < N; i++) {
-  const seed = 1000 + i * 7919;
-  const site = SITES[i % SITES.length]!;
-  let run: RunState;
-  try {
-    run = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: DIFFICULTY, metaPerks: [] });
-    // 测试台：补足迁入门槛，让六个站点都能被公平地测到
-    if (site.cost.cash) run.res.cash += site.cost.cash;
-    if (site.cost.requires?.res?.parts) run.res.parts += site.cost.requires.res.parts;
-    if (site.cost.requires?.skills?.negotiation) run.skills.negotiation = site.cost.requires.skills.negotiation;
-    if (site.cost.requires?.tags?.all?.includes('hasVehicle')) run.hasVehicle = true;
-    const r = chooseSite(run, site.id);
-    if (!r.ok) chooseSite(run, 'apartment');
-  } catch (e) {
-    errors.push({ seed, day: 0, message: `创建失败：${(e as Error).message}` });
-    continue;
-  }
+/**
+ * 全因子采样：6 站点 × 6 灾难，每格跑同样多的局、用同样的一组种子。
+ *
+ * 原来用同一个 i 决定站点和种子（seed = 1000 + i * 7919，site = SITES[i % 6]），
+ * 灾难由 seed 决定、站点由 i%6 决定，两者相关。实测 240 局下 36 个组合每格 1~17 次
+ * （期望 6.7），于是「按站点」的通关率里混着灾难难度，两张表无法独立归因。
+ * 现在每组都对齐，站点间与灾难间的差异才是真的差异。
+ */
+const SEEDS_PER_CELL = Math.max(1, Math.round(N / (SITES.length * DISASTERS.length)));
 
-  let cause: string | undefined;
-  let guard = 0;
-  while (run.phase !== 'ended' && guard++ < 80) {
-    try {
-      clearQueue(run);
-      if (run.phase === 'ended') break;
-      if (run.phase === 'collapse') {
-        acknowledgeCollapse(run);
+for (let si = 0; si < SITES.length; si++) {
+  for (let di = 0; di < DISASTERS.length; di++) {
+    for (let k = 0; k < SEEDS_PER_CELL; k++) {
+      const site = SITES[si]!;
+      const disaster = DISASTERS[di]!;
+      // 每格用不同的种子序列，避免各格跑出同一条世界线
+      const seed = 1000 + (si * DISASTERS.length + di) * 7919 + k * 104729;
+      let run: RunState;
+      try {
+        run = createRun({
+          seed,
+          classId: 'clerk',
+          packId: 'none',
+          difficulty: DIFFICULTY,
+          metaPerks: [],
+          forceDisaster: disaster.id,
+        });
+        // 测试台：补足迁入门槛，让六个站点都能被公平地测到
+        if (site.cost.cash) run.res.cash += site.cost.cash;
+        if (site.cost.requires?.res?.parts) run.res.parts += site.cost.requires.res.parts;
+        if (site.cost.requires?.skills?.negotiation) run.skills.negotiation = site.cost.requires.skills.negotiation;
+        if (site.cost.requires?.tags?.all?.includes('hasVehicle')) run.hasVehicle = true;
+        const r = chooseSite(run, site.id);
+        if (!r.ok) chooseSite(run, 'apartment');
+      } catch (e) {
+        errors.push({ seed, day: 0, message: `创建失败：${(e as Error).message}` });
         continue;
       }
-      if (run.day < TIME.COLLAPSE_DAY) prepDay(run);
-      else survivalDay(run);
-      const report = endDay(run);
-      if (report.cause) cause = report.cause;
-    } catch (e) {
-      errors.push({ seed, day: run.day, message: (e as Error).message });
-      break;
+
+      let cause: string | undefined;
+      let guard = 0;
+      while (run.phase !== 'ended' && guard++ < 80) {
+        try {
+          clearQueue(run);
+          if (run.phase === 'ended') break;
+          if (run.phase === 'collapse') {
+            acknowledgeCollapse(run);
+            continue;
+          }
+          if (run.day < TIME.COLLAPSE_DAY) prepDay(run);
+          else survivalDay(run);
+          const report = endDay(run);
+          if (report.cause) cause = report.cause;
+        } catch (e) {
+          errors.push({ seed, day: run.day, message: (e as Error).message });
+          break;
+        }
+      }
+
+      outcomes.push({
+        seed,
+        site: run.siteId ?? 'apartment',
+        disaster: run.world.disaster,
+        days: Math.max(0, run.day - 1),
+        threat: run.threat,
+        endingId: run.endingId ?? 'unfinished',
+        cause,
+        finalModules: MODULE_IDS.reduce((s, m) => s + run.modules[m], 0),
+        crew: run.survivors.length,
+      });
     }
   }
-
-  outcomes.push({
-    seed,
-    site: run.siteId ?? 'apartment',
-    disaster: run.world.disaster,
-    days: Math.max(0, run.day - 1),
-    threat: run.threat,
-    endingId: run.endingId ?? 'unfinished',
-    cause,
-    finalModules: MODULE_IDS.reduce((s, m) => s + run.modules[m], 0),
-    crew: run.survivors.length,
-  });
 }
 
 // ============================================================
@@ -317,6 +360,15 @@ const pct = (n: number, total: number) => `${((n / Math.max(1, total)) * 100).to
 
 console.log('');
 console.log(`  模拟 ${outcomes.length} 局 · 难度 ${DIFFICULTY} · 策略：及格水平`);
+console.log(
+  `  全因子采样：${SITES.length} 站点 × ${DISASTERS.length} 灾难 × ${SEEDS_PER_CELL} 组种子（每格 ${SEEDS_PER_CELL} 局）`,
+);
+if (SEEDS_PER_CELL < 20) {
+  console.log(
+    `  注：每格 ${SEEDS_PER_CELL} 局，看边际（每站点/每灾难 ${SEEDS_PER_CELL * DISASTERS.length} 局）够了；` +
+      `要比较单个组合请加大 N（例如 720 → 每格 20 局）`,
+  );
+}
 console.log('');
 console.log(`  通关率        ${pct(wins.length, outcomes.length)}  (${wins.length}/${outcomes.length})`);
 console.log(`  平均存活      ${avgDays.toFixed(1)} 天 / ${TIME.FINAL_DAY}`);
@@ -331,10 +383,16 @@ for (const o of outcomes) {
   if (ENDING_BY_ID[o.endingId]?.kind === 'win') cur.wins += 1;
   byDisaster.set(o.disaster, cur);
 }
-console.log('  按灾难');
-for (const [k, v] of [...byDisaster.entries()].sort((a, b) => a[1].days / a[1].n - b[1].days / b[1].n)) {
+console.log('  按灾难（通关率升序）');
+for (const [k, v] of [...byDisaster.entries()].sort((a, b) => a[1].wins / a[1].n - b[1].wins / b[1].n)) {
   console.log(`    ${k.padEnd(16)} 平均 ${(v.days / v.n).toFixed(1).padStart(5)} 天   通关 ${pct(v.wins, v.n).padStart(6)}   n=${v.n}`);
 }
+// 极差用百分点而非倍率：通关率可以是 0，倍率会变成无穷大，没法比较
+const dRates = [...byDisaster.values()].map((v) => (v.wins / v.n) * 100);
+console.log(
+  `    通关率极差 ${(Math.max(...dRates) - Math.min(...dRates)).toFixed(1)} 个百分点` +
+    `  (${Math.min(...dRates).toFixed(1)}% ~ ${Math.max(...dRates).toFixed(1)}%)`,
+);
 console.log('');
 
 const bySite = new Map<string, { n: number; days: number; wins: number }>();
@@ -345,10 +403,15 @@ for (const o of outcomes) {
   if (ENDING_BY_ID[o.endingId]?.kind === 'win') cur.wins += 1;
   bySite.set(o.site, cur);
 }
-console.log('  按站点');
-for (const [k, v] of [...bySite.entries()].sort((a, b) => a[1].days / a[1].n - b[1].days / b[1].n)) {
+console.log('  按站点（通关率升序）');
+for (const [k, v] of [...bySite.entries()].sort((a, b) => a[1].wins / a[1].n - b[1].wins / b[1].n)) {
   console.log(`    ${k.padEnd(16)} 平均 ${(v.days / v.n).toFixed(1).padStart(5)} 天   通关 ${pct(v.wins, v.n).padStart(6)}   n=${v.n}`);
 }
+const sRates = [...bySite.values()].map((v) => (v.wins / v.n) * 100);
+console.log(
+  `    通关率极差 ${(Math.max(...sRates) - Math.min(...sRates)).toFixed(1)} 个百分点` +
+    `  (${Math.min(...sRates).toFixed(1)}% ~ ${Math.max(...sRates).toFixed(1)}%)`,
+);
 console.log('');
 
 console.log('  最难的两种灾难，死因构成');

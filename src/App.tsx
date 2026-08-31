@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { useGame } from './game/store';
+import { rebuildSettlement, useGame } from './game/store';
 import Game from './ui/Game';
 import MainMenu from './ui/MainMenu';
 import { CodexPanel, MetaPanel } from './ui/Meta';
@@ -11,7 +11,40 @@ import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts 
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
 
 export default function App() {
-  const { run, screen, overlay, nightReport, lastChoice, haul, openShop, settlement, setOverlay, endDay } = useGame();
+  const {
+    run,
+    meta,
+    screen,
+    overlay,
+    nightReport,
+    lastChoice,
+    haul,
+    openShop,
+    settlement,
+    setOverlay,
+    endDay,
+    pruneQueue,
+  } = useGame();
+
+  /**
+   * 自愈二：队列里留着指向已删除家族/变体的条目时，EventCard 会渲染成 null，
+   * 而「结束这一天」又被队列长度拦住。进游戏前先清一遍，别让玩家卡死。
+   */
+  useEffect(() => {
+    if (run && run.queue.length > 0) pruneQueue();
+  }, [run, pruneQueue]);
+
+  /**
+   * 自愈一：settlement 不进存档，但下面的路由依赖它存在。
+   * 结算页刷新后会落进「run 已 ended、settlement 为空」的死角——玩家既领不到遗物，
+   * 也回不到菜单。这里按 run.endingId 就地重算一份。
+   */
+  useEffect(() => {
+    if (!run || run.phase !== 'ended' || settlement) return;
+    const rebuilt = rebuildSettlement(run, meta);
+    if (!rebuilt) return;
+    useGame.setState({ settlement: rebuilt, screen: 'summary' });
+  }, [run, settlement, meta]);
 
   // 键盘：Esc 关闭浮层，空格推进一天
   useEffect(() => {

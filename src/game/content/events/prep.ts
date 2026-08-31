@@ -851,12 +851,14 @@ export const PREP_EVENTS: EventFamily[] = [
               skill: 'negotiation',
               dc: 8,
               ok: {
+                ap: -1,
                 setFlags: ['flag:intelBonus'],
                 stats: { sanity: 3 },
                 log: '你把两份通报的落款单位、发布时间和往年同类文件对了一遍。你现在更清楚该信什么。',
                 tone: 'good',
               },
               bad: {
+                ap: -1,
                 stats: { sanity: -4 },
                 log: '你看了两个小时，唯一的结论是：他们自己也不知道。',
                 tone: 'neutral',

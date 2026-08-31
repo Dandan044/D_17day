@@ -47,7 +47,10 @@ export const MODULES: ModuleDef[] = [
     desc: '决定你能存多少水。水比食物先要命。',
     zero: '几个空矿泉水瓶和浴缸。',
     buildPenaltyTags: ['building:cistern'],
-    buildPenaltyDesc: '水箱正在排空清洗，储水容量暂时归零。',
+    // 曾经写的是「储水容量暂时归零」。真那么做的话，施工会让容量掉到 0 级，
+    // clampResources 会把已经存下的水悄悄倒掉——玩家升级储水反而丢水，且没有提示。
+    // 改用「净水暂停」：水箱在清洗，净化出来的水没处存。存量不受影响。
+    buildPenaltyDesc: '水箱正在排空清洗，这段时间净化出来的水没处存。',
     levels: [
       { materials: 8, parts: 3, labor: 7, hireCash: 2200, buyCash: 2900, buyDays: 1, desc: '两个 120 L 食品级塑料桶，浴缸铺内衬蓄满。' },
       { materials: 16, parts: 8, labor: 15, hireCash: 5800, buyCash: 7200, buyDays: 2, desc: '不锈钢水塔加浮球阀，接了雨水导流。' },

@@ -2,11 +2,11 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { CAPS, DIFFICULTY, FOOD_NEED, LOOT, PRICE, WATER_NEED, WEAR } from '../balance';
+import { CAPS, DIFFICULTY, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
-import type { Difficulty, ResourceId, RunState, WeatherId } from '../types';
+import type { Difficulty, Location, ResourceId, RunState, WeatherId } from '../types';
 import { effectiveModule, headcount } from './tags';
 
 /** 每日采购上限，防止第一天把全城搬空 */
@@ -93,7 +93,13 @@ export function applyProduction(run: RunState): string[] {
   }
 
   const filter = effectiveModule(run, 'filter');
-  if (filter > 0) {
+  // 水箱在清洗时，净化出来的水没处存——净水只能停掉。
+  // 这是 cistern 施工的惩罚。原本按 buildPenaltyDesc 的承诺是「储水容量暂时归零」，
+  // 但那样会让 clampResources 把已经存下的水悄悄倒掉，是对玩家的暗中惩罚，不采用。
+  const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
+  if (filter > 0 && cisternBusy) {
+    notes.push('水箱还在清洗，净化出来的水没处存，净水停了一天');
+  } else if (filter > 0) {
     const factor = rawWaterFactor(run);
     const amt = Math.round((CAPS.FILTER_OUTPUT[filter] ?? 0) * factor * 10) / 10;
     if (amt > 0) {
@@ -268,6 +274,23 @@ export function purchase(
 // ============================================================
 // 搜刮
 // ============================================================
+
+/**
+ * 一次外出的成本。站点决定底子，距离决定附加。
+ *
+ * 抽成函数是因为 store 和 simulate 各写了一份搜刮逻辑，而 simulate 那份连燃料都没扣，
+ * 两处不一致就会让平衡数据偏离真实游戏。现在两边共用同一份。
+ */
+export function travelCost(run: RunState, loc: Location): { fuel: number; stamina: number } {
+  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const longHaul = !!loc.needsVehicle || loc.distance >= 3;
+  return {
+    // 站点的底子（公寓 0 = 近处不耗油，农舍 2.5 = 每趟都烧）
+    fuel: site.travelFuel + (longHaul ? loc.distance * 1.2 : 0),
+    // 基础 + 距离 + 站点的额外消耗
+    stamina: STAMINA.SCAVENGE + loc.distance * 3 + site.travelStamina,
+  };
+}
 
 export function carryCapacity(run: RunState, hasTruckerPerk: boolean): number {
   let cap: number = LOOT.CARRY_BASE;

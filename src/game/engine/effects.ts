@@ -77,6 +77,11 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     clampResources(run);
   }
 
+  // 行动点不像资源那样有储量上限，只需保证不为负
+  if (eff.ap) {
+    run.ap = Math.max(0, run.ap + eff.ap);
+  }
+
   if (eff.stats) {
     for (const [k, delta] of Object.entries(eff.stats)) {
       if (!delta) continue;

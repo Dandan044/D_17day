@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import { STAMINA, TIME } from './balance';
 import { CLASS_BY_ID } from './content/classes';
 import { ENDING_BY_ID } from './content/endings';
+import { FAMILY_BY_ID } from './content/events';
 import { LOCATION_BY_ID } from './content/locations';
 import { PERK_BY_ID, UNLOCK_COST } from './content/perks';
 import {
@@ -22,6 +23,7 @@ import {
   drainLocation,
   purchase as enginePurchase,
   rollHaul,
+  travelCost,
   type Haul,
   type HaulItem,
 } from './engine/economy';
@@ -94,6 +96,8 @@ interface GameState {
   chooseSite: (siteId: SiteId) => void;
   abandonRun: () => void;
   endDay: () => void;
+  /** 清掉指向已不存在家族/变体的队列项：否则玩家既看不到选项，也结束不了这一天 */
+  pruneQueue: () => void;
   dismissNight: () => void;
   acknowledgeCollapse: () => void;
   claimSettlement: () => void;
@@ -236,6 +240,15 @@ export const useGame = create<GameState>()(
           }
         },
 
+        /**
+         * 队列里若留有指向已删除家族/变体的条目，EventCard 会渲染成 null，
+         * 而「结束这一天」又被队列长度拦住——玩家两头堵死，只能清 localStorage。
+         * 改过内容再载入旧存档就会撞上，所以每次进入游戏前先扫一遍。
+         */
+        pruneQueue: () => {
+          mutate((r) => void pruneOrphanQueue(r));
+        },
+
         dismissNight: () => {
           const { run } = get();
           set({ nightReport: null });
@@ -305,13 +318,10 @@ export const useGame = create<GameState>()(
           }
           const next = structuredClone(run) as RunState;
           const rng = makeRng(next.seed, next.rngCursor);
+          const cost = travelCost(next, loc);
           next.ap -= 1;
-          next.stats.stamina = Math.max(0, next.stats.stamina - STAMINA.SCAVENGE - loc.distance * 3);
-          if (loc.needsVehicle || loc.distance >= 3) {
-            const site = next.siteId ? next.siteId : 'apartment';
-            void site;
-            next.res.fuel = Math.max(0, next.res.fuel - loc.distance * 1.2);
-          }
+          next.stats.stamina = Math.max(0, next.stats.stamina - cost.stamina);
+          next.res.fuel = Math.max(0, next.res.fuel - cost.fuel);
           const haul = rollHaul(next, locationId, night, rng, next.difficulty);
           drainLocation(next, locationId);
           next.stats_meta.scavengeRuns += 1;
@@ -545,4 +555,39 @@ export function isPrep(run: RunState | null): boolean {
 
 export function carryCap(run: RunState): number {
   return carryCapacity(run, run.abilities.includes('trucker_vehicle'));
+}
+
+// ============================================================
+// 存档自愈
+//
+// settlement 不进持久化，但路由依赖它存在；队列里也可能留着指向已删除
+// 内容的条目。这两件事都只有在「刷新后」或「改过内容后」才出现，
+// 手工测一次就忘，所以抽成纯函数，让 scripts/verify-p0.ts 能打在真实代码上。
+// ============================================================
+
+/**
+ * 按 run.endingId 重算一份结算数据。
+ * claimSettlement 会清空 run，所以不存在「已领过又被重建」导致遗物算两遍的情况。
+ */
+export function rebuildSettlement(run: RunState | null, meta: MetaState): Settlement | null {
+  if (!run || run.phase !== 'ended') return null;
+  const ending = (run.endingId ? ENDING_BY_ID[run.endingId] : undefined) ?? ENDING_BY_ID['death_generic'];
+  return ending ? settle(run, ending, meta) : null;
+}
+
+/**
+ * 清掉指向已不存在家族/变体的队列项，返回剔除条数。
+ * 不清的话 EventCard 渲染成 null，而「结束这一天」又被队列长度拦住——玩家两头堵死。
+ */
+export function pruneOrphanQueue(run: RunState): number {
+  if (run.queue.length === 0) return 0;
+  const kept = run.queue.filter((q) => {
+    const f = FAMILY_BY_ID[q.familyId];
+    return !!f && f.variants.some((v) => v.id === q.variantId);
+  });
+  const dropped = run.queue.length - kept.length;
+  if (dropped === 0) return 0;
+  run.queue = kept;
+  addLog(run, `${dropped} 件事没有下文，像是被谁忘了。`, 'neutral');
+  return dropped;
 }

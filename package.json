@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint:content": "tsx scripts/lint-content.ts",
-    "sim": "tsx scripts/simulate.ts"
+    "sim": "tsx scripts/simulate.ts",
+    "verify": "tsx scripts/verify.ts"
   },
   "license": "ISC",
   "dependencies": {

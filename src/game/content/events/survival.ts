@@ -70,6 +70,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '把院子里的痕迹和烟囱的烟都处理掉',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               world: { exposure: -12 },
               stats: { stamina: -10 },
               log: '你把车辙扫平，把烟囱改成了贴地排烟。这个地方从路上看起来又空了。',
@@ -207,6 +208,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '擦掉它，再画一个别的',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               world: { exposure: -13 },
               stats: { stamina: -8 },
               log: '你擦掉了三角形，在旁边画了一个圆圈和一道斜线——你不知道那代表什么，但看起来像是"已清"。',
@@ -247,6 +249,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '把所有痕迹扫掉，加强伪装',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               world: { exposure: -14 },
               stats: { stamina: -10 },
               log: '你花了一上午把院子里所有的痕迹清掉，又在门口堆了些看起来很久没人动过的杂物。',
@@ -505,6 +508,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '用一切能搬的东西堵住门',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               stats: { stamina: -18 },
               setFlags: ['flag:raidDefend'],
               log: '你把冰箱、书架、装满水的桶全推到了门后。',
@@ -775,6 +779,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '上去清灰',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               stats: { stamina: -20, hp: -4 },
               world: { exposure: 3 },
               log: '你在屋顶铲了两个小时。口罩很快就糊住了，你只能用围巾。',
@@ -933,6 +938,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '用热水和布慢慢解冻',
             requires: { res: { fuel: 2 }, ap: 1 },
             effect: {
+              ap: -1,
               res: { fuel: -2 },
               stats: { stamina: -10 },
               log: '你花了一上午，一段一段地敷。管子活了，没裂。',
@@ -1198,6 +1204,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '去排队',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               res: { foodStaple: 5, water: 8 },
               stats: { stamina: -20 },
               world: { contagion: 3, exposure: 4 },
@@ -1210,6 +1217,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '带同伴一起去，能多领几份',
             requires: { tags: { any: ['crew:some', 'crew:full'] }, ap: 1, reason: '需要有同伴' },
             effect: {
+              ap: -1,
               res: { foodStaple: 10, water: 16 },
               stats: { stamina: -24 },
               world: { contagion: 6, exposure: 7 },
@@ -1310,6 +1318,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             label: '把他们搬到楼后，做个标记',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               stats: { stamina: -18, sanity: -10, humanity: 6 },
               world: { neighborhood: 6 },
               log: '你花了一上午。你不知道他们叫什么，就在墙上用炭写了"两个人，一个孩子"和日期。',

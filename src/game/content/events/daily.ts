@@ -196,6 +196,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '现在就修（2 零件 + 1 AP）',
             requires: { res: { parts: 2 }, ap: 1 },
             effect: {
+              ap: -1,
               res: { parts: -2 },
               stats: { stamina: -10 },
               log: '你换了轴承，上了油。它安静下来了。',
@@ -253,6 +254,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '拆开清洗，能延一点',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               stats: { stamina: -8 },
               wear: { filterLife: 8 },
               log: '你把滤芯反冲洗了三遍，水从黑色慢慢变成灰色。能多撑几天。',
@@ -290,6 +292,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '大修（6 零件 + 1 AP）',
             requires: { res: { parts: 6 }, ap: 1 },
             effect: {
+              ap: -1,
               res: { parts: -6 },
               stats: { stamina: -14 },
               clearFlags: ['flag:deferredMaintenance'],
@@ -332,6 +335,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '把所有食物移进密封容器（1 AP）',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               res: { foodStaple: -1, materials: -1 },
               stats: { stamina: -8 },
               setFlags: ['flag:sealedFood'],
@@ -380,6 +384,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '铲掉并做防潮处理（2 建材）',
             requires: { res: { materials: 2 }, ap: 1 },
             effect: {
+              ap: -1,
               res: { materials: -2 },
               stats: { stamina: -9 },
               log: '你铲掉墙皮，刷了一层防水涂料，又在墙角摆了两盆生石灰。',
@@ -428,6 +433,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '撬开看看',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               res: { water: 45 },
               stats: { stamina: -14 },
               world: { exposure: 4 },
@@ -440,6 +446,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '悄悄接管子，别让人看见',
             requires: { res: { parts: 2 }, ap: 1 },
             effect: {
+              ap: -1,
               res: { parts: -2, water: 38 },
               stats: { stamina: -10 },
               log: '你接了一根软管从楼顶下来，藏在雨水管里。现在只有你知道那箱水的存在。',
@@ -470,6 +477,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '搭一套集雨装置（3 建材）',
             requires: { res: { materials: 3 }, ap: 1 },
             effect: {
+              ap: -1,
               res: { materials: -3, water: 26 },
               stats: { stamina: -10 },
               setFlags: ['flag:rainCatcher'],
@@ -727,12 +735,14 @@ export const DAILY_EVENTS: EventFamily[] = [
               skill: 'stealth',
               dc: 9,
               ok: {
+                ap: -1,
                 res: { water: 6, meds: 2, foodStaple: 3 },
                 stats: { sanity: -8, humanity: 4 },
                 log: '你在八楼找到了那间屋子。人已经不在了——门开着，东西还整整齐齐地摆着。你带走了她用不上的部分。',
                 tone: 'grim',
               },
               bad: {
+                ap: -1,
                 stats: { stamina: -12, sanity: -6 },
                 log: '你把每一层都敲了一遍，没有人应门。回到自己屋里，你听见楼上有脚步声。',
                 tone: 'grim',
@@ -773,6 +783,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '把所有字都擦掉',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               world: { exposure: -10, neighborhood: -5 },
               stats: { stamina: -6 },
               log: '你擦掉了整面墙。有用的信息和危险的信息一起消失了。',
@@ -1006,12 +1017,14 @@ export const DAILY_EVENTS: EventFamily[] = [
               skill: 'stealth',
               dc: 11,
               ok: {
+                ap: -1,
                 res: { ammo: 4, foodStaple: 3, parts: 2 },
                 stats: { sanity: -10, humanity: -4 },
                 log: '两个人躺在便利店门口，货架已经被清过一遍，但他们的背包还在。你拿了背包。',
                 tone: 'grim',
               },
               bad: {
+                ap: -1,
                 stats: { hp: -12, sanity: -12 },
                 world: { exposure: 10 },
                 log: '你还没走到街口就被人看见了。他们没开枪，只是看着你，一直到你退回去。',
@@ -1045,6 +1058,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '和邻居一起处理',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               stats: { stamina: -16, sanity: -8, humanity: 8, reputation: 6 },
               world: { neighborhood: 16, contagion: -3 },
               log: '你和另外两户人家一起把他搬到了小区花园，挖了坑。有人念了几句，没人知道他叫什么。',
@@ -1056,6 +1070,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '自己去处理',
             requires: { ap: 1 },
             effect: {
+              ap: -1,
               stats: { stamina: -20, sanity: -12, humanity: 6 },
               world: { contagion: -2, exposure: 4 },
               log: '你一个人干完了。回来之后你把外套烧了，洗了四遍手，还是觉得洗不干净。',

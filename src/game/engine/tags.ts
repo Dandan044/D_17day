@@ -6,7 +6,7 @@
  */
 
 import { AIR, CAPS, EXPOSURE, HEALTH, POWER, THREAT_NAMES } from '../balance';
-import { MODULE_IDS, moduleSpec } from '../content/modules';
+import { MODULE_BY_ID, MODULE_IDS, moduleSpec } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { parseTag } from '../tags';
 import type { Facts, ModuleId, Requirement, RunState, TagQuery, WeatherId } from '../types';
@@ -58,8 +58,13 @@ export function computePower(run: RunState): PowerReport {
 
   output += Math.max(0, run.wear.batteryCharge);
 
-  // 施工中的发电模块 = 断电
-  if (run.projects.some((p) => p.moduleId === 'power')) output = 0;
+  // 施工中的电路是断开的：全屋断电，不只是发电模块自己归零。
+  // 由模块的 buildPenaltyTags 声明（power 配了 power:blackout），
+  // 所以改内容就能改这个行为，不必动引擎。
+  const rewiring = run.projects.some((p) =>
+    MODULE_BY_ID[p.moduleId].buildPenaltyTags.includes('power:blackout'),
+  );
+  if (rewiring) output = 0;
 
   let demand = 0;
   const draws: Array<{ id: ModuleId; kwh: number }> = [];
@@ -179,7 +184,11 @@ export function deriveFacts(run: RunState): Facts {
     nums[`mod:${id}`] = effectiveModule(run, id, power);
   }
   for (const p of run.projects) {
+    // 施工期的劣化标签由模块自己声明。power 除了 building:power 还会打上
+    // power:blackout（线路改接中，全屋断电）——以前这里是硬编码拼 building:${id}，
+    // 那第二个标签永远不会被注入，于是"施工期间全屋断电"这句承诺落了空。
     add(`building:${p.moduleId}`);
+    for (const tag of MODULE_BY_ID[p.moduleId].buildPenaltyTags) add(tag);
     if (p.path === 'buy' && !p.laborDone) add(`delivery:${p.moduleId}`);
   }
   if (effectiveModule(run, 'insulate', power) >= 2) add('sealed');

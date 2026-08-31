@@ -168,6 +168,11 @@ export interface ScheduledSeed {
 
 export interface Effect {
   res?: Partial<Record<ResourceId, number>>;
+  /**
+   * 行动点增减：负为消耗，正为返还。
+   * 与 `Requirement.ap` 配套——门槛在那里声明，成本在这里兑现，跟 res 的约定一致。
+   */
+  ap?: number;
   stats?: Partial<Record<StatId, number>>;
   addCond?: ConditionId[];
   removeCond?: ConditionId[];
@@ -224,6 +229,14 @@ export interface SkillCheck {
   bad: Effect;
 }
 
+/**
+ * 一个事件选项。
+ *
+ * 这里曾经有个 `endsDay?: boolean`（选完立刻结束当天），但引擎从未实现它，
+ * 内容层也一次都没用过——它只是让「声明了但没接线」这条坑又多了一个。
+ * 真要做「逃走 / 昏倒 / 外出过夜」这类选项，加回来时必须在 resolveChoice 里实现，
+ * 否则写了照样没反应。
+ */
 export interface Choice {
   id: string;
   label: string;
@@ -232,8 +245,6 @@ export interface Choice {
   requires?: Requirement;
   check?: SkillCheck;
   effect?: Effect;
-  /** 选完后立刻结束当天（如"逃走"） */
-  endsDay?: boolean;
 }
 
 export interface EventVariant {

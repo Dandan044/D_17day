@@ -107,6 +107,20 @@ for (const f of ALL_FAMILIES) {
       const effects = c.check ? [c.check.ok, c.check.bad] : c.effect ? [c.effect] : [];
       if (effects.length === 0) err(`${cw}：既没有 effect 也没有 check，点了不会发生任何事`);
 
+      /**
+       * AP 对账：requires.ap 只是门槛，成本得在 effect 里兑现——跟 res 一个约定。
+       * 两边对不上时，玩家会看到「需要 1 行动点」的提示，选完却一分不扣。
+       * check 型要求 ok/bad 都扣：决定动手的那一刻时间就花出去了，与检定成败无关。
+       */
+      if (c.requires?.ap !== undefined && !effects.every((e) => e.ap !== undefined)) {
+        err(
+          `${cw}：requires 声明了 ${c.requires.ap} 行动点，但 effect 没有对应的 ap 扣除——玩家会看到收费提示却不会被扣`,
+        );
+      }
+      if (c.requires?.ap === undefined && effects.some((e) => (e.ap ?? 0) < 0)) {
+        warn(`${cw}：effect 扣了行动点，但 requires 没声明门槛，AP 为 0 时照样能选`);
+      }
+
       for (const e of effects) {
         if (!e.log?.trim()) err(`${cw}：effect 缺少 log 文本`);
         checkFlagList(`${cw}.setFlags`, e.setFlags);

@@ -1,9 +1,19 @@
+import { useEffect, useState } from 'react';
+
 import { useGame } from '../game/store';
 import { formatSeed } from '../game/rng';
 import { Chip, Panel } from './kit';
 
 export default function MainMenu() {
-  const { run, meta, goSetup, setOverlay, toast } = useGame();
+  const { run, meta, goSetup, setOverlay, toast, abandonRun } = useGame();
+  const [confirmAbandon, setConfirmAbandon] = useState(false);
+
+  // 确认态 4 秒后自动撤销，免得玩家点了就忘了，下次误触直接结算掉一局
+  useEffect(() => {
+    if (!confirmAbandon) return;
+    const t = setTimeout(() => setConfirmAbandon(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmAbandon]);
 
   return (
     <div className="relative flex h-full items-center justify-center overflow-y-auto p-6">
@@ -44,6 +54,21 @@ export default function MainMenu() {
           <button className="btn w-full py-3 text-[13px]" onClick={goSetup}>
             {run && run.phase !== 'ended' ? '放弃当前进度，重新开始' : '开始新的一局'}
           </button>
+          {run && run.phase !== 'ended' && (
+            <button
+              className={`btn btn-ghost w-full py-2 text-[11.5px] ${confirmAbandon ? 'text-alarmhi' : 'text-faint'}`}
+              onClick={() => {
+                if (confirmAbandon) {
+                  setConfirmAbandon(false);
+                  abandonRun();
+                  return;
+                }
+                setConfirmAbandon(true);
+              }}
+            >
+              {confirmAbandon ? '再点一次，确认结算' : '结算当前这一局，领取遗物'}
+            </button>
+          )}
           <div className="grid grid-cols-2 gap-2.5">
             <button className="btn btn-ghost py-2.5" onClick={() => setOverlay('meta')}>
               局外成长
