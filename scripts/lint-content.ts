@@ -12,6 +12,8 @@
  */
 
 import { TIME } from '../src/game/balance';
+import '../src/game/copy';
+import { hasCopy, t as copyT } from '../src/game/copy/t';
 import { CLASSES, SUPPLY_PACKS } from '../src/game/content/classes';
 import { DISASTERS } from '../src/game/content/disasters';
 import { ENDINGS } from '../src/game/content/endings';
@@ -120,8 +122,8 @@ for (const f of ALL_FAMILIES) {
     variantIds.add(v.id);
     checkQuery(`${vw}.require`, v.require);
     checkQuery(`${vw}.forbid`, v.forbid);
-    if (!v.title.trim()) err(`${vw}：标题为空`);
-    if (!v.body.trim()) err(`${vw}：正文为空`);
+    if (!(v.title ?? '').trim()) err(`${vw}：标题为空`);
+    if (!(v.body ?? '').trim()) err(`${vw}：正文为空`);
     if (v.choices.length === 0) err(`${vw}：没有任何选项`);
 
     /**
@@ -386,6 +388,76 @@ for (const f of writtenFlags) {
   const slicePool = ALL_FAMILIES.filter((f) => f.baseWeight > 0 && isEligible(f, aptNuclear, aptFacts) === null);
   if (slicePool.length < 40) {
     warn(`公寓 × 核交火生存池只有 ${slicePool.length} 个加权家族（目标约百条本局可玩）`);
+  }
+}
+
+// ============================================================
+// 7. 文案目录：缺键、skip 共用键、名表唯一
+// ============================================================
+
+function copyKey(familyId: string, variantId: string, suffix: string): boolean {
+  return hasCopy(`event.${familyId}.${variantId}.${suffix}`) || hasCopy(`event.${familyId}._shared.${suffix}`);
+}
+
+const SKIP_LABEL = copyT('ui.choice.skip');
+const SKIP_EXCEPT = new Set(['什么都不做，继续观察']);
+const SHARED_ECHO = new Set(['hook_echo_sliceflags']);
+const bodyDup = new Map<string, string[]>();
+
+for (const f of ALL_FAMILIES) {
+  for (const v of f.variants) {
+    const vw = `事件家族 ${f.id} / 变体 ${v.id}`;
+    if (!copyKey(f.id, v.id, 'title')) err(`${vw}：缺少文案键 title`);
+    if (!copyKey(f.id, v.id, 'body')) err(`${vw}：缺少文案键 body`);
+    if (!SHARED_ECHO.has(f.id)) {
+      const sig = `${v.title ?? ''}\n${v.body ?? ''}`;
+      const hits = bodyDup.get(sig) ?? [];
+      hits.push(`${f.id}/${v.id}`);
+      bodyDup.set(sig, hits);
+    }
+    for (const c of v.choices) {
+      const cw = `${vw} / 选项 ${c.id}`;
+      if (!copyKey(f.id, v.id, `choice.${c.id}.label`)) err(`${cw}：缺少文案键 label`);
+      if (c.check) {
+        if (!copyKey(f.id, v.id, `choice.${c.id}.ok.log`)) err(`${cw}：缺少文案键 ok.log`);
+        if (!copyKey(f.id, v.id, `choice.${c.id}.bad.log`)) err(`${cw}：缺少文案键 bad.log`);
+      } else if (!copyKey(f.id, v.id, `choice.${c.id}.log`)) {
+        err(`${cw}：缺少文案键 log`);
+      }
+      if (c.id === 'skip' && c.label && c.label !== SKIP_LABEL && !SKIP_EXCEPT.has(c.label)) {
+        err(`${cw}：skip 标签应走 ui.choice.skip（当前「${c.label}」）`);
+      }
+    }
+  }
+}
+
+for (const [sig, ids] of bodyDup) {
+  if (ids.length > 1 && sig.trim()) {
+    warn(`正文完全重复：${ids.slice(0, 6).join('、')}${ids.length > 6 ? ` 等 ${ids.length} 条` : ''}`);
+  }
+}
+
+{
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const walk = (dir: string, acc: string[] = []): string[] => {
+    for (const name of readdirSync(dir)) {
+      if (name === 'node_modules' || name === 'dist' || name === 'copy') continue;
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p, acc);
+      else if (p.endsWith('.ts') || p.endsWith('.tsx')) acc.push(p);
+    }
+    return acc;
+  };
+  for (const file of walk('src')) {
+    if (file.replace(/\\/g, '/').endsWith('game/copy/names.ts')) continue;
+    const text = readFileSync(file, 'utf8');
+    if (/\bconst RES_NAME\b/.test(text) || /\bexport const RES_NAME\b/.test(text)) {
+      err(`${file}：资源名表重复，只允许 src/game/copy/names.ts`);
+    }
+    if (/\bconst SKILL_NAME\b/.test(text) || (/\bexport const SKILL_NAME\b/.test(text) && !file.includes('copy'))) {
+      err(`${file}：技能名表重复，只允许 src/game/copy/names.ts`);
+    }
   }
 }
 

@@ -4,6 +4,8 @@ import { TIME } from '../game/balance';
 import { DISASTERS, DISASTER_BY_ID } from '../game/content/disasters';
 import { SOURCE_NAME } from '../game/content/intel';
 import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locations';
+import { BUILD_PATH_NAME, FACTION_NAME, SKILL_NAME } from '../game/copy/names';
+import { t } from '../game/copy/t';
 import { MODULES, moduleHardEffect, moduleSpec } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
 import {
@@ -17,35 +19,12 @@ import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, iodineBoughtCount, remainingBuyLimi
 import { effectiveModule, waterCapacity } from '../game/engine/tags';
 import { forecastAccuracy, WEATHER_NAME } from '../game/engine/world';
 import { useGame } from '../game/store';
-import type { BuildPath, DisasterId, ModuleId, ResourceId, RunState } from '../game/types';
+import type { DisasterId, ModuleId, ResourceId, RunState } from '../game/types';
 import { Bar, Chip, Empty, Modal, Panel, SectionLabel, Stat } from './kit';
-
-const SKILL_NAME: Record<string, string> = {
-  medicine: '医疗',
-  mechanics: '机械',
-  negotiation: '谈判',
-  fitness: '体能',
-  stealth: '隐蔽',
-};
-
-const FACTION_NAME: Record<string, string> = {
-  gov: '政府军',
-  militia: '自治民兵',
-  gang: '帮派',
-  looter: '掠夺者',
-  quarantine: '防疫队',
-  cult: '邪教',
-  refugee: '难民潮',
-  rescue: '救援队',
-  neighbors: '邻居',
-  trader: '流浪商人',
-};
 
 // ============================================================
 // 避难所
 // ============================================================
-
-const PATH_NAME: Record<BuildPath, string> = { diy: '自己动手', hire: '雇工', buy: '买成品', salvage: '拆解' };
 
 export function ShelterPanel({ run }: { run: RunState }) {
   const { setOverlay, build, work, cancelProject, salvage, maintain } = useGame();
@@ -55,8 +34,8 @@ export function ShelterPanel({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title={`避难所 · ${site.name}`}
-      subtitle="施工中的模块处于劣化状态。什么时候动工，本身就是一个决定。"
+      title={t('ui.shelter.title', { name: site.name })}
+      subtitle={t('ui.shelter.subtitle')}
       onClose={() => setOverlay(null)}
       width="max-w-5xl"
     >
@@ -92,7 +71,7 @@ export function ShelterPanel({ run }: { run: RunState }) {
                     <span className="num text-[11.5px] text-amberdim">
                       {level} / {cap}
                     </span>
-                    {project && <Chip tone="warn">施工中</Chip>}
+                    {project && <Chip tone="warn">{t('ui.common.building')}</Chip>}
                   </div>
                   <div className="truncate text-[11.5px] text-faint">
                     {moduleHardEffect(id, level, site.waterCapMult) ||
@@ -117,20 +96,22 @@ export function ShelterPanel({ run }: { run: RunState }) {
                 <div className="border-t border-line p-3">
                   <p className="mb-3 text-[12.5px] leading-relaxed text-dim">{m.desc}</p>
                   <div className="mb-3 text-[12px] leading-snug text-amberhi">
-                    当前：{moduleHardEffect(id, level, site.waterCapMult) || '无'}
-                    {target ? ` → 下一级：${moduleHardEffect(id, target, site.waterCapMult)}` : ''}
+                    {t('ui.shelter.current', {
+                      fx: moduleHardEffect(id, level, site.waterCapMult) || t('ui.common.none'),
+                    })}
+                    {target ? t('ui.shelter.next', { fx: moduleHardEffect(id, target, site.waterCapMult) }) : ''}
                   </div>
 
                   {project && (
                     <div className="mb-3 border-l-2 border-amber bg-amber/5 p-3">
                       <div className="mb-1 flex items-baseline justify-between gap-2">
                         <span className="text-[12.5px] text-amberhi">
-                          {PATH_NAME[project.path]} · 目标 {project.toLevel} 级
+                          {t('ui.shelter.target', { path: BUILD_PATH_NAME[project.path], n: project.toLevel })}
                         </span>
                         <span className="num text-[11.5px] text-dim">
                           {project.path === 'diy'
-                            ? `${project.laborDone} / ${project.laborTotal} 工时`
-                            : `第 ${project.etaDay} 天`}
+                            ? t('ui.common.laborSp', { done: project.laborDone, total: project.laborTotal })
+                            : t('ui.common.etaDay', { day: project.etaDay ?? 0 })}
                         </span>
                       </div>
                       {project.path === 'diy' && (
@@ -140,11 +121,11 @@ export function ShelterPanel({ run }: { run: RunState }) {
                       <div className="mt-2 flex gap-2">
                         {project.path === 'diy' && (
                           <button className="btn px-3 py-1 text-[11.5px]" disabled={run.ap < 1} onClick={() => work(id)}>
-                            投入 1 行动点施工
+                            {t('ui.shelter.work')}
                           </button>
                         )}
                         <button className="btn btn-danger px-3 py-1 text-[11.5px]" onClick={() => cancelProject(id)}>
-                          停工（回收一半材料）
+                          {t('ui.shelter.cancel')}
                         </button>
                       </div>
                     </div>
@@ -152,9 +133,7 @@ export function ShelterPanel({ run }: { run: RunState }) {
 
                   {!project && target && spec && (
                     <>
-                      <SectionLabel>
-                        升到 {target} 级 · {spec.desc}
-                      </SectionLabel>
+                      <SectionLabel>{t('ui.shelter.upTo', { n: target, desc: spec.desc })}</SectionLabel>
                       {blocked ? (
                         <div className="border-l-2 border-alarmdim bg-alarm/5 px-3 py-2 text-[12px] text-alarmhi">
                           {blocked}
@@ -169,24 +148,24 @@ export function ShelterPanel({ run }: { run: RunState }) {
                               onClick={() => build(id, o.path)}
                             >
                               <div className="flex items-baseline justify-between gap-2">
-                                <span className="font-medium text-paper">{PATH_NAME[o.path]}</span>
+                                <span className="font-medium text-paper">{BUILD_PATH_NAME[o.path]}</span>
                                 {!o.available && <Chip tone="bad">{o.reason}</Chip>}
                               </div>
                               <div className="num mt-1 text-[11.5px] leading-snug text-dim">{o.cost}</div>
                               {o.available && o.path === 'diy' && (o.failRisk ?? 0) > 0 && (
                                 <div className="mt-1 text-[11px] text-alarmhi">
-                                  技能不足，每次施工有 {Math.round((o.failRisk ?? 0) * 100)}% 概率做坏
+                                  {t('ui.shelter.failRisk', { pct: Math.round((o.failRisk ?? 0) * 100) })}
                                 </div>
                               )}
                             </button>
                           ))}
                         </div>
                       )}
-                      {spec.power ? <p className="mt-2 text-[11.5px] text-faint">每日耗电 {spec.power} kWh</p> : null}
+                      {spec.power ? <p className="mt-2 text-[11.5px] text-faint">{t('ui.shelter.power', { n: spec.power })}</p> : null}
                     </>
                   )}
 
-                  {!project && !target && <div className="text-[12px] text-faint">已经到达这个站点允许的上限。</div>}
+                  {!project && !target && <div className="text-[12px] text-faint">{t('ui.shelter.atCap')}</div>}
                 </div>
               )}
             </div>
@@ -195,24 +174,22 @@ export function ShelterPanel({ run }: { run: RunState }) {
       </div>
 
       <div className="mt-4">
-        <SectionLabel>维护</SectionLabel>
-        <p className="mb-2 text-[12px] leading-snug text-faint">
-          保养滤芯/机油也会推进某些还没结束的事。
-        </p>
+        <SectionLabel>{t('ui.shelter.maint')}</SectionLabel>
+        <p className="mb-2 text-[12px] leading-snug text-faint">{t('ui.shelter.maintHint')}</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {maintenanceOptions(run).map((m) => (
             <button key={m.kind} className="choice" disabled={!m.available} onClick={() => maintain(m.kind)}>
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-medium text-paper">{m.name}</span>
                 {m.available ? (
-                  <Chip tone={m.remaining <= 6 ? 'bad' : 'warn'}>剩 {m.remaining} 天</Chip>
+                  <Chip tone={m.remaining <= 6 ? 'bad' : 'warn'}>{t('ui.shelter.remain', { n: m.remaining })}</Chip>
                 ) : (
                   <Chip tone="bad">{m.reason}</Chip>
                 )}
               </div>
               <div className="mt-1 text-[11.5px] leading-snug text-faint">{m.desc}</div>
               <div className="num mt-1 text-[11px] text-dim">
-                {m.parts} 零件 · 1 行动点
+                {t('ui.shelter.maintCost', { n: m.parts })}
               </div>
             </button>
           ))}
@@ -221,23 +198,26 @@ export function ShelterPanel({ run }: { run: RunState }) {
 
       {!isPrep && (
         <div className="mt-4">
-          <SectionLabel>拆解回收</SectionLabel>
-          <p className="mb-2 text-[12px] leading-snug text-faint">
-            现在买不到建材了。你只能从已经存在的东西上取——每一次都会制造声音，有些还会制造敌人。
-          </p>
+          <SectionLabel>{t('ui.shelter.salvage')}</SectionLabel>
+          <p className="mb-2 text-[12px] leading-snug text-faint">{t('ui.shelter.salvageHint')}</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {SALVAGE_TARGETS.map((t) => (
-              <button key={t.id} className="choice" disabled={run.ap < 1} onClick={() => salvage(t.id)}>
+            {SALVAGE_TARGETS.map((target) => (
+              <button key={target.id} className="choice" disabled={run.ap < 1} onClick={() => salvage(target.id)}>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-medium text-paper">{t.name}</span>
+                  <span className="font-medium text-paper">{target.name}</span>
                   <div className="flex gap-1">
-                    <Chip tone="warn">暴露 +{t.exposure}</Chip>
-                    {t.humanity < 0 && <Chip tone="bad">人性 {t.humanity}</Chip>}
+                    <Chip tone="warn">{t('ui.shelter.exposure', { n: target.exposure })}</Chip>
+                    {target.humanity < 0 && <Chip tone="bad">{t('ui.shelter.humanity', { n: target.humanity })}</Chip>}
                   </div>
                 </div>
-                <div className="mt-1 text-[11.5px] leading-snug text-faint">{t.desc}</div>
+                <div className="mt-1 text-[11.5px] leading-snug text-faint">{target.desc}</div>
                 <div className="num mt-1 text-[11px] text-dim">
-                  建材 {t.materials[0]}-{t.materials[1]} · 零件 {t.parts[0]}-{t.parts[1]}
+                  {t('ui.shelter.salvageRange', {
+                    a: target.materials[0],
+                    b: target.materials[1],
+                    c: target.parts[0],
+                    d: target.parts[1],
+                  })}
                 </div>
               </button>
             ))}
@@ -261,31 +241,29 @@ export function MapPanel({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title={isPrep ? '采购' : '外出'}
+      title={isPrep ? t('ui.map.shop') : t('ui.map.out')}
       subtitle={
         isPrep
-          ? `物价指数 ${run.world.priceIndex.toFixed(2)}${run.day >= 5 ? ' · 已开始限购' : ''}`
-          : '越远的地方存量越多，也越难回来。危险会变成暴露，高危可能被人盯上。'
+          ? `${t('ui.map.price', { n: run.world.priceIndex.toFixed(2) })}${run.day >= 5 ? t('ui.map.limited') : ''}`
+          : t('ui.map.scavSub')
       }
       onClose={() => setOverlay(null)}
       width="max-w-4xl"
     >
       {!isPrep && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="label">出行时段</span>
+          <span className="label">{t('ui.map.when')}</span>
           <button
             className={`btn px-3 py-1 text-[11.5px] ${!night ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setNight(false)}
           >
-            白天
+            {t('ui.map.day')}
           </button>
           <button
             className={`btn px-3 py-1 text-[11.5px] ${night ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setNight(true)}
           >
-            {nightowl
-              ? '夜间（产出 +60%，危险减轻，仍会增加暴露）'
-              : '夜间（产出 +40%，危险 ×1.8，暴露上升）'}
+            {nightowl ? t('ui.map.nightOwl') : t('ui.map.night')}
           </button>
         </div>
       )}
@@ -304,19 +282,21 @@ export function MapPanel({ run }: { run: RunState }) {
               <div className="flex flex-wrap items-baseline gap-2">
                 <span className="text-[13.5px] font-medium text-paper">{loc.name}</span>
                 <Chip tone={loc.distance === 1 ? 'good' : loc.distance === 2 ? 'warn' : 'bad'}>
-                  {['', '近', '中', '远'][loc.distance]}
+                  {['', t('ui.map.near'), t('ui.map.mid'), t('ui.map.far')][loc.distance]}
                 </Chip>
                 {!isPrep && (
-                  <Chip tone={loc.danger < 20 ? 'good' : loc.danger < 40 ? 'warn' : 'bad'}>危险 {loc.danger}</Chip>
-                )}
-                {loc.needsVehicle && <Chip tone={run.hasVehicle ? 'info' : 'bad'}>需要车</Chip>}
-                {showStock && (
-                  <Chip tone={stock <= 0 ? 'bad' : stock > 60 ? 'good' : stock > 25 ? 'warn' : 'bad'}>
-                    {stock <= 0 ? '已空' : `存量 ${Math.round(stock)}%`}
+                  <Chip tone={loc.danger < 20 ? 'good' : loc.danger < 40 ? 'warn' : 'bad'}>
+                    {t('ui.map.danger', { n: loc.danger })}
                   </Chip>
                 )}
-                {blocked && <Chip tone="bad">设卡</Chip>}
-                {visited && <Chip>今日已去过</Chip>}
+                {loc.needsVehicle && <Chip tone={run.hasVehicle ? 'info' : 'bad'}>{t('ui.map.needCar')}</Chip>}
+                {showStock && (
+                  <Chip tone={stock <= 0 ? 'bad' : stock > 60 ? 'good' : stock > 25 ? 'warn' : 'bad'}>
+                    {stock <= 0 ? t('ui.map.empty') : t('ui.map.stock', { n: Math.round(stock) })}
+                  </Chip>
+                )}
+                {blocked && <Chip tone="bad">{t('ui.map.blocked')}</Chip>}
+                {visited && <Chip>{t('ui.map.visited')}</Chip>}
               </div>
               <p className="mt-1.5 text-[12px] leading-relaxed text-dim">
                 {!isPrep && loc.descSurvival ? loc.descSurvival : loc.desc}
@@ -333,7 +313,7 @@ export function MapPanel({ run }: { run: RunState }) {
                     disabled={!canGo || (run.ap < 1 && !visited)}
                     onClick={() => visitShop(loc.id)}
                   >
-                    {visited ? '再看看货架' : '去采购（1 AP）'}
+                    {visited ? t('ui.map.shopAgain') : t('ui.map.shopGo')}
                   </button>
                 )}
                 {!isPrep && (
@@ -342,7 +322,7 @@ export function MapPanel({ run }: { run: RunState }) {
                     disabled={!canGo || run.ap < 1 || stock <= 0}
                     onClick={() => scavenge(loc.id, night)}
                   >
-                    {stock <= 0 ? '已经空了' : `搜刮（1 AP${night ? ' · 夜间' : ''}）`}
+                    {stock <= 0 ? t('ui.map.scavEmpty') : night ? t('ui.map.scavNight') : t('ui.map.scavGo')}
                   </button>
                 )}
               </div>
@@ -383,36 +363,44 @@ export function IntelPanel({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title={isPrep ? '情报板' : '无线电与局势'}
-      subtitle={isPrep ? '真假混杂。你要在第七天之前赌对一个方向。' : '灾难已经揭晓，现在你要判断的是外面还剩下什么。'}
+      title={isPrep ? t('ui.intel.board') : t('ui.intel.radio')}
+      subtitle={isPrep ? t('ui.intel.boardSub') : t('ui.intel.radioSub')}
       onClose={() => setOverlay(null)}
       width="max-w-4xl"
     >
       {run.world.revealed ? (
         <RevealedIntel run={run} />
       ) : (
-        <Panel title="方向推断" mark className="mb-4">
-          <p className="mb-3 text-[12px] leading-snug text-faint">
-            指向某个方向的情报越多，它越可能是真的——但制造噪音也很容易。核实过的情报会给出确认结果，那才是硬信息。
-          </p>
+        <Panel title={t('ui.intel.infer')} mark className="mb-4">
+          <p className="mb-3 text-[12px] leading-snug text-faint">{t('ui.intel.inferHint')}</p>
           <div className="space-y-2">
             {DISASTERS.map((d) => {
-              const t = tally.get(d.id) ?? { total: 0, confirmed: 0, denied: 0 };
+              const row = tally.get(d.id) ?? { total: 0, confirmed: 0, denied: 0 };
               const max = Math.max(1, ...[...tally.values()].map((x) => x.total));
               return (
                 <div key={d.id}>
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[12.5px] text-paper">{d.name}</span>
                     <span className="num text-[11.5px] text-dim">
-                      {t.total} 条
-                      {t.confirmed > 0 && <span className="ml-1.5 text-safehi">确认真 {t.confirmed}</span>}
-                      {t.denied > 0 && <span className="ml-1.5 text-alarmhi">确认假 {t.denied}</span>}
+                      {t('ui.intel.count', { n: row.total })}
+                      {row.confirmed > 0 && (
+                        <span className="ml-1.5 text-safehi">{t('ui.intel.true', { n: row.confirmed })}</span>
+                      )}
+                      {row.denied > 0 && (
+                        <span className="ml-1.5 text-alarmhi">{t('ui.intel.false', { n: row.denied })}</span>
+                      )}
                     </span>
                   </div>
                   <div className="mt-0.5">
-                    <Bar value={t.total} max={max} tone={t.confirmed > 0 ? 'good' : t.denied > 0 ? 'bad' : 'info'} />
+                    <Bar
+                      value={row.total}
+                      max={max}
+                      tone={row.confirmed > 0 ? 'good' : row.denied > 0 ? 'bad' : 'info'}
+                    />
                   </div>
-                  <div className="mt-0.5 text-[11px] text-faint">关键物资：{d.keySupplies.join('、')}</div>
+                  <div className="mt-0.5 text-[11px] text-faint">
+                    {t('ui.intel.keys', { list: d.keySupplies.join('、') })}
+                  </div>
                 </div>
               );
             })}
@@ -420,12 +408,13 @@ export function IntelPanel({ run }: { run: RunState }) {
         </Panel>
       )}
 
-      <SectionLabel>情报流</SectionLabel>
-      {days.length === 0 && <Empty>还没有收到任何东西。</Empty>}
+      <SectionLabel>{t('ui.intel.stream')}</SectionLabel>
+      {days.length === 0 && <Empty>{t('ui.intel.empty')}</Empty>}
       {days.map((day) => (
         <div key={day} className="mb-4">
           <div className="label mb-1.5">
-            第 {day} 天{day === run.day && ' · 今天'}
+            {t('ui.common.dayN', { n: day })}
+            {day === run.day && t('ui.intel.today')}
           </div>
           <div className="space-y-1.5">
             {(byDay.get(day) ?? []).map((i) => (
@@ -450,7 +439,9 @@ export function IntelPanel({ run }: { run: RunState }) {
                     {SOURCE_NAME[i.source]}
                   </Chip>
                   {i.verified && (
-                    <Chip tone={i.truthful ? 'good' : 'bad'}>{i.truthful ? '核实：真' : '核实：误导'}</Chip>
+                    <Chip tone={i.truthful ? 'good' : 'bad'}>
+                      {i.truthful ? t('ui.intel.verifiedTrue') : t('ui.intel.verifiedFalse')}
+                    </Chip>
                   )}
                   {!i.verified && day === run.day && !run.world.revealed && (
                     <button
@@ -458,7 +449,7 @@ export function IntelPanel({ run }: { run: RunState }) {
                       disabled={run.ap < 1}
                       onClick={() => verifyIntel(i.id)}
                     >
-                      核实（1 AP）
+                      {t('ui.intel.verify')}
                     </button>
                   )}
                 </div>
@@ -477,11 +468,11 @@ function RevealedIntel({ run }: { run: RunState }) {
   const acc = forecastAccuracy(run);
   return (
     <div className="mb-4 space-y-3">
-      <Panel title={`当前灾难 · ${def.name}`} mark>
+      <Panel title={t('ui.intel.current', { name: def.name })} mark>
         <p className="mb-2 text-[12.5px] leading-relaxed text-amberhi">{def.thesis}</p>
         <div className="grid gap-2 sm:grid-cols-2">
           <div>
-            <div className="label mb-1">关键物资</div>
+            <div className="label mb-1">{t('ui.intel.keySupplies')}</div>
             <div className="flex flex-wrap gap-1">
               {def.keySupplies.map((s) => (
                 <Chip key={s} tone="warn">
@@ -491,7 +482,7 @@ function RevealedIntel({ run }: { run: RunState }) {
             </div>
           </div>
           <div>
-            <div className="label mb-1">活跃势力</div>
+            <div className="label mb-1">{t('ui.intel.factions')}</div>
             <div className="flex flex-wrap gap-1">
               {def.factions.map((f) => (
                 <Chip key={f} tone="info">
@@ -503,36 +494,36 @@ function RevealedIntel({ run }: { run: RunState }) {
         </div>
       </Panel>
 
-      <Panel title="天气预报" mark right={<span className="text-faint">准确度 {Math.round(acc * 100)}%</span>}>
+      <Panel title={t('ui.intel.forecast')} mark right={<span className="text-faint">{t('ui.intel.accuracy', { n: Math.round(acc * 100) })}</span>}>
         <div className="flex gap-2">
           {run.world.forecast.map((w, i) => (
             <div key={i} className="flex-1 border border-line bg-ink px-2 py-2 text-center">
-              <div className="label">第 {run.day + i + 1} 天</div>
+              <div className="label">{t('ui.common.dayN', { n: run.day + i + 1 })}</div>
               <div className="mt-1 text-[13px] text-paper">{WEATHER_NAME[w]}</div>
             </div>
           ))}
         </div>
         <p className="mt-2 text-[11.5px] leading-snug text-faint">
           {effectiveModule(run, 'radio') > 0
-            ? '无线电有电，预报更可靠。提前一天知道寒潮，就能提前一天囤燃料。'
+            ? t('ui.intel.radioOn')
             : run.modules.radio > 0
-              ? '电台因缺电停摆，预报不准。把它排到供电表前面，或关掉别的负荷。'
-              : '没有无线电，你只能靠看天。装一台会让预报准得多。'}
+              ? t('ui.intel.radioOff')
+              : t('ui.intel.noRadio')}
         </p>
       </Panel>
 
-      <Panel title="局势指标" mark>
+      <Panel title={t('ui.intel.world')} mark>
         <div className="grid gap-x-4 sm:grid-cols-2">
-          <Stat label="秩序度" value={Math.round(run.world.lawOrder)} tone={run.world.lawOrder < 40 ? 'bad' : 'warn'} />
-          <Stat label="物资稀缺度" value={Math.round(run.world.scarcity)} tone="warn" />
+          <Stat label={t('ui.intel.law')} value={Math.round(run.world.lawOrder)} tone={run.world.lawOrder < 40 ? 'bad' : 'warn'} />
+          <Stat label={t('ui.intel.scarcity')} value={Math.round(run.world.scarcity)} tone="warn" />
           <Stat
-            label="社区关系"
+            label={t('ui.intel.neighborhood')}
             value={Math.round(run.world.neighborhood)}
             tone={run.world.neighborhood > 0 ? 'good' : 'bad'}
           />
-          <Stat label="空气污染" value={Math.round(run.world.airPollution)} tone="warn" />
-          <Stat label="辐射" value={Math.round(run.world.radiation)} tone={run.world.radiation > 30 ? 'bad' : 'warn'} />
-          <Stat label="疫病流行度" value={Math.round(run.world.contagion)} tone="psyche" />
+          <Stat label={t('ui.intel.air')} value={Math.round(run.world.airPollution)} tone="warn" />
+          <Stat label={t('ui.intel.rad')} value={Math.round(run.world.radiation)} tone={run.world.radiation > 30 ? 'bad' : 'warn'} />
+          <Stat label={t('ui.intel.contagion')} value={Math.round(run.world.contagion)} tone="psyche" />
         </div>
       </Panel>
     </div>
@@ -549,43 +540,43 @@ export function CrewPanel({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title="这里的人"
-      subtitle={`${run.survivors.length} / ${site.companionCap} 人 · 每个人都是一份劳力，也是一份口粮`}
+      title={t('ui.crew.title')}
+      subtitle={t('ui.crew.subtitle', { n: run.survivors.length, cap: site.companionCap })}
       onClose={() => setOverlay(null)}
       width="max-w-3xl"
     >
       {run.survivors.length === 0 ? (
-        <Empty>只有你一个人。这既是最安全的，也是最难熬的。</Empty>
+        <Empty>{t('ui.crew.empty')}</Empty>
       ) : (
         <div className="space-y-2">
           {run.survivors.map((s) => (
             <Panel key={s.id}>
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 <span className="text-[14px] font-medium text-paper">{s.name}</span>
-                <span className="num text-[11.5px] text-faint">{s.age} 岁</span>
-                <span className="text-[11px] text-faint">第 {s.joinedDay} 天加入</span>
-                {s.conditions.length > 0 && <Chip tone="bad">生病了</Chip>}
+                <span className="num text-[11.5px] text-faint">{t('ui.common.age', { n: s.age })}</span>
+                <span className="text-[11px] text-faint">{t('ui.common.joined', { n: s.joinedDay })}</span>
+                {s.conditions.length > 0 && <Chip tone="bad">{t('ui.common.sick')}</Chip>}
               </div>
               <p className="mb-2 text-[12.5px] leading-relaxed text-dim">{s.bio}</p>
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {Object.entries(s.skills).map(([k, v]) => (
                   <Chip key={k} tone="info">
-                    {SKILL_NAME[k] ?? k} {v}
+                    {SKILL_NAME[k as keyof typeof SKILL_NAME] ?? k} {v}
                   </Chip>
                 ))}
-                <Chip tone="warn">日耗 ×{s.upkeep}</Chip>
+                <Chip tone="warn">{t('ui.common.upkeep', { n: s.upkeep })}</Chip>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="mb-0.5 flex items-baseline justify-between">
-                    <span className="label">士气</span>
+                    <span className="label">{t('ui.common.morale')}</span>
                     <span className="num text-[11.5px] text-dim">{Math.round(s.morale)}</span>
                   </div>
                   <Bar value={s.morale} tone={s.morale > 55 ? 'good' : s.morale > 28 ? 'warn' : 'bad'} />
                 </div>
                 <div>
                   <div className="mb-0.5 flex items-baseline justify-between">
-                    <span className="label">信任</span>
+                    <span className="label">{t('ui.common.trust')}</span>
                     <span className="num text-[11.5px] text-dim">{Math.round(s.trust)}</span>
                   </div>
                   <Bar value={s.trust} tone="info" />
@@ -597,7 +588,7 @@ export function CrewPanel({ run }: { run: RunState }) {
                 </div>
               )}
               {!s.secretRevealed && s.secret && (
-                <p className="mt-2 text-[11.5px] text-faint">他还有些话没说。信任够高的时候，你会知道。</p>
+                <p className="mt-2 text-[11.5px] text-faint">{t('ui.crew.secretSoon')}</p>
               )}
             </Panel>
           ))}
@@ -615,10 +606,10 @@ export function LogPanel({ run }: { run: RunState }) {
   const { setOverlay, toast } = useGame();
 
   const exportText = () => {
-    const lines = run.log.map((l) => `第 ${l.day} 天　${l.text}`);
-    const text = `《七日之前》记忆日记\n种子 ${run.seed}\n\n${lines.join('\n\n')}`;
+    const lines = run.log.map((l) => t('ui.log.line', { n: l.day, text: l.text }));
+    const text = `${t('ui.log.exportTitle')}\n${t('ui.log.exportSeed', { n: run.seed })}\n\n${lines.join('\n\n')}`;
     navigator.clipboard?.writeText(text);
-    toast('日记已复制到剪贴板', 'good');
+    toast(t('ledger.toast.diaryCopied'), 'good');
   };
 
   const byDay = new Map<number, typeof run.log>();
@@ -638,21 +629,22 @@ export function LogPanel({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title="记忆日记"
-      subtitle="这一局发生过的事，按天记录"
+      title={t('ui.log.title')}
+      subtitle={t('ui.log.subtitle')}
       onClose={() => setOverlay(null)}
       width="max-w-3xl"
       footer={
         <button className="btn btn-ghost w-full py-2" onClick={exportText}>
-          复制全文
+          {t('ui.log.copy')}
         </button>
       }
     >
-      {days.length === 0 && <Empty>还没有什么值得写下来的。</Empty>}
+      {days.length === 0 && <Empty>{t('ui.log.empty')}</Empty>}
       {days.map((day) => (
         <div key={day} className="mb-4">
           <div className="label mb-1.5">
-            第 {day} 天{day < TIME.COLLAPSE_DAY ? ` · D-${TIME.PREP_DAYS - day + 1}` : ''}
+            {t('ui.common.dayN', { n: day })}
+            {day < TIME.COLLAPSE_DAY ? t('ui.log.prep', { n: TIME.PREP_DAYS - day + 1 }) : ''}
           </div>
           <div className="space-y-1.5">
             {(byDay.get(day) ?? []).map((l, i) => (
@@ -688,36 +680,36 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
   return (
     <Modal
       title={loc.name}
-      subtitle={`物价指数 ${run.world.priceIndex.toFixed(2)} · 货架 ${Math.round(st?.stock ?? 100)}%${
-        run.day >= 5 && !hasClerk ? ' · 已限购' : ''
+      subtitle={`${t('ui.shop.price', { n: run.world.priceIndex.toFixed(2), stock: Math.round(st?.stock ?? 100) })}${
+        run.day >= 5 && !hasClerk ? t('ui.shop.limited') : ''
       }`}
       onClose={closeShop}
       width="max-w-2xl"
     >
-      {sellable.length === 0 && locationId !== 'pharmacy' && <Empty>这里不卖东西。</Empty>}
+      {sellable.length === 0 && locationId !== 'pharmacy' && <Empty>{t('ui.shop.empty')}</Empty>}
       <div className="space-y-2">
         {locationId === 'pharmacy' && (
           <div className="panel flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
-                <span className="text-[13px] text-paper">碘片</span>
-                <Chip tone="warn">不是普通药品</Chip>
-                <span className="num text-[11.5px] text-amberdim">{iodinePrice} 元 / 盒</span>
+                <span className="text-[13px] text-paper">{t('ui.shop.iodine')}</span>
+                <Chip tone="warn">{t('ui.shop.notMeds')}</Chip>
+                <span className="num text-[11.5px] text-amberdim">{t('ui.shop.box', { n: iodinePrice })}</span>
               </div>
               <div className="text-[11px] leading-snug text-faint">
-                限购 {IODINE_BOX_LIMIT} 盒。买下即生效，核沉降时挡甲状腺剂量。柜台剩 {iodineLeft} 盒。
+                {t('ui.shop.iodineHint', { limit: IODINE_BOX_LIMIT, left: iodineLeft })}
               </div>
             </div>
             <div>
               {iodineLeft <= 0 ? (
-                <span className="text-[11px] text-faint">已买过了</span>
+                <span className="text-[11px] text-faint">{t('ui.shop.bought')}</span>
               ) : (
                 <button
                   className="btn px-2 py-1 text-[11px]"
                   disabled={run.res.cash < iodinePrice}
                   onClick={() => buyIodine(locationId)}
                 >
-                  买 1 盒
+                  {t('ui.shop.buyBox')}
                 </button>
               )}
             </div>
@@ -741,22 +733,22 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
                 <div className="flex items-baseline gap-2">
                   <span className="text-[13px] text-paper">{RES_NAME[res]}</span>
                   <span className="num text-[11.5px] text-amberdim">
-                    {price} 元 / {RES_UNIT[res]}
+                    {t('ui.shop.unit', { price, unit: RES_UNIT[res] })}
                   </span>
                 </div>
                 <div className="text-[11px] text-faint">
-                  今日剩余 {limit} {RES_UNIT[res]} · 现有 {Math.round(run.res[res] * 10) / 10}
-                  {res === 'water' ? ` · 还能装 ${room.toFixed(1)} L（上限 ${waterCapacity(run)} L）` : ''}
+                  {t('ui.shop.remain', { limit, unit: RES_UNIT[res], have: Math.round(run.res[res] * 10) / 10 })}
+                  {res === 'water' ? t('ui.shop.waterRoom', { room: room.toFixed(1), cap: waterCapacity(run) }) : ''}
                 </div>
               </div>
               <div className="flex gap-1">
                 {empty ? (
                   <span className="text-[11px] text-faint">
                     {res === 'water' && room <= 0
-                      ? '储水已满'
+                      ? t('ui.shop.waterFull')
                       : limit <= 0
-                        ? '今日已买满'
-                        : '货架空了'}
+                        ? t('ui.shop.dayFull')
+                        : t('ui.shop.shelfEmpty')}
                   </span>
                 ) : (
                   amounts.map((n) => (
@@ -776,8 +768,8 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
         })}
       </div>
       <div className="mt-3 flex items-baseline justify-between border-t border-line pt-3">
-        <span className="label">现金</span>
-        <span className="num text-[15px] text-amberhi">{Math.round(run.res.cash)} 元</span>
+        <span className="label">{t('ui.shop.cash')}</span>
+        <span className="num text-[15px] text-amberhi">{t('ui.shop.cashAmt', { n: Math.round(run.res.cash) })}</span>
       </div>
     </Modal>
   );

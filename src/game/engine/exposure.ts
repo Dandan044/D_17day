@@ -6,27 +6,22 @@
  */
 
 import { DIFFICULTY, EXPOSURE, RAID } from '../balance';
+import { MODULE_NAME, TIER_DESC, TIER_NAMES } from '../copy/names';
+import { t } from '../copy/t';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ResourceId, RunState } from '../types';
 import { effectiveModule } from './tags';
 import { computePower, loadOnline } from './power';
 
-export const TIER_NAMES = ['无人注意', '被人看见', '被盯上了', '被标记了', '被猎捕'] as const;
-export const TIER_DESC = [
-  '外面没人知道这里住着人。',
-  '有人注意到这栋楼还有活人。',
-  '有人在观察你的作息。你出门的时间被记下来了。',
-  '有组织的人已经把你列进了名单。他们会来要东西。',
-  '他们不再要东西了，他们要这个地方。',
-] as const;
+export { TIER_NAMES, TIER_DESC };
 
 export function exposureTier(exposure: number): number {
-  const t = EXPOSURE.TIERS;
-  if (exposure < t[0]!) return 0;
-  if (exposure < t[1]!) return 1;
-  if (exposure < t[2]!) return 2;
-  if (exposure < t[3]!) return 3;
+  const tiers = EXPOSURE.TIERS;
+  if (exposure < tiers[0]!) return 0;
+  if (exposure < tiers[1]!) return 1;
+  if (exposure < tiers[2]!) return 2;
+  if (exposure < tiers[3]!) return 3;
   return 4;
 }
 
@@ -40,36 +35,37 @@ export function dailyExposure(run: RunState): ExposureBreakdown {
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const parts: Array<{ label: string; value: number }> = [];
 
-  parts.push({ label: `${site.name}基础`, value: site.exposureBase * 0.25 });
+  parts.push({ label: t('ledger.exposure.siteBase', { site: site.name }), value: site.exposureBase * 0.25 });
 
-  if (run.modules.power > 0 || run.world.powerGrid !== 'off') {
-    const power = computePower(run);
-    if (loadOnline(run, 'lights', power)) {
-      parts.push({ label: '灯光漏出窗外', value: EXPOSURE.SRC_LIGHTS });
-    }
-    if (power.generator > 0) {
-      parts.push({ label: '柴油机噪音', value: EXPOSURE.SRC_GENERATOR });
-    }
+  const power = computePower(run);
+  if (loadOnline(run, 'lights', power)) {
+    parts.push({ label: t('ledger.exposure.lights'), value: EXPOSURE.SRC_LIGHTS });
+  }
+  if (power.generator > 0) {
+    parts.push({ label: t('ledger.exposure.generator'), value: EXPOSURE.SRC_GENERATOR });
   }
 
   if (run.survivors.length > 0) {
-    parts.push({ label: `${run.survivors.length} 名同伴的动静`, value: run.survivors.length * EXPOSURE.SRC_PER_COMPANION });
+    parts.push({
+      label: t('ledger.exposure.crew', { n: run.survivors.length }),
+      value: run.survivors.length * EXPOSURE.SRC_PER_COMPANION,
+    });
   }
 
   const conceal = effectiveModule(run, 'conceal');
-  if (conceal > 0) parts.push({ label: `${conceal} 级隐蔽`, value: -conceal * EXPOSURE.CONCEAL_REDUCE });
+  if (conceal > 0) parts.push({ label: t('ledger.exposure.conceal', { lvl: conceal }), value: -conceal * EXPOSURE.CONCEAL_REDUCE });
 
   if (run.projects.some((p) => p.moduleId === 'conceal')) {
-    parts.push({ label: '隐蔽施工中，材料堆在门口', value: 5 });
+    parts.push({ label: t('ledger.exposure.concealBuild'), value: 5 });
   }
 
   const w = run.world.weather;
   if (w === 'snow' || w === 'blizzard' || w === 'fog') {
-    parts.push({ label: '天气掩盖了行踪', value: -EXPOSURE.WEATHER_COVER });
+    parts.push({ label: t('ledger.exposure.weather'), value: -EXPOSURE.WEATHER_COVER });
   }
 
   if (run.flags.includes('flag:gunshotRecent')) {
-    parts.push({ label: '前几天的枪声', value: EXPOSURE.SRC_GUNSHOT * 0.5 });
+    parts.push({ label: t('ledger.exposure.gunshot'), value: EXPOSURE.SRC_GUNSHOT * 0.5 });
   }
 
   const total = parts.reduce((s, p) => s + p.value, 0);
@@ -158,10 +154,7 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1): RaidResu
       lost,
       hpLost,
       usedAmmo,
-      narrative:
-        underConstruction
-          ? '门框还没装好，但你用能搬得动的一切把入口堵住了。他们试了很久，最后走了。'
-          : '门挡住了。你听着外面的动静，一直到脚步声散开。',
+      narrative: underConstruction ? t('ledger.exposure.raidHoldBuild') : t('ledger.exposure.raidHold'),
     };
   }
 
@@ -186,7 +179,7 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1): RaidResu
   // 破门会实际损坏加固
   if (fortify > 0 && rng.chance(0.5)) {
     run.modules.fortify = Math.max(0, run.modules.fortify - 1);
-    moduleDamaged = '加固';
+    moduleDamaged = MODULE_NAME.fortify;
   }
 
   run.world.exposure = Math.min(EXPOSURE.MAX, run.world.exposure + 6);
@@ -197,9 +190,7 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1): RaidResu
     hpLost,
     moduleDamaged,
     usedAmmo,
-    narrative: underConstruction
-      ? '半拆的门框一脚就开了。你藏在里屋，听着他们把能拿的都拿走。'
-      : '门开了。你没能拦住他们，只能记住这一晚。',
+    narrative: underConstruction ? t('ledger.exposure.raidFailBuild') : t('ledger.exposure.raidFail'),
   };
 }
 
@@ -238,6 +229,7 @@ export function applyScavengeDanger(
       familyId: run.world.exposure >= EXPOSURE.TIERS[2]! ? 'raid_attempt' : 'pressure_scout',
       dueDay: run.day + rng.int(1, 2),
       retries: 0,
+      unless: { all: ['exposure:calm'] },
     });
     scheduledRaid = true;
   }

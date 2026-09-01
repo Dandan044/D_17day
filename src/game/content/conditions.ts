@@ -1,4 +1,6 @@
 import type { ConditionId } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import '../copy';
 
 export interface ConditionDef {
   id: ConditionId;
@@ -167,6 +169,10 @@ export const CONDITIONS: ConditionDef[] = [
     selfHeal: 0.12,
   },
 ];
+
+for (const c of CONDITIONS) {
+  Object.assign(c, hydrateNamed('world.condition', c, ['name', 'desc']));
+}
 
 export const CONDITION_BY_ID: Record<ConditionId, ConditionDef> = Object.fromEntries(
   CONDITIONS.map((c) => [c.id, c]),

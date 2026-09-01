@@ -1,4 +1,10 @@
 import type { PerkDef } from '../types';
+import { TREE_NAMES } from '../copy/names';
+import { hydrateNamed } from '../copy/hydrate';
+import { pickCopy } from '../copy/t';
+import '../copy';
+
+export { TREE_NAMES };
 
 /**
  * 局外天赋树。id 会直接进入 RunState.abilities，被引擎各处读取。
@@ -29,13 +35,11 @@ export const PERKS: PerkDef[] = [
   { id: 'perk_wellprepared', tree: 'social', tier: 3, name: '早有准备', desc: '起始行动点 +1。', cost: 110, requires: ['perk_reputation'] },
 ];
 
-export const PERK_BY_ID: Record<string, PerkDef> = Object.fromEntries(PERKS.map((p) => [p.id, p]));
+for (const p of PERKS) {
+  Object.assign(p, hydrateNamed('world.perk', p, ['name', 'desc']));
+}
 
-export const TREE_NAMES: Record<PerkDef['tree'], string> = {
-  survival: '生存',
-  build: '建造',
-  social: '人际',
-};
+export const PERK_BY_ID: Record<string, PerkDef> = Object.fromEntries(PERKS.map((p) => [p.id, p]));
 
 /** 局外解锁项的展示名（站点、职业、图纸、物资包） */
 export const UNLOCK_NAMES: Record<string, string> = {
@@ -57,6 +61,10 @@ export const UNLOCK_NAMES: Record<string, string> = {
   perk_leader: '天赋：有人愿意跟着你',
   perk_ghost: '天赋：不存在的人',
 };
+
+for (const id of Object.keys(UNLOCK_NAMES)) {
+  UNLOCK_NAMES[id] = pickCopy(`world.unlock.${id}`, UNLOCK_NAMES[id]);
+}
 
 export const UNLOCK_COST: Record<string, number> = {
   site_bunker: 120,

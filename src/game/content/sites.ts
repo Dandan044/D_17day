@@ -1,4 +1,7 @@
 import type { Site, SiteId } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import { pickCopy } from '../copy/t';
+import '../copy';
 
 /**
  * 站点：Day 1 的第一个重大决策。
@@ -124,6 +127,16 @@ export const SITES: Site[] = [
     cons: ['空间狭小，最多只能收留 1 人', '保温上限 1 级，风雪直接打在铁皮上', '搜刮产出只有 60%', '每天上下山极耗体力'],
   },
 ];
+
+for (const s of SITES) {
+  Object.assign(s, hydrateNamed('world.site', s, ['name', 'codename', 'desc'], ['pros', 'cons']));
+  if (s.cost.requires?.reason) {
+    s.cost = {
+      ...s.cost,
+      requires: { ...s.cost.requires, reason: pickCopy(`world.site.${s.id}.reason`, s.cost.requires.reason) },
+    };
+  }
+}
 
 export const SITE_BY_ID: Record<SiteId, Site> = Object.fromEntries(SITES.map((s) => [s.id, s])) as Record<SiteId, Site>;
 

@@ -12,6 +12,8 @@
  */
 
 import { DIRECTOR } from '../balance';
+import { KIND_NAME } from '../copy/names';
+import { t } from '../copy/t';
 import { FAMILY_BY_ID, ALL_FAMILIES } from '../content/events';
 import type { Rng } from '../rng';
 import type { EventFamily, EventKind, EventVariant, Facts, RunState } from '../types';
@@ -187,14 +189,14 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
       const retries = (p.retries ?? 0) + 1;
       if (retries < 5) stillPending.push({ ...p, dueDay: run.day + 1, retries });
       else if (hasWait) stillPending.push({ ...p, dueDay: undefined, retries });
-      else addLog(run, '有件事错过了时机，没有再出现。', 'neutral');
+      else addLog(run, t('ledger.run.missed'), 'neutral');
       continue;
     }
     if (!tryPush(p.familyId, p.tags)) {
       const retries = (p.retries ?? 0) + 1;
       if (retries < 5) stillPending.push({ ...p, dueDay: run.day + 1, retries });
       else if (hasWait) stillPending.push({ ...p, dueDay: undefined, retries });
-      else addLog(run, '有件事错过了时机，没有再出现。', 'neutral');
+      else addLog(run, t('ledger.run.missed'), 'neutral');
     }
   }
   run.pending = stillPending;
@@ -239,16 +241,5 @@ export function recordBeat(run: RunState, familyId: string): void {
 }
 
 export function kindName(kind: EventKind): string {
-  return (
-    {
-      threat: '威胁',
-      opportunity: '机会',
-      social: '人际',
-      medical: '医疗',
-      weather: '天候',
-      moral: '抉择',
-      story: '叙事',
-      dream: '梦境',
-    } as Record<EventKind, string>
-  )[kind];
+  return KIND_NAME[kind];
 }

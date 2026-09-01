@@ -12,12 +12,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 10,
     require: NUC,
-    title: '雨是黑的，落在窗台上像细砂',
-    body: '第一滴你以为是灰。第二滴在玻璃上拖出一道。你没有把手伸出去。\n楼下水坑里漂着一层膜。',
+
+
     choices: [
-      ch('seal', '把还没封严的缝全部补上', { res: { materials: -2 }, stats: { stamina: -10 }, world: { radiation: -2 }, setFlags: ['flag:sealedBlackRain'], schedule: [{ familyId: 'nuke_arc_blackrain_2', inDays: 2 }], log: '你贴到手指发白。雨还在下，进不来。', tone: 'good' }, { requires: { res: { materials: 2 } } }),
-      ch('sample', '用盆在窗边接一点', { stats: { sanity: -4 }, world: { radiation: 3 }, setFlags: ['flag:sampledRain'], schedule: [{ familyId: 'nuke_arc_blackrain_2', waitFor: 'maintain' }], log: '盆底有一层细灰。你盖上盖，放进卫生间，离食物远远的。', tone: 'grim' }),
-      skip('你拉上所有窗帘。雨声变得很近。', { setFlags: ['flag:hidFromRain'], schedule: [{ familyId: 'nuke_arc_blackrain_2', inDays: 3 }] }),
+      ch('seal', { res: { materials: -2 }, stats: { stamina: -10 }, world: { radiation: -2 }, setFlags: ['flag:sealedBlackRain'], schedule: [{ familyId: 'nuke_arc_blackrain_2', inDays: 2 }],  tone: 'good' }, { requires: { res: { materials: 2 } } }),
+      ch('sample', { stats: { sanity: -4 }, world: { radiation: 3 }, setFlags: ['flag:sampledRain'], schedule: [{ familyId: 'nuke_arc_blackrain_2', waitFor: 'maintain' }],  tone: 'grim' }),
+      skip({ setFlags: ['flag:hidFromRain'], schedule: [{ familyId: 'nuke_arc_blackrain_2', inDays: 3 }] }),
     ],
   }),
   beat({
@@ -28,12 +28,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: { any: ['flag:sealedBlackRain', 'flag:sampledRain', 'flag:hidFromRain'] },
-    title: '雨停之后，窗台像被谁用铅笔涂过',
-    body: '灰是干的，一碰就起来。你咳嗽了一声，立刻把袖子捂上。\n对面楼有人在擦玻璃。你想喊，没喊。',
+
+
     choices: [
-      ch('wipe_mask', '戴罩子把灰刮进袋子', { stats: { stamina: -12, sanity: -3 }, world: { radiation: -1, exposure: 2 }, setFlags: ['flag:baggedAsh'], schedule: [{ familyId: 'nuke_arc_blackrain_3', inDays: 4 }], log: '袋子沉得不像灰。你把它放到门后，贴了纸条：不要打开。', tone: 'neutral' }),
-      ch('leave_ash', '不要动它', { stats: { sanity: -5 }, world: { radiation: 2 }, setFlags: ['flag:leftAsh'], schedule: [{ familyId: 'nuke_arc_blackrain_3', waitFor: 'endDay' }], log: '灰留在原处。风会从某条你没看见的缝进来。', tone: 'bad' }),
-      skip('你用湿布隔着门擦了一下把手。只是把手。', { stats: { sanity: -2 }, schedule: [{ familyId: 'nuke_arc_blackrain_3', inDays: 5 }] }),
+      ch('wipe_mask', { stats: { stamina: -12, sanity: -3 }, world: { radiation: -1, exposure: 2 }, setFlags: ['flag:baggedAsh'], schedule: [{ familyId: 'nuke_arc_blackrain_3', inDays: 4 }],  tone: 'neutral' }),
+      ch('leave_ash', { stats: { sanity: -5 }, world: { radiation: 2 }, setFlags: ['flag:leftAsh'], schedule: [{ familyId: 'nuke_arc_blackrain_3', waitFor: 'endDay' }],  tone: 'bad' }),
+      skip({ stats: { sanity: -2 }, schedule: [{ familyId: 'nuke_arc_blackrain_3', inDays: 5 }] }),
     ],
   }),
   beat({
@@ -43,12 +43,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '天气预报没有了，但天空又黄了',
-    body: '像第二场要来。你把第一场的灰还记得清。喉咙发干，不一定是辐射，也可能是你不敢喝水。',
+
+
     choices: [
-      ch('prep', '再封一遍，减少外出', { res: { materials: -1 }, world: { exposure: -4, radiation: -1 }, stats: { stamina: -8 }, log: '你把缝又封了一遍。窗外的天色你不再看。', tone: 'good' }, { requires: { res: { materials: 1 } } }),
-      ch('pills', '把碘片按说明书吃掉', { res: { meds: -1 }, stats: { sanity: 3 }, setFlags: ['flag:iodine'], log: '碘片很苦。你喝了很多水。说明书上还印着微笑的小人。', tone: 'good' }, { requires: { res: { meds: 1 } } }),
-      skip('你坐在屋里等颜色自己淡下去。', { stats: { sanity: -4, hp: -2 } }),
+      ch('prep', { res: { materials: -1 }, world: { exposure: -4, radiation: -1 }, stats: { stamina: -8 },  tone: 'good' }, { requires: { res: { materials: 1 } } }),
+      ch('pills', { res: { meds: -1 }, stats: { sanity: 3 }, setFlags: ['flag:iodine'],  tone: 'good' }, { requires: { res: { meds: 1 } } }),
+      skip({ stats: { sanity: -4, hp: -2 } }),
     ],
   }),
   beat({
@@ -60,12 +60,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     weight: 8,
     minThreat: 2,
     require: APT,
-    title: '楼下有人用喇叭念"战时征收"',
-    body: '名单按门牌。他们说配合的给标记，不配合的以后再来。标记是一张黄纸，贴在门上。\n已经有两家开门了。',
+
+
     choices: [
-      ch('hide', '把能藏的藏进吊柜', { stats: { stamina: -10, sanity: -3 }, world: { exposure: -3 }, setFlags: ['flag:hidFromLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 2, waitFor: 'raid' }], log: '你藏了。喇叭还在念。你的门没有黄纸。', tone: 'neutral' }),
-      ch('give', '交一部分，换他们走', { res: { foodStaple: -4, water: -6 }, world: { exposure: -6 }, stats: { sanity: 2 }, setFlags: ['flag:paidLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 3 }], log: '他们写了收条。收条没有章。黄纸贴上了，歪的。', tone: 'neutral' }, { requires: { res: { foodStaple: 4, water: 6 } } }),
-      skip('你不回应。喇叭在下一层重复同一段。', { world: { exposure: 4 }, setFlags: ['flag:ignoredLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 1 }] }),
+      ch('hide', { stats: { stamina: -10, sanity: -3 }, world: { exposure: -3 }, setFlags: ['flag:hidFromLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 2, waitFor: 'raid' }],  tone: 'neutral' }),
+      ch('give', { res: { foodStaple: -4, water: -6 }, world: { exposure: -6 }, stats: { sanity: 2 }, setFlags: ['flag:paidLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 3 }],  tone: 'neutral' }, { requires: { res: { foodStaple: 4, water: 6 } } }),
+      skip({ world: { exposure: 4 }, setFlags: ['flag:ignoredLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 1 }] }),
     ],
   }),
   beat({
@@ -76,12 +76,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: { any: ['flag:hidFromLevy', 'flag:paidLevy', 'flag:ignoredLevy'] },
-    title: '征收队第二次上来，人数少了',
-    body: '没有喇叭。有人敲门，很有礼貌。他说上次登记有误，要复核库存。\n他的袖章是新的，褶皱还在。',
+
+
     choices: [
-      ch('talk', '隔着门谈', { stats: { sanity: -4 }, world: { exposure: 3 }, setFlags: ['flag:talkedLevy'], log: '他说可以少收，如果你提供楼层情况。你没有提供。他记下了什么。', tone: 'bad' }),
-      ch('pay_again', '再给一点打发走', { res: { foodStaple: -2 }, world: { exposure: -2 }, log: '他走了。礼貌还在。你的柜子轻了。', tone: 'neutral' }, { requires: { res: { foodStaple: 2 } } }),
-      skip('你不说话。他敲了很久。然后下楼。', { world: { exposure: 6 }, schedule: [{ familyId: 'raid_attempt', inDays: 2 }] }),
+      ch('talk', { stats: { sanity: -4 }, world: { exposure: 3 }, setFlags: ['flag:talkedLevy'],  tone: 'bad' }),
+      ch('pay_again', { res: { foodStaple: -2 }, world: { exposure: -2 },  tone: 'neutral' }, { requires: { res: { foodStaple: 2 } } }),
+      skip({ world: { exposure: 6 }, schedule: [{ familyId: 'raid_attempt', inDays: 2 }] }),
     ],
   }),
   beat({
@@ -92,12 +92,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
-    title: '阳台地砖空鼓，踩上去像鼓面',
-    body: '裂缝从排水口往房间爬。你记得这栋楼验收那年你还在别的城市。\n对面有人把花盆搬进去了，很及时。',
+
+
     choices: [
-      ch('brace', '用木方撑住栏板', { res: { materials: -3 }, stats: { stamina: -14 }, setFlags: ['flag:bracedBalcony'], schedule: [{ familyId: 'nuke_arc_balcony_2', inDays: 3 }], log: '你撑了。楼下有人抬头看。你把身体缩回门里。', tone: 'good' }, { requires: { res: { materials: 3 } } }),
-      ch('abandon', '封死阳台门，当它不存在', { res: { materials: -1 }, stats: { sanity: -3 }, setFlags: ['flag:abandonedBalcony'], schedule: [{ familyId: 'nuke_arc_balcony_2', waitFor: 'build' }], log: '你钉上板。客厅少了一块光。裂缝被挡在板外。', tone: 'neutral' }, { requires: { res: { materials: 1 } } }),
-      skip('你不再去阳台。裂缝留在门外。', { setFlags: ['flag:ignoredBalcony'], schedule: [{ familyId: 'nuke_arc_balcony_2', inDays: 4 }] }),
+      ch('brace', { res: { materials: -3 }, stats: { stamina: -14 }, setFlags: ['flag:bracedBalcony'], schedule: [{ familyId: 'nuke_arc_balcony_2', inDays: 3 }],  tone: 'good' }, { requires: { res: { materials: 3 } } }),
+      ch('abandon', { res: { materials: -1 }, stats: { sanity: -3 }, setFlags: ['flag:abandonedBalcony'], schedule: [{ familyId: 'nuke_arc_balcony_2', waitFor: 'build' }],  tone: 'neutral' }, { requires: { res: { materials: 1 } } }),
+      skip({ setFlags: ['flag:ignoredBalcony'], schedule: [{ familyId: 'nuke_arc_balcony_2', inDays: 4 }] }),
     ],
   }),
   beat({
@@ -107,12 +107,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '夜里你听见阳台那边掉东西',
-    body: '一声，很闷。然后没有第二声。你不敢开灯。\n早晨如果还敢看，你会知道掉的是砖还是别的。',
+
+
     choices: [
-      ch('look', '天亮再看', { stats: { stamina: -6, sanity: -4 }, world: { exposure: 2 }, setFlags: ['flag:sawDrop'], log: '掉的是花盆——不是你的。对面阳台空了半截。', tone: 'grim' }),
-      ch('ignore_drop', '当没听见', { stats: { sanity: -6 }, log: '你把耳朵埋进被子。第二声没有来。', tone: 'neutral' }),
-      skip('你把柜子再顶紧阳台门。', { stats: { stamina: -4 } }),
+      ch('look', { stats: { stamina: -6, sanity: -4 }, world: { exposure: 2 }, setFlags: ['flag:sawDrop'],  tone: 'grim' }),
+      ch('ignore_drop', { stats: { sanity: -6 },  tone: 'neutral' }),
+      skip({ stats: { stamina: -4 } }),
     ],
   }),
   beat({
@@ -123,12 +123,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
-    title: '有人把楼梯间改成了过夜的地方',
-    body: '毯子、塑料桶、一只没有电池的收音机。人白天不在。你下楼看见的是摊开的铺盖，像一张没有签字的租约。\n六楼到一楼，这是你唯一的路。',
+
+
     choices: [
-      ch('detour', '改走另一侧消防梯', { stats: { stamina: -12 }, world: { exposure: -2 }, setFlags: ['flag:usedFireExit'], schedule: [{ familyId: 'nuke_arc_stair_2', waitFor: 'scavenge' }], log: '消防梯锈得手发黑。但没有铺盖。', tone: 'neutral' }),
-      ch('note', '留一张纸条：请留出通道', { stats: { humanity: 2, reputation: 1 }, world: { neighborhood: 2 }, setFlags: ['flag:stairNote'], schedule: [{ familyId: 'nuke_arc_stair_2', inDays: 2 }], log: '纸条还在。铺盖往边上挪了半尺。', tone: 'good' }),
-      skip('你踮着脚走过去。没有惊动任何人。', { world: { exposure: 3 }, setFlags: ['flag:tiptoedStair'], schedule: [{ familyId: 'nuke_arc_stair_2', inDays: 3 }] }),
+      ch('detour', { stats: { stamina: -12 }, world: { exposure: -2 }, setFlags: ['flag:usedFireExit'], schedule: [{ familyId: 'nuke_arc_stair_2', waitFor: 'scavenge' }],  tone: 'neutral' }),
+      ch('note', { stats: { humanity: 2, reputation: 1 }, world: { neighborhood: 2 }, setFlags: ['flag:stairNote'], schedule: [{ familyId: 'nuke_arc_stair_2', inDays: 2 }],  tone: 'good' }),
+      skip({ world: { exposure: 3 }, setFlags: ['flag:tiptoedStair'], schedule: [{ familyId: 'nuke_arc_stair_2', inDays: 3 }] }),
     ],
   }),
   beat({
@@ -138,12 +138,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '楼梯间的人回来了，带着一个小孩',
-    body: '小孩不说话，看着你的购物袋。大人把小孩往身后揽。没有要进你家的意思。\n你仍可以装作没看见。',
+
+
     choices: [
-      ch('food', '放下一点食物就走', { res: { foodStaple: -2 }, stats: { humanity: 4, sanity: 2 }, world: { exposure: 4 }, setFlags: ['flag:fedStairKid'], log: '你没有停留。下到半层你听见塑料袋响。', tone: 'good' }, { requires: { res: { foodStaple: 2 } } }),
-      ch('warn', '告诉他们别在窗口亮灯', { stats: { humanity: 2 }, log: '大人点头。小孩仍看着你。你没有邀请任何人。', tone: 'neutral' }),
-      skip('你从他们身边过去。购物袋的声音很响。', { stats: { humanity: -2, sanity: -2 } }),
+      ch('food', { res: { foodStaple: -2 }, stats: { humanity: 4, sanity: 2 }, world: { exposure: 4 }, setFlags: ['flag:fedStairKid'],  tone: 'good' }, { requires: { res: { foodStaple: 2 } } }),
+      ch('warn', { stats: { humanity: 2 },  tone: 'neutral' }),
+      skip({ stats: { humanity: -2, sanity: -2 } }),
     ],
   }),
   beat({
@@ -154,12 +154,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: HIGH,
-    title: '对面楼有个孩子每天在同一扇窗出现',
-    body: '不招手。只是出现。有时举着一本画册，有时什么都没有。\n你没有孩子。你还是会在那个时间往那边看。',
+
+
     choices: [
-      ch('signal', '用手电筒对空闪两下', { world: { exposure: 5 }, stats: { sanity: 3, humanity: 2 }, setFlags: ['flag:signaledKid'], schedule: [{ familyId: 'nuke_arc_across_2', inDays: 2 }], log: '对面也闪了一下。然后窗帘拉上了。', tone: 'good' }),
-      ch('stop_look', '不再看那扇窗', { stats: { sanity: -4 }, setFlags: ['flag:stoppedLooking'], schedule: [{ familyId: 'nuke_arc_across_2', waitFor: 'rest' }], log: '你改看自己的墙。墙没有画册。', tone: 'neutral' }),
-      skip('你看了。没有表示。孩子也没有。', { setFlags: ['flag:watchedKid'], schedule: [{ familyId: 'nuke_arc_across_2', inDays: 3 }] }),
+      ch('signal', { world: { exposure: 5 }, stats: { sanity: 3, humanity: 2 }, setFlags: ['flag:signaledKid'], schedule: [{ familyId: 'nuke_arc_across_2', inDays: 2 }],  tone: 'good' }),
+      ch('stop_look', { stats: { sanity: -4 }, setFlags: ['flag:stoppedLooking'], schedule: [{ familyId: 'nuke_arc_across_2', waitFor: 'rest' }],  tone: 'neutral' }),
+      skip({ setFlags: ['flag:watchedKid'], schedule: [{ familyId: 'nuke_arc_across_2', inDays: 3 }] }),
     ],
   }),
   beat({
@@ -169,12 +169,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '那扇窗连续两天没有人',
-    body: '画册也不见了。玻璃上多了一道胶带，从里面贴的。\n你也可以当没看见。',
+
+
     choices: [
-      ch('binoculars', '用望远镜看清楚', { stats: { sanity: -5 }, world: { exposure: 2 }, setFlags: ['flag:sawEmptyWindow'], log: '房间是空的。桌子还在。杯子倒了。', tone: 'grim' }),
-      ch('accept', '当他们走了', { stats: { sanity: 2, humanity: 1 }, log: '你当他们是搬走了，不是别的。', tone: 'neutral' }),
-      skip('你不再看那扇窗。', { stats: { sanity: -3 } }),
+      ch('binoculars', { stats: { sanity: -5 }, world: { exposure: 2 }, setFlags: ['flag:sawEmptyWindow'],  tone: 'grim' }),
+      ch('accept', { stats: { sanity: 2, humanity: 1 },  tone: 'neutral' }),
+      skip({ stats: { sanity: -3 } }),
     ],
   }),
   beat({
@@ -185,12 +185,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: NUC,
-    title: '你的脖子在领口那里发紧',
-    body: '照镜子看，不像肿，像你太注意它了。说明书上的甲状腺图你看过太多次。\n碘片还剩几粒，按疗程该在最初几天吃完。',
+
+
     choices: [
-      ch('dose', '补一次剂量', { res: { meds: -1 }, stats: { sanity: 4 }, setFlags: ['flag:iodine', 'flag:lateIodine'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 3 }], log: '你吃了。可能晚了。你还是吃了。', tone: 'neutral' }, { requires: { res: { meds: 1 } } }),
-      ch('wait_sym', '再观察一天', { stats: { sanity: -4 }, setFlags: ['flag:watchedNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', waitFor: 'treat' }], log: '你用手指量宽度。数字没有意义，你还是量。', tone: 'neutral' }),
-      skip('你把镜子转过去。领口松开一扣。', { setFlags: ['flag:ignoredNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 4 }] }),
+      ch('dose', { res: { meds: -1 }, stats: { sanity: 4 }, setFlags: ['flag:iodine', 'flag:lateIodine'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 3 }],  tone: 'neutral' }, { requires: { res: { meds: 1 } } }),
+      ch('wait_sym', { stats: { sanity: -4 }, setFlags: ['flag:watchedNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', waitFor: 'treat' }],  tone: 'neutral' }),
+      skip({ setFlags: ['flag:ignoredNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 4 }] }),
     ],
   }),
   beat({
@@ -200,12 +200,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '吞咽的时候会轻轻响一下',
-    body: '可能是嗓子干，也可能不是。你没有医生，只有说明书和自己的手指。',
+
+
     choices: [
-      ch('rest_neck', '少说话，多喝水', { res: { water: -3 }, stats: { sanity: 3, hp: 2 }, log: '一天里你说的话不超过十句。嗓子还是紧，人安静了。', tone: 'good' }, { requires: { res: { water: 3 } } }),
-      ch('more_meds', '再吃药', { res: { meds: -2 }, stats: { hp: 3 }, addCond: [], log: '你加了剂量。说明书不建议这么做。这里没有第二个医生。', tone: 'neutral' }, { requires: { res: { meds: 2 } } }),
-      skip('你把它当成嗓子干。没有再照镜子。', { stats: { sanity: -4, hp: -3 } }),
+      ch('rest_neck', { res: { water: -3 }, stats: { sanity: 3, hp: 2 },  tone: 'good' }, { requires: { res: { water: 3 } } }),
+      ch('more_meds', { res: { meds: -2 }, stats: { hp: 3 }, addCond: [],  tone: 'neutral' }, { requires: { res: { meds: 2 } } }),
+      skip({ stats: { sanity: -4, hp: -3 } }),
     ],
   }),
   beat({
@@ -216,12 +216,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: { all: ['disaster:nuclear', 'mod:radio>=1'] },
-    title: '短波里有人反复念一组坐标',
-    body: '声音年轻，累，像在念作业。坐标后面是"北"。没有频率呼号，没有保证。\n你的天线在窗边，窗你封过。',
+
+
     choices: [
-      ch('copy', '把坐标抄三遍', { stats: { sanity: 2 }, setFlags: ['flag:knowsNorthRoute', 'flag:copiedCoords'], schedule: [{ familyId: 'nuke_arc_radio_north_2', waitFor: 'verifyIntel' }], log: '纸上的数字比声音可靠。你把纸夹进日记。', tone: 'good' }),
-      ch('reply', '试着回话', { world: { exposure: 6 }, stats: { sanity: -3 }, setFlags: ['flag:radioReplied'], schedule: [{ familyId: 'nuke_arc_radio_north_2', inDays: 2 }], log: '没有人答。你的声音在自己的房间里显得太大。', tone: 'neutral' }),
-      skip('你把音量拧小。坐标还在念，像雨。', { setFlags: ['flag:ignoredCoords'], schedule: [{ familyId: 'nuke_arc_radio_north_2', inDays: 4 }] }),
+      ch('copy', { stats: { sanity: 2 }, setFlags: ['flag:knowsNorthRoute', 'flag:copiedCoords'], schedule: [{ familyId: 'nuke_arc_radio_north_2', waitFor: 'verifyIntel' }],  tone: 'good' }),
+      ch('reply', { world: { exposure: 6 }, stats: { sanity: -3 }, setFlags: ['flag:radioReplied'], schedule: [{ familyId: 'nuke_arc_radio_north_2', inDays: 2 }],  tone: 'neutral' }),
+      skip({ setFlags: ['flag:ignoredCoords'], schedule: [{ familyId: 'nuke_arc_radio_north_2', inDays: 4 }] }),
     ],
   }),
   beat({
@@ -231,12 +231,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '那个声音停了，换了一个更老的',
-    body: '老人说北面的桥断了，别信坐标。然后也停了。沙沙声回来，像什么都没发生。',
+
+
     choices: [
-      ch('keep', '两份都留下', { stats: { sanity: -2 }, setFlags: ['flag:twoNorthStories'], log: '你把两句话写在同一页。哪一句是真的，要到路上才知道。你暂时没有路。', tone: 'neutral' }),
-      ch('drop', '当都是假的', { stats: { sanity: 3 }, clearFlags: ['flag:knowsNorthRoute'], log: '你把纸翻过去。北还在地图上，不在你的计划里。', tone: 'good' }),
-      skip('你继续听沙沙。沙沙不撒谎，也不帮忙。', { stats: { sanity: -2 } }),
+      ch('keep', { stats: { sanity: -2 }, setFlags: ['flag:twoNorthStories'],  tone: 'neutral' }),
+      ch('drop', { stats: { sanity: 3 }, clearFlags: ['flag:knowsNorthRoute'],  tone: 'good' }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -247,12 +247,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: { all: ['disaster:nuclear', 'hasGeiger'] },
-    title: '盖革计数器在门口叫得比屋里响',
-    body: '你沿门缝走了一圈。数字在猫眼附近跳了一下。\n外面有什么东西经过，或者只是风把灰送进来。',
+
+
     choices: [
-      ch('map', '把读数记在门框上', { stats: { stamina: -4, sanity: 2 }, setFlags: ['flag:mappedClicks'], log: '你记下了时间和数字。门框变成一张很小的表。', tone: 'good' }),
-      ch('towel', '再堵门缝', { res: { materials: -1 }, world: { radiation: -1 }, log: '读数低了一点。你愿意相信是堵的作用。', tone: 'good' }, { requires: { res: { materials: 1 } } }),
-      skip('你把计数器关了。安静很贵。', { stats: { sanity: 3 } }),
+      ch('map', { stats: { stamina: -4, sanity: 2 }, setFlags: ['flag:mappedClicks'],  tone: 'good' }),
+      ch('towel', { res: { materials: -1 }, world: { radiation: -1 },  tone: 'good' }, { requires: { res: { materials: 1 } } }),
+      skip({ stats: { sanity: 3 } }),
     ],
   }),
   beat({
@@ -262,12 +262,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: { all: ['disaster:nuclear', 'flag:iodineDoubt'] },
-    title: '你买的那盒碘片说明书是复印的',
-    body: '页码跳号。有一页的剂量被手写改过。你尝了一粒，苦得正常，也许假药也知道要苦。',
+
+
     choices: [
-      ch('stop', '停用，改喝净水', { res: { water: -4 }, clearFlags: ['flag:iodine'], stats: { sanity: -2 }, log: '你停了。苦味还在舌根。你宁可渴一点。', tone: 'neutral' }, { requires: { res: { water: 4 } } }),
-      ch('continue', '按手写剂量吃', { res: { meds: -1 }, setFlags: ['flag:iodine'], stats: { sanity: -3 }, log: '你吃了手写的那个数。手写的人你不认识。', tone: 'grim' }, { requires: { res: { meds: 1 } } }),
-      skip('你把说明书撕了。药还在。', { stats: { sanity: -2 } }),
+      ch('stop', { res: { water: -4 }, clearFlags: ['flag:iodine'], stats: { sanity: -2 },  tone: 'neutral' }, { requires: { res: { water: 4 } } }),
+      ch('continue', { res: { meds: -1 }, setFlags: ['flag:iodine'], stats: { sanity: -3 },  tone: 'grim' }, { requires: { res: { meds: 1 } } }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -278,12 +278,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: HIGH,
-    title: '远方又亮了一下，玻璃嗡了很久',
-    body: '比第一夜弱。花瓶还是走了两厘米。你趴在内墙根，数自己的呼吸。\n警报没有响。也许没有人再按警报。',
+
+
     choices: [
-      ch('inner', '搬到没有窗的卫生间过夜', { stats: { stamina: -8, sanity: 2 }, setFlags: ['flag:sleptBathroom'], log: '瓷砖很冷。你听见自己的牙。外面没有第二下。', tone: 'good' }),
-      ch('tape_x', '玻璃上贴米字', { res: { materials: -1 }, stats: { stamina: -6 }, log: '米字让玻璃看起来像受伤。你希望它真能少碎一点。', tone: 'neutral' }, { requires: { res: { materials: 1 } } }),
-      skip('你继续靠着内墙。嗡声自己停了。', { stats: { sanity: -5 } }),
+      ch('inner', { stats: { stamina: -8, sanity: 2 }, setFlags: ['flag:sleptBathroom'],  tone: 'good' }),
+      ch('tape_x', { res: { materials: -1 }, stats: { stamina: -6 },  tone: 'neutral' }, { requires: { res: { materials: 1 } } }),
+      skip({ stats: { sanity: -5 } }),
     ],
   }),
   beat({
@@ -294,12 +294,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: HIGH,
-    title: '电梯井里有人在喊，声音发空',
-    body: '轿厢停在两层之间。你从缝里看见一只手，又缩回去。\n你没有绳，没有开电梯的钥匙。你住六楼。',
+
+
     choices: [
-      ch('call', '喊他往上爬，你在门口等', { stats: { stamina: -10, humanity: 3, sanity: -4 }, world: { exposure: 5 }, setFlags: ['flag:helpedShaft'], log: '他爬上来一段，又滑下去。后来声音没有了。你在门口坐到腿麻。', tone: 'grim' }),
-      ch('tool', '用撬棍把缝再开一点', { res: { parts: -1 }, stats: { stamina: -14 }, world: { exposure: 6 }, log: '缝大了一点。里面是黑的。你没有看见人。', tone: 'bad' }, { requires: { res: { parts: 1 } } }),
-      skip('你关上门。井里的声音还在你耳朵里。', { stats: { humanity: -4, sanity: -5 } }),
+      ch('call', { stats: { stamina: -10, humanity: 3, sanity: -4 }, world: { exposure: 5 }, setFlags: ['flag:helpedShaft'],  tone: 'grim' }),
+      ch('tool', { res: { parts: -1 }, stats: { stamina: -14 }, world: { exposure: 6 },  tone: 'bad' }, { requires: { res: { parts: 1 } } }),
+      skip({ stats: { humanity: -4, sanity: -5 } }),
     ],
   }),
   beat({
@@ -309,12 +309,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     weight: 7,
     cooldown: 14,
     require: NUC,
-    title: '窗台内侧也有灰了',
-    body: '你封过。灰还是来了，像烟会找缝。你用湿布擦，布立刻变黑。',
+
+
     choices: [
-      ch('wipe_daily', '当成日常，每天擦', { stats: { stamina: -6, sanity: 2 }, world: { radiation: -0.5 }, log: '布洗不干净。你开始用过期的内衣当布。', tone: 'neutral' }),
-      ch('caulk', '再用一层胶', { res: { materials: -1 }, world: { radiation: -1 }, log: '胶很臭。灰少了一点。你愿意用臭换灰。', tone: 'good' }, { requires: { res: { materials: 1 } } }),
-      skip('你不再擦。灰成为家具。', { stats: { sanity: -3, hp: -2 } }),
+      ch('wipe_daily', { stats: { stamina: -6, sanity: 2 }, world: { radiation: -0.5 },  tone: 'neutral' }),
+      ch('caulk', { res: { materials: -1 }, world: { radiation: -1 },  tone: 'good' }, { requires: { res: { materials: 1 } } }),
+      skip({ stats: { sanity: -3, hp: -2 } }),
     ],
   }),
   beat({
@@ -324,12 +324,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: NUC,
-    title: '桶里的水隔夜变成浅黄',
-    body: '盖子是盖的。你没有放东西进去。黄得均匀，像茶，没有茶的香。\n你还有别的桶，暂时还清。',
+
+
     choices: [
-      ch('isolate', '黄的那桶单放，不喝', { stats: { sanity: 2 }, setFlags: ['flag:isolatedWater'], log: '你贴了标签：不喝。黄水桶挪到角落。', tone: 'good' }),
-      ch('filter', '再滤一遍', { wear: { filterLife: -2 }, res: { water: -1 }, log: '黄淡了。你尝了一口，没有味道。你拿它洗了手，没有喝第二口。', tone: 'neutral' }),
-      skip('你搅了搅。黄还在。你盖上盖。', { stats: { sanity: -3 } }),
+      ch('isolate', { stats: { sanity: 2 }, setFlags: ['flag:isolatedWater'],  tone: 'good' }),
+      ch('filter', { wear: { filterLife: -2 }, res: { water: -1 },  tone: 'neutral' }),
+      skip({ stats: { sanity: -3 } }),
     ],
   }),
   beat({
@@ -339,12 +339,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: NUC,
-    title: '小臂内侧开始发痒，没有疹',
-    body: '你用指甲划过，留下白痕，久久不退。可能是干燥，可能是你把灰蹭上了。\n水要省着洗脸。',
+
+
     choices: [
-      ch('wash', '用存货洗一次', { res: { water: -3, meds: -0.5 }, stats: { hp: 2, sanity: 2 }, log: '洗完白痕还在，痒轻了。你把袖子放下来。', tone: 'good' }, { requires: { res: { water: 3 } } }),
-      ch('ignore_itch', '当干燥', { stats: { sanity: -2 }, log: '你把手揣进口袋。口袋里的灰你刚才才拍过。', tone: 'neutral' }),
-      skip('你把指甲剪短。能划的变少了。', { stats: { sanity: -2 } }),
+      ch('wash', { res: { water: -3, meds: -0.5 }, stats: { hp: 2, sanity: 2 },  tone: 'good' }, { requires: { res: { water: 3 } } }),
+      ch('ignore_itch', { stats: { sanity: -2 },  tone: 'neutral' }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -354,12 +354,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: APT,
-    title: '楼道多了一张印刷的疏散图',
-    body: '箭头指向北。图上的街道名字有一半你不认识，像用了旧版地图。\n背面是碘片剂量，和一串已经打不通的电话。',
+
+
     choices: [
-      ch('keep_map', '收下当资料', { setFlags: ['flag:hasEvacMap', 'flag:knowsNorthRoute'], stats: { sanity: 2 }, log: '你把图折好。北还是北。街道名字你用笔记了一遍。', tone: 'good' }),
-      ch('tear_map', '撕掉，避免被人看见你关心北', { world: { exposure: -3 }, stats: { sanity: -2 }, log: '碎片进了垃圾桶。箭头还在你脑子里。', tone: 'neutral' }),
-      skip('你看完，让它留在原处。也许有人比你更需要北。', { stats: { humanity: 2 } }),
+      ch('keep_map', { setFlags: ['flag:hasEvacMap', 'flag:knowsNorthRoute'], stats: { sanity: 2 },  tone: 'good' }),
+      ch('tear_map', { world: { exposure: -3 }, stats: { sanity: -2 },  tone: 'neutral' }),
+      skip({ stats: { humanity: 2 } }),
     ],
   }),
   beat({
@@ -370,12 +370,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: APT,
-    title: '防空警报响了一分钟，停了',
-    body: '没有第二轮。街上没有人跑。你趴在内墙，数到六十，世界还是原来的黑暗。\n可能是误触。可能不是。',
+
+
     choices: [
-      ch('go_inner', '按演习来，进卫生间', { stats: { stamina: -6, sanity: 2 }, setFlags: ['flag:drilledOnce'], log: '你带着水进去。一分钟后出来，觉得自己既谨慎又可笑。', tone: 'good' }),
-      ch('look_out', '从封窗的缝看一眼', { world: { exposure: 3, radiation: 1 }, stats: { sanity: -4 }, log: '街是空的。只有警报器还在惯性里轻轻晃。', tone: 'bad' }),
-      skip('你没有动。一分钟比你想的长。', { stats: { sanity: -3 } }),
+      ch('go_inner', { stats: { stamina: -6, sanity: 2 }, setFlags: ['flag:drilledOnce'],  tone: 'good' }),
+      ch('look_out', { world: { exposure: 3, radiation: 1 }, stats: { sanity: -4 },  tone: 'bad' }),
+      skip({ stats: { sanity: -3 } }),
     ],
   }),
   beat({
@@ -385,12 +385,12 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: NUC,
-    title: '出门回来，鞋底的灰印到了地砖上',
-    body: '你在门口拍过。印还是进来了。你开始怀疑拍有没有用，还是该把鞋永远留在门外。\n门外是楼道。楼道也有人经过。',
+
+
     choices: [
-      ch('leave_shoes', '鞋永远留在门外', { world: { exposure: 2 }, stats: { sanity: 2 }, setFlags: ['flag:shoesOutside'], log: '你穿着袜子在家里走。鞋在门外像两只守门的动物。', tone: 'good' }),
-      ch('wipe_tile', '把地砖擦三遍', { res: { water: -2 }, stats: { stamina: -8 }, log: '砖亮了。你的膝盖湿了。灰还在鞋纹里。', tone: 'neutral' }, { requires: { res: { water: 2 } } }),
-      skip('你绕开那几块砖走。家变得有禁区。', { stats: { sanity: -2 } }),
+      ch('leave_shoes', { world: { exposure: 2 }, stats: { sanity: 2 }, setFlags: ['flag:shoesOutside'],  tone: 'good' }),
+      ch('wipe_tile', { res: { water: -2 }, stats: { stamina: -8 },  tone: 'neutral' }, { requires: { res: { water: 2 } } }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
 ];

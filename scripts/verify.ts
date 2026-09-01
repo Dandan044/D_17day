@@ -10,11 +10,13 @@
 import { FAMILY_BY_ID } from '../src/game/content/events';
 import { LOCATION_BY_ID } from '../src/game/content/locations';
 import { SITE_BY_ID } from '../src/game/content/sites';
-import { applyProduction, dailyNeeds, travelCost } from '../src/game/engine/economy';
+import { applyProduction, consumeDaily, dailyNeeds, travelCost } from '../src/game/engine/economy';
 import { applyEffect } from '../src/game/engine/effects';
-import { startProject } from '../src/game/engine/construction';
+import { startProject, grantCompanionLabor, completeReadyProjects } from '../src/game/engine/construction';
 import { chooseSite, createRun, endDay, resolveChoice } from '../src/game/engine/run';
 import { computePower, deriveFacts } from '../src/game/engine/tags';
+import { settleBattery, batteryCapacity } from '../src/game/engine/power';
+import { resolveHealth } from '../src/game/engine/health';
 import { pruneOrphanQueue, rebuildSettlement } from '../src/game/store';
 import { makeRng } from '../src/game/rng';
 import type { MetaState, ModuleId, RunState, SiteId } from '../src/game/types';
@@ -183,6 +185,7 @@ console.log('\n  P1-1  施工期劣化：buildPenaltyTags 真的被读取并生�
   normalRun.modules.filter = 1;
   normalRun.wear.filterLife = 30;
   normalRun.world.weather = 'rain';
+  normalRun.res.water = 4;
   const w0 = normalRun.res.water;
   const notes2 = applyProduction(normalRun);
   check('雨天净水正常产出', normalRun.res.water > w0 && !notes2.some((n) => n.text.includes('没法入库')),
@@ -250,6 +253,111 @@ console.log('\n  P1-2  站点出行成本：travelFuel / travelStamina 生效');
     const blocked = createRun({ seed: 9, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
     const r = chooseSite(blocked, 'farmhouse');
     check('WIP 站点不可迁入', !r.ok && (r.reason ?? '').includes('开发中'), r.reason);
+  }
+}
+
+// ============================================================
+console.log('\n  审计修复  蓄电消耗 / 饥饿双扣 / 没下雨去重 / 同伴工时');
+// ============================================================
+{
+  const mk = () => {
+    const run = createRun({ seed: 101, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [], forceDisaster: 'gridDown' });
+    chooseSite(run, 'apartment');
+    run.day = 25;
+    run.phase = 'survival';
+    run.threat = 3;
+    run.world.revealed = true;
+    run.world.powerGrid = 'off';
+    return run;
+  };
+
+  {
+    const run = mk();
+    run.modules.power = 0;
+    run.wear.batteryCharge = 8;
+    run.world.weather = 'ashfall';
+    run.powerEnabled = { lights: true, fridge: true, heater: false };
+    const before = run.wear.batteryCharge;
+    const p = computePower(run);
+    check('蓄电池按缺口放电而不是整仓送出', p.battery > 0 && p.battery <= before, `draw=${p.battery} stored=${before} demand=${p.demand} solar=${p.solar}`);
+    settleBattery(run, p);
+    check('settleBattery 会扣库存', run.wear.batteryCharge < before, `${before} -> ${run.wear.batteryCharge}`);
+
+    run.wear.batteryCharge = 99;
+    applyEffect(run, { wear: { batteryCharge: 1 }, log: '充' }, makeRng(1, 0));
+    check('蓄电受 BATTERY_CAP 截断', run.wear.batteryCharge <= batteryCapacity(run), `${run.wear.batteryCharge}/${batteryCapacity(run)}`);
+  }
+
+  {
+    const run = mk();
+    run.modules.filter = 1;
+    run.wear.filterLife = 20;
+    run.world.weather = 'clear';
+    run.res.water = 40;
+    run.res.foodStaple = 40;
+    const notes = [...applyProduction(run), ...consumeDaily(run, makeRng(2, 0), 'story').notes];
+    const rainLines = notes.filter((n) => n.text.includes('没下雨'));
+    check('旱夜「没下雨」只出现一次', rainLines.length === 1, rainLines.map((n) => n.text).join(' | '));
+  }
+
+  {
+    const run = mk();
+    run.ration = 'full';
+    run.waterUse = 'full';
+    run.res.water = 0.2;
+    run.res.foodStaple = 0.2;
+    run.res.foodFresh = 0;
+    const consume = consumeDaily(run, makeRng(3, 0), 'story');
+    const health = resolveHealth(run, consume, makeRng(3, 1));
+    const starveHits = health.hpParts.filter((p) => p.label === '饥饿');
+    const fullHits = health.hpParts.filter((p) => p.label === '充足口粮');
+    check('饥饿当晚只扣一次', starveHits.length <= 1, JSON.stringify(starveHits));
+    check('断粮时不会出现「充足口粮」', fullHits.length === 0, JSON.stringify(health.hpParts));
+  }
+
+  {
+    const run = mk();
+    run.modules.cistern = 0;
+    run.modules.filter = 1;
+    run.wear.filterLife = 20;
+    run.world.weather = 'rain';
+    run.res.water = 19.5;
+    const before = run.res.water;
+    const notes = applyProduction(run);
+    const capOk = run.res.water <= before + 1; // 0 级储水上限 20
+    check('净水产出不会默默撑破水箱', run.res.water <= 20.05 && notes.some((n) => n.text.includes('溢出') || n.text.includes('已满') || run.res.water < before + 8), `${before} -> ${run.res.water} / ${notes.map((n) => n.text).join(';')}`);
+    void capOk;
+  }
+
+  {
+    const run = mk();
+    run.survivors.push({
+      id: 'chen',
+      name: '测试同伴',
+      age: 40,
+      bio: '',
+      skills: {},
+      traits: [],
+      upkeep: 1,
+      morale: 80,
+      trust: 50,
+      joinedDay: 20,
+      conditions: [],
+    });
+    run.projects.push({
+      moduleId: 'fortify',
+      toLevel: 1,
+      path: 'diy',
+      laborDone: 0,
+      laborTotal: 100,
+      startedDay: run.day,
+    });
+    grantCompanionLabor(run);
+    const afterFirst = run.projects[0]!.laborDone;
+    completeReadyProjects(run, makeRng(4, 0));
+    check('work/complete 不会再发同伴工时', run.projects[0]!.laborDone === afterFirst, `${afterFirst} vs ${run.projects[0]!.laborDone}`);
+    grantCompanionLabor(run);
+    check('同伴工时每次 grant 只加一档', run.projects[0]!.laborDone === afterFirst * 2, `${afterFirst} then ${run.projects[0]!.laborDone}`);
   }
 }
 

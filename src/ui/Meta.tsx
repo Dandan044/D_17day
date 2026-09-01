@@ -6,14 +6,11 @@ import { ENDINGS } from '../game/content/endings';
 import { ALL_FAMILIES } from '../game/content/events';
 import { PERKS, TREE_NAMES, UNLOCK_COST, UNLOCK_NAMES } from '../game/content/perks';
 import { SITES } from '../game/content/sites';
+import { t } from '../game/copy/t';
 import { kindName } from '../game/engine/director';
 import { useGame } from '../game/store';
 import type { PerkDef } from '../game/types';
 import { Chip, Empty, Modal, Panel, SectionLabel } from './kit';
-
-// ============================================================
-// 局外成长
-// ============================================================
 
 export function MetaPanel() {
   const { meta, setOverlay, buyPerk, buyUnlock } = useGame();
@@ -27,15 +24,15 @@ export function MetaPanel() {
 
   const shopPerks = PERKS.filter((p) => !p.wip);
   const unlockGroups = [
-    { label: '职业', ids: CLASSES.filter((c) => c.unlock).map((c) => c.unlock!) },
-    { label: '站点', ids: SITES.filter((s) => s.unlock && !s.wip).map((s) => s.unlock!) },
-    { label: '起手物资包', ids: SUPPLY_PACKS.filter((p) => p.unlock).map((p) => p.unlock!) },
+    { label: t('ui.meta.class'), ids: CLASSES.filter((c) => c.unlock).map((c) => c.unlock!) },
+    { label: t('ui.meta.site'), ids: SITES.filter((s) => s.unlock && !s.wip).map((s) => s.unlock!) },
+    { label: t('ui.meta.pack'), ids: SUPPLY_PACKS.filter((p) => p.unlock).map((p) => p.unlock!) },
   ];
 
   return (
     <Modal
-      title="局外成长"
-      subtitle={`遗物 ${meta.relics} · 每一局的存活天数与结局都会变成这里的进度`}
+      title={t('ui.meta.title')}
+      subtitle={t('ui.meta.subtitle', { n: meta.relics })}
       onClose={() => setOverlay(null)}
       width="max-w-4xl"
     >
@@ -44,16 +41,19 @@ export function MetaPanel() {
           className={`btn px-4 py-1.5 text-[12px] ${tab === 'perks' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setTab('perks')}
         >
-          天赋树（{meta.perks.filter((id) => shopPerks.some((p) => p.id === id)).length}/{shopPerks.length}）
+          {t('ui.meta.perks', {
+            a: meta.perks.filter((id) => shopPerks.some((p) => p.id === id)).length,
+            b: shopPerks.length,
+          })}
         </button>
         <button
           className={`btn px-4 py-1.5 text-[12px] ${tab === 'unlocks' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => setTab('unlocks')}
         >
-          解锁
+          {t('ui.meta.unlocks')}
         </button>
         <div className="ml-auto flex items-baseline gap-2">
-          <span className="label">遗物</span>
+          <span className="label">{t('ui.meta.relics')}</span>
           <span className="num text-xl text-amberhi">{meta.relics}</span>
         </div>
       </div>
@@ -79,9 +79,9 @@ export function MetaPanel() {
                         <div className="flex items-baseline justify-between gap-2">
                           <span className={`font-medium ${owned ? 'text-safehi' : 'text-paper'}`}>{p.name}</span>
                           {owned ? (
-                            <Chip tone="good">已获得</Chip>
+                            <Chip tone="good">{t('ui.common.owned')}</Chip>
                           ) : locked ? (
-                            <Chip tone="bad">需前置</Chip>
+                            <Chip tone="bad">{t('ui.common.needReq')}</Chip>
                           ) : (
                             <Chip tone={meta.relics >= p.cost ? 'warn' : 'bad'}>{p.cost}</Chip>
                           )}
@@ -114,7 +114,11 @@ export function MetaPanel() {
                     >
                       <div className="flex items-baseline justify-between gap-2">
                         <span className={owned ? 'text-safehi' : 'text-paper'}>{UNLOCK_NAMES[id] ?? id}</span>
-                        {owned ? <Chip tone="good">已解锁</Chip> : <Chip tone={meta.relics >= cost ? 'warn' : 'bad'}>{cost}</Chip>}
+                        {owned ? (
+                          <Chip tone="good">{t('ui.common.unlocked')}</Chip>
+                        ) : (
+                          <Chip tone={meta.relics >= cost ? 'warn' : 'bad'}>{cost}</Chip>
+                        )}
                       </div>
                     </button>
                   );
@@ -122,45 +126,39 @@ export function MetaPanel() {
               </div>
             </div>
           ))}
-          <p className="text-[11.5px] leading-snug text-faint">
-            部分内容也可以通过达成特定结局直接解锁——那样不花遗物。
-          </p>
+          <p className="text-[11.5px] leading-snug text-faint">{t('ui.meta.unlockHint')}</p>
         </div>
       )}
     </Modal>
   );
 }
 
-// ============================================================
-// 档案馆
-// ============================================================
-
 export function CodexPanel() {
   const { meta, setOverlay } = useGame();
   const [tab, setTab] = useState<'endings' | 'disasters' | 'events' | 'classes'>('endings');
 
   const tabs = [
-    { id: 'endings' as const, label: `结局 ${meta.seenEndings.length}/${ENDINGS.length}` },
-    { id: 'disasters' as const, label: `灾难 ${meta.seenDisasters.length}/${DISASTERS.length}` },
-    { id: 'events' as const, label: `事件 ${meta.seenFamilies.length}/${ALL_FAMILIES.length}` },
-    { id: 'classes' as const, label: '职业' },
+    { id: 'endings' as const, label: t('ui.meta.tabEnding', { a: meta.seenEndings.length, b: ENDINGS.length }) },
+    { id: 'disasters' as const, label: t('ui.meta.tabDisaster', { a: meta.seenDisasters.length, b: DISASTERS.length }) },
+    { id: 'events' as const, label: t('ui.meta.tabEvent', { a: meta.seenFamilies.length, b: ALL_FAMILIES.length }) },
+    { id: 'classes' as const, label: t('ui.meta.tabClass') },
   ];
 
   return (
     <Modal
-      title="档案馆"
-      subtitle="你见过的东西会留在这里。见过越多，下一局你知道得越多。"
+      title={t('ui.meta.codex')}
+      subtitle={t('ui.meta.codexSub')}
       onClose={() => setOverlay(null)}
       width="max-w-4xl"
     >
       <div className="mb-4 flex flex-wrap gap-2">
-        {tabs.map((t) => (
+        {tabs.map((item) => (
           <button
-            key={t.id}
-            className={`btn px-3 py-1.5 text-[11.5px] ${tab === t.id ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setTab(t.id)}
+            key={item.id}
+            className={`btn px-3 py-1.5 text-[11.5px] ${tab === item.id ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setTab(item.id)}
           >
-            {t.label}
+            {item.label}
           </button>
         ))}
       </div>
@@ -173,16 +171,16 @@ export function CodexPanel() {
               <div key={e.id} className="panel p-3">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className={`text-[13.5px] font-medium ${seen ? 'text-paper' : 'text-faint'}`}>
-                    {seen ? e.name.replace('{day}', '?') : '？？？'}
+                    {seen ? e.name.replace('{day}', '?') : t('ui.meta.unseen')}
                   </span>
                   <Chip tone={e.kind === 'win' ? 'good' : 'bad'}>{e.subtitle}</Chip>
-                  {!seen && <Chip>未发现</Chip>}
+                  {!seen && <Chip>{t('ui.meta.undiscovered')}</Chip>}
                 </div>
                 {seen ? (
                   <p className="mt-1.5 whitespace-pre-line text-[12.5px] leading-relaxed text-dim">{e.text}</p>
                 ) : (
                   <p className="mt-1.5 text-[12px] text-faint">
-                    {e.kind === 'win' ? '还有一条活路你没走到。' : '还有一种死法你没遇到。'}
+                    {e.kind === 'win' ? t('ui.meta.winHint') : t('ui.meta.deathHint')}
                   </p>
                 )}
               </div>
@@ -199,7 +197,7 @@ export function CodexPanel() {
               <div key={d.id} className="panel p-3">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className={`text-[13.5px] font-medium ${seen ? 'text-paper' : 'text-faint'}`}>
-                    {seen ? d.name : '未知灾难'}
+                    {seen ? d.name : t('ui.meta.unknownDisaster')}
                   </span>
                   <span className="title-stamp text-[10px] text-amberdim">{seen ? d.codename : '████'}</span>
                 </div>
@@ -207,7 +205,7 @@ export function CodexPanel() {
                   <>
                     <p className="mt-1.5 text-[12.5px] leading-relaxed text-amberhi">{d.thesis}</p>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      <span className="label mr-1">关键物资</span>
+                      <span className="label mr-1">{t('ui.meta.keySupplies')}</span>
                       {d.keySupplies.map((s) => (
                         <Chip key={s} tone="warn">
                           {s}
@@ -215,7 +213,7 @@ export function CodexPanel() {
                       ))}
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      <span className="label mr-1">线索关键词</span>
+                      <span className="label mr-1">{t('ui.meta.clues')}</span>
                       {d.clueTopics.map((s) => (
                         <Chip key={s} tone="info">
                           {s}
@@ -224,7 +222,7 @@ export function CodexPanel() {
                     </div>
                   </>
                 ) : (
-                  <p className="mt-1.5 text-[12px] text-faint">经历过一次之后，这里会列出它的线索关键词与关键物资。</p>
+                  <p className="mt-1.5 text-[12px] text-faint">{t('ui.meta.disasterHint')}</p>
                 )}
               </div>
             );
@@ -234,22 +232,25 @@ export function CodexPanel() {
 
       {tab === 'events' && (
         <>
-          {meta.seenFamilies.length === 0 && <Empty>还没有记录任何事件。</Empty>}
+          {meta.seenFamilies.length === 0 && <Empty>{t('ui.meta.noEvents')}</Empty>}
           <div className="grid gap-2 sm:grid-cols-2">
             {ALL_FAMILIES.map((f) => {
               const seen = meta.seenFamilies.includes(f.id);
               const variant = f.variants[0];
+              const seenVarCount = f.variants.filter((v) => meta.seenVariants.includes(`${f.id}/${v.id}`)).length;
               return (
                 <div key={f.id} className={`panel p-2.5 ${seen ? '' : 'opacity-45'}`}>
                   <div className="flex flex-wrap items-baseline gap-1.5">
-                    <span className="text-[12.5px] text-paper">{seen ? (variant?.title ?? f.id) : '未记录'}</span>
+                    <span className="text-[12.5px] text-paper">{seen ? (variant?.title ?? f.id) : t('ui.meta.unrecorded')}</span>
                     <Chip>{kindName(f.kind)}</Chip>
-                    {seen && f.variants.length > 1 && <Chip tone="info">{f.variants.length} 种情形</Chip>}
+                    {seen && f.variants.length > 1 && (
+                      <Chip tone="info">{t('ui.meta.variants', { a: seenVarCount, b: f.variants.length })}</Chip>
+                    )}
                   </div>
                   {seen && (
                     <p className="mt-1 text-[11.5px] leading-snug text-faint">
-                      强度 {f.intensity} · 冷却 {f.cooldown ?? 14} 天
-                      {f.once && ' · 每局一次'}
+                      {t('ui.meta.intensity', { n: f.intensity, cd: f.cooldown ?? 14 })}
+                      {f.once ? t('ui.meta.once') : ''}
                     </p>
                   )}
                 </div>
@@ -268,7 +269,7 @@ export function CodexPanel() {
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="text-[13.5px] font-medium text-paper">{c.name}</span>
                   <span className="text-[12px] text-faint">{c.title}</span>
-                  {!unlocked && <Chip tone="bad">未解锁</Chip>}
+                  {!unlocked && <Chip tone="bad">{t('ui.common.locked')}</Chip>}
                 </div>
                 <p className="mt-1.5 text-[12.5px] leading-relaxed text-dim">{c.desc}</p>
                 <p className="mt-1.5 text-[12px] text-amberhi">{PERK_TEXT[c.perk]}</p>

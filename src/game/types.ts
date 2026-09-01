@@ -271,7 +271,7 @@ export interface Effect {
   /** 局外永久解锁 */
   unlock?: string[];
   /** 记忆日记里的一行 */
-  log: string;
+  log?: string;
   /** 日记条目的语气，决定 UI 颜色 */
   tone?: 'good' | 'bad' | 'neutral' | 'grim';
 }
@@ -298,7 +298,7 @@ export interface SkillCheck {
  */
 export interface Choice {
   id: string;
-  label: string;
+  label?: string;
   /** 补充说明，例如"消耗 2 份罐头" */
   note?: string;
   requires?: Requirement;
@@ -310,9 +310,8 @@ export interface EventVariant {
   id: string;
   require?: TagQuery;
   forbid?: TagQuery;
-  title: string;
-  /** 支持 {{}} 占位符，由引擎注入运行时数值 */
-  body: string;
+  title?: string;
+  body?: string;
   choices: Choice[];
 }
 
@@ -522,6 +521,8 @@ export interface WorldState {
   revealed: boolean;
   weather: WeatherId;
   forecast: WeatherId[];
+  /** 已掷出的次日真实天气，预报可能对它撒谎 */
+  queuedWeather?: WeatherId;
   temperature: number;
   season: 'autumn' | 'winter';
   /** 以下三项均为"越高越糟" */
@@ -635,6 +636,10 @@ export interface RunState {
   /** 崩溃日的准备度清算，供崩溃日界面展示 */
   collapseReport?: { score: number; hits: string[]; misses: string[]; losses: string[] };
   endingId?: string;
+  /** 本局事件效果排队的局外解锁，结算时并入 meta */
+  pendingUnlocks?: string[];
+  /** 本局见过的 familyId/variantId，写入图鉴 */
+  seenVariants?: string[];
   /** 结算用统计 */
   stats_meta: { daysSurvived: number; scavengeRuns: number; raidsRepelled: number; peopleHelped: number; peopleRefused: number };
 }

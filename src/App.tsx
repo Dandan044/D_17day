@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 
+import './game/copy';
 import { rebuildSettlement, useGame } from './game/store';
+import { t } from './game/copy/t';
 import { SITE_BY_ID } from './game/content/sites';
 import Game from './ui/Game';
 import MainMenu from './ui/MainMenu';
@@ -11,6 +13,7 @@ import Summary from './ui/Summary';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
 import { PowerPanel } from './ui/PowerPanel';
+import { HelpPanel } from './ui/Help';
 
 export default function App() {
   const {
@@ -47,7 +50,7 @@ export default function App() {
     useGame.setState({
       run: { ...run, siteId: null, phase: 'siteSelect' },
     });
-    useGame.getState().toast('这个住所还在开发中，请另选一处。', 'bad');
+    useGame.getState().toast(t('ledger.toast.siteWip'), 'bad');
   }, [run]);
 
   /**
@@ -106,6 +109,7 @@ export default function App() {
       {run && overlay === 'log' && <LogPanel run={run} />}
       {overlay === 'meta' && <MetaPanel />}
       {overlay === 'codex' && <CodexPanel />}
+      {overlay === 'help' && <HelpPanel />}
 
       {/* 模态 */}
       {run && openShop && <ShopModal run={run} locationId={openShop} />}

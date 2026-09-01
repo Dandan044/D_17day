@@ -2,7 +2,8 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { CAPS, COLD, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED } from '../balance';
+import { CAPS, COLD, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
+import { t } from '../copy/t';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
@@ -57,7 +58,8 @@ export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal'): Da
   const precip = isPrecipWeather(run.world.weather);
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const hasWell = site.tags.includes('site:hasWell');
-  if (filter > 0 && !precip && !hasWell) {
+  const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
+  if (filter > 0 && !precip && !hasWell && !cisternBusy) {
     water *= FILTER.RECYCLE_NEED[filter] ?? 1;
     recycling = true;
   } else if (filter > 0 && !precip && hasWell) {
@@ -128,7 +130,7 @@ export function applyProduction(run: RunState): LedgerNote[] {
     if (run.world.temperature < 0) yieldAmt *= 0.6;
     if (yieldAmt > 0) {
       run.res.foodFresh += yieldAmt;
-      notes.push(ledger(`农圃：生鲜 +${yieldAmt.toFixed(1)} 份`));
+      notes.push(ledger(t('ledger.garden.yield', { amt: yieldAmt.toFixed(1) })));
     }
   }
 
@@ -139,7 +141,7 @@ export function applyProduction(run: RunState): LedgerNote[] {
   const hasWell = site.tags.includes('site:hasWell');
 
   if (filter > 0 && cisternBusy) {
-    notes.push(ledger('净水：水箱在清洗，产出没法入库', 'bad'));
+    notes.push(ledger(t('ledger.filter.tankCleaning'), 'bad'));
   } else if (filter > 0 && (precip || hasWell)) {
     let amt = FILTER.RAIN_OUTPUT[filter] ?? 0;
     if (precip) {
@@ -150,24 +152,35 @@ export function applyProduction(run: RunState): LedgerNote[] {
     }
     amt = Math.round(amt * 10) / 10;
     if (amt > 0) {
-      run.res.water += amt;
-      (run as RunState & { _filterHarvested?: boolean })._filterHarvested = true;
-      notes.push(
-        ledger(
-          precip
-            ? `净水：接雨雪 +${amt} L`
-            : `净水：井水过滤 +${amt} L`,
-          'good',
-        ),
-      );
+      const room = waterRoom(run);
+      const stored = Math.min(amt, room);
+      const wasted = Math.round((amt - stored) * 10) / 10;
+      run.res.water += stored;
+      if (stored > 0) {
+        (run as RunState & { _filterHarvested?: boolean })._filterHarvested = true;
+        const overflow = wasted > 0 ? t('ledger.filter.overflowBit', { wasted }) : '';
+        notes.push(
+          ledger(
+            (precip ? t('ledger.filter.rainStored', { stored, overflow }) : t('ledger.filter.wellStored', { stored, overflow })),
+            wasted > 0 ? 'neutral' : 'good',
+          ),
+        );
+      } else {
+        notes.push(ledger(t('ledger.filter.allOverflow', { amt }), 'bad'));
+      }
     }
-  } else if (filter > 0 && !precip) {
-    const mult = FILTER.RECYCLE_NEED[filter] ?? 1;
-    notes.push(
-      ledger(`没下雨，净水没接雨水：今日改走回用（耗水 ×${mult.toFixed(2)}）`),
-    );
   } else if (filter <= 0 && precip) {
-    notes.push(ledger('外面在下雨，但没有净水设备，接不住'));
+    if (run.modules.filter > 0) {
+      if (run.projects.some((p) => p.moduleId === 'filter')) {
+        notes.push(ledger(t('ledger.filter.building')));
+      } else if (run.wear.filterLife <= 0) {
+        notes.push(ledger(t('ledger.filter.clogged'), 'bad'));
+      } else {
+        notes.push(ledger(t('ledger.filter.noPower'), 'bad'));
+      }
+    } else {
+      notes.push(ledger(t('ledger.filter.noModule')));
+    }
   }
 
   // 滤芯寿命：净水侧按天气/污染；空气过滤另计
@@ -188,16 +201,16 @@ export function applyProduction(run: RunState): LedgerNote[] {
       drain *= FILTER.WEAR_LEVEL_MULT[filter] ?? 1;
     }
     if (airFilter > 0) drain += FILTER.WEAR_AIR;
-    if (run.world.weather === 'ashfall') drain += FILTER.WEAR_ASH;
+    if (run.world.weather === 'ashfall') drain += FILTER.WEAR_ASH + WEAR.FILTER_EXTRA_DUST;
     drain += (run.world.airPollution / 40) * FILTER.WEAR_POLLUTION_PER_40;
     drain += (run.world.radiation / 40) * FILTER.WEAR_RAD_PER_40;
     if (run.abilities.includes('chemist_consumables')) drain *= 0.6;
     if (run.abilities.includes('perk_maintainer')) drain *= 0.65;
     run.wear.filterLife -= drain;
     if (run.wear.filterLife <= 0) {
-      notes.push(ledger('滤芯：已堵死，净水与空气过滤失效', 'bad'));
+      notes.push(ledger(t('ledger.filter.dead'), 'bad'));
     } else if (run.wear.filterLife <= 4) {
-      notes.push(ledger(`滤芯：还剩约 ${Math.ceil(run.wear.filterLife)} 天`, 'bad'));
+      notes.push(ledger(t('ledger.filter.daysLeft', { days: Math.ceil(run.wear.filterLife) }), 'bad'));
     }
   }
 
@@ -241,8 +254,8 @@ export function spoilFood(run: RunState): LedgerNote[] {
   return [
     ledger(
       fridgeOn
-        ? `冰箱还在转：生鲜 −${lost.toFixed(1)} 份`
-        : `冰箱没电：生鲜 −${lost.toFixed(1)} 份`,
+        ? t('ledger.fridge.on', { amt: lost.toFixed(1) })
+        : t('ledger.fridge.off', { amt: lost.toFixed(1) }),
       fridgeOn ? 'neutral' : 'bad',
     ),
   ];
@@ -265,13 +278,22 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
     const mult = FILTER.RECYCLE_NEED[filterLv] ?? 1;
     notes.push(
       ledger(
-        `没下雨，净水走回用（过滤尿液/废水，今日耗水 ×${mult.toFixed(2)}）：饮水 −${waterUsed.toFixed(1)} L（需求 ${need.water.toFixed(1)} / 库存还剩 ${waterLeft}）`,
+        t('ledger.ration.recycle', {
+          mult: mult.toFixed(2),
+          used: waterUsed.toFixed(1),
+          need: need.water.toFixed(1),
+          left: waterLeft,
+        }),
       ),
     );
   } else {
     notes.push(
       ledger(
-        `配给：饮水 −${waterUsed.toFixed(1)} L（需求 ${need.water.toFixed(1)} / 库存还剩 ${waterLeft}）`,
+        t('ledger.ration.water', {
+          used: waterUsed.toFixed(1),
+          need: need.water.toFixed(1),
+          left: waterLeft,
+        }),
       ),
     );
   }
@@ -280,7 +302,7 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
   let drankRaw = false;
   if (waterRatio < 0.6 && hasRawWater(run) && filterLv === 0) {
     drankRaw = true;
-    notes.push(ledger('饮水不足：只能喝没处理过的水', 'bad'));
+    notes.push(ledger(t('ledger.ration.dirty'), 'bad'));
   }
 
   // 今天喝了新滤的水或回用水（用于致病掷骰）
@@ -299,50 +321,69 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
   const foodRatio = need.food > 0 ? (need.food - foodNeed) / need.food : 1;
   const foodTotal = Math.round((freshUsed + stapleUsed) * 10) / 10;
   const foodBits: string[] = [];
-  if (freshUsed > 0.01) foodBits.push(`生鲜 ${freshUsed.toFixed(1)}`);
-  if (stapleUsed > 0.01) foodBits.push(`罐头 ${stapleUsed.toFixed(1)}`);
+  if (freshUsed > 0.01) foodBits.push(t('ledger.ration.foodBits', { kind: t('ledger.ration.fresh'), amt: freshUsed.toFixed(1) }));
+  if (stapleUsed > 0.01) foodBits.push(t('ledger.ration.foodBits', { kind: t('ledger.ration.staple'), amt: stapleUsed.toFixed(1) }));
   notes.push(
     ledger(
       foodBits.length > 0
-        ? `配给：食物 −${foodTotal.toFixed(1)} 份（${foodBits.join(' + ')}）`
-        : `配给：食物 −0 份（需求 ${need.food.toFixed(1)}）`,
+        ? t('ledger.ration.food', { amt: foodTotal.toFixed(1), bits: foodBits.join(' + ') })
+        : t('ledger.ration.foodZero', { need: need.food.toFixed(1) }),
       foodRatio < 0.99 ? 'bad' : 'neutral',
     ),
   );
 
   if (waterRatio < 0.99) {
-    notes.push(ledger(`饮水缺口：${((1 - waterRatio) * 100).toFixed(0)}%`, 'bad'));
+    notes.push(ledger(t('ledger.ration.waterGap', { pct: ((1 - waterRatio) * 100).toFixed(0) }), 'bad'));
   }
   if (foodRatio < 0.99) {
-    notes.push(ledger(`食物缺口：${((1 - foodRatio) * 100).toFixed(0)}%`, 'bad'));
+    notes.push(ledger(t('ledger.ration.foodGap', { pct: ((1 - foodRatio) * 100).toFixed(0) }), 'bad'));
   }
 
   const power = computePower(run);
-  const weatherBit =
-    power.weatherMult !== 1 ? `（天气 ×${power.weatherMult.toFixed(2)}）` : '';
+  const weatherBit = power.weatherMult !== 1 ? t('ledger.power.weatherBit', { mult: power.weatherMult.toFixed(2) }) : '';
   notes.push(
     ledger(
-      `天气光伏：+${power.solar.toFixed(1)} kWh${weatherBit}` +
-        (power.grid > 0 ? ` · 市电 +${power.grid.toFixed(1)}` : '') +
-        (power.generator > 0 ? ` · 柴油机补 +${power.generator.toFixed(1)}` : ''),
+      t('ledger.power.solar', { solar: power.solar.toFixed(1), weather: weatherBit }) +
+        (power.grid > 0 ? t('ledger.power.gridBit', { amt: power.grid.toFixed(1) }) : '') +
+        (power.generator > 0 ? t('ledger.power.genBit', { amt: power.generator.toFixed(1) }) : ''),
     ),
   );
   if (power.offline.length > 0) {
-    notes.push(
-      ledger(
-        `缺电停摆：${power.offline.map((id) => LOAD_NAME[id] ?? id).join('、')}`,
-        'bad',
-      ),
-    );
+    notes.push(ledger(t('ledger.power.offline', { list: power.offline.map((id) => LOAD_NAME[id] ?? id).join('、') }), 'bad'));
   }
 
   if (power.fuelBurn > 0) {
     run.res.fuel = Math.max(0, run.res.fuel - power.fuelBurn);
     run.wear.generatorOil -= 1;
-    notes.push(ledger(`柴油机：燃料 −${power.fuelBurn.toFixed(1)} L`));
+    notes.push(ledger(t('ledger.power.fuel', { amt: power.fuelBurn.toFixed(1) })));
     if (run.wear.generatorOil <= 0 && rng.chance(0.3)) {
-      notes.push(ledger('发电机开始异响：需要保养', 'bad'));
+      notes.push(ledger(t('ledger.power.oilWarn'), 'bad'));
     }
+  }
+
+  if (power.battery > 0) {
+    notes.push(
+      ledger(
+        t('ledger.power.battDischarge', {
+          amt: power.battery.toFixed(1),
+          left: (power.batteryStored - power.battery + power.batteryGain).toFixed(1),
+          cap: power.batteryCap,
+        }),
+      ),
+    );
+  } else if (power.batteryGain > 0) {
+    notes.push(
+      ledger(
+        t('ledger.power.battCharge', {
+          amt: power.batteryGain.toFixed(1),
+          left: (power.batteryStored + power.batteryGain).toFixed(1),
+          cap: power.batteryCap,
+        }),
+        'good',
+      ),
+    );
+  } else if (power.batteryStored > 0) {
+    notes.push(ledger(t('ledger.power.battIdle', { stored: power.batteryStored.toFixed(1), cap: power.batteryCap })));
   }
 
   const unheated = unheatedFelt(run);
@@ -351,35 +392,38 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
   let indoor = unheated;
   const mode = run.heatMode ?? 'off';
 
-  if (mode === 'fuel' && canFuelHeat(run)) {
-    const needFuel = fuelHeatCost(run);
-    if (needFuel > 0 && run.res.fuel > 0) {
-      const spent = Math.min(run.res.fuel, needFuel);
-      run.res.fuel -= spent;
-      const rise = (COLD.TARGET - unheated) * (spent / needFuel);
-      indoor = Math.round(Math.min(COLD.TARGET, unheated + rise) * 10) / 10;
-      heated = spent > 0;
-      heatKind = 'fuel';
-      notes.push(ledger(`烧燃料取暖：燃料 −${spent.toFixed(1)} L，室内 ${indoor}°C`));
+  if (mode === 'fuel') {
+    if (!canFuelHeat(run)) {
+      notes.push(ledger(t('ledger.heat.fuelNoInsulate', { indoor }), 'bad'));
     } else {
-      notes.push(
-        ledger(
-          `想烧燃料取暖，但${needFuel <= 0 ? '保温还不够装炉子' : '没有油了'}：室内 ${indoor}°C`,
-          'bad',
-        ),
-      );
+      const needFuel = fuelHeatCost(run);
+      if (needFuel <= 0) {
+        notes.push(ledger(t('ledger.heat.alreadyWarm', { indoor })));
+      } else if (run.res.fuel <= 0) {
+        notes.push(ledger(t('ledger.heat.fuelEmpty', { indoor }), 'bad'));
+      } else {
+        const spent = Math.min(run.res.fuel, needFuel);
+        run.res.fuel -= spent;
+        const rise = (COLD.TARGET - unheated) * (spent / needFuel);
+        indoor = Math.round(Math.min(COLD.TARGET, unheated + rise) * 10) / 10;
+        heated = spent > 0;
+        heatKind = 'fuel';
+        notes.push(ledger(t('ledger.heat.fuelBurn', { spent: spent.toFixed(1), indoor })));
+      }
     }
-  } else if (mode === 'electric' && canElectricHeat(run)) {
-    if (loadOnline(run, 'heater', power)) {
+  } else if (mode === 'electric') {
+    if (!canElectricHeat(run)) {
+      notes.push(ledger(t('ledger.heat.elecLocked', { indoor }), 'bad'));
+    } else if (loadOnline(run, 'heater', power)) {
       indoor = COLD.TARGET;
       heated = true;
       heatKind = 'electric';
-      notes.push(ledger(`电热开了一夜：室内 ${indoor}°C`));
+      notes.push(ledger(t('ledger.heat.elecOn', { indoor })));
     } else {
-      notes.push(ledger(`电热没排上或没电：室内 ${indoor}°C`, 'bad'));
+      notes.push(ledger(t('ledger.heat.elecFail', { indoor }), 'bad'));
     }
-  } else if (mode === 'off') {
-    notes.push(ledger(`不取暖：室内 ${indoor}°C`));
+  } else {
+    notes.push(ledger(t('ledger.heat.off', { indoor })));
   }
 
   return {
@@ -441,18 +485,18 @@ export function purchase(
   hasClerkPerk: boolean,
 ): PurchaseResult {
   const loc = LOCATION_BY_ID[locationId];
-  if (!loc || !loc.prepShop) return { ok: false, reason: '这里不能采购', spent: 0, got: 0 };
+  if (!loc || !loc.prepShop) return { ok: false, reason: t('ledger.buy.notShop'), spent: 0, got: 0 };
 
   const remaining = remainingBuyLimit(run, res, hasClerkPerk);
   let want = Math.min(qty, remaining);
-  if (want <= 0) return { ok: false, reason: '已达今日限购', spent: 0, got: 0 };
+  if (want <= 0) return { ok: false, reason: t('ledger.buy.limit'), spent: 0, got: 0 };
 
   let capped = false;
   if (res === 'water') {
     const room = waterRoom(run);
     const cap = waterCapacity(run);
     if (room <= 0) {
-      return { ok: false, reason: `储水已满（上限 ${cap} L）`, spent: 0, got: 0 };
+      return { ok: false, reason: t('ledger.buy.waterFull', { cap }), spent: 0, got: 0 };
     }
     if (want > room) {
       want = room;
@@ -464,22 +508,22 @@ export function purchase(
   const shelf = st?.stock ?? loc.stock;
   const stockFactor = Math.max(0, shelf / 100);
   const available = Math.floor(want * Math.max(0.15, stockFactor));
-  if (available <= 0) return { ok: false, reason: '货架已经空了', spent: 0, got: 0 };
+  if (available <= 0) return { ok: false, reason: t('ledger.buy.empty'), spent: 0, got: 0 };
 
   let price = unitPrice(run, res, locationId);
   if (hasClerkPerk) price = Math.round(price * 0.9);
   const cost = price * available;
   if (run.res.cash < cost) {
     let afford = Math.floor(run.res.cash / price);
-    if (afford <= 0) return { ok: false, reason: '现金不够', spent: 0, got: 0 };
+    if (afford <= 0) return { ok: false, reason: t('ledger.buy.noCash'), spent: 0, got: 0 };
     if (res === 'water') {
       const room = waterRoom(run);
-      if (room <= 0) return { ok: false, reason: `储水已满（上限 ${waterCapacity(run)} L）`, spent: 0, got: 0 };
+      if (room <= 0) return { ok: false, reason: t('ledger.buy.waterFull', { cap: waterCapacity(run) }), spent: 0, got: 0 };
       if (afford > room) {
         afford = Math.floor(room);
         capped = true;
       }
-      if (afford <= 0) return { ok: false, reason: `储水已满（上限 ${waterCapacity(run)} L）`, spent: 0, got: 0 };
+      if (afford <= 0) return { ok: false, reason: t('ledger.buy.waterFull', { cap: waterCapacity(run) }), spent: 0, got: 0 };
     }
     run.res.cash -= price * afford;
     run.res[res] += afford;
@@ -503,11 +547,11 @@ export function iodineBoughtCount(run: RunState): number {
 }
 
 export function buyIodine(run: RunState, locationId: string): { ok: boolean; reason?: string; spent: number } {
-  if (locationId !== 'pharmacy') return { ok: false, reason: '只有药店卖碘片', spent: 0 };
+  if (locationId !== 'pharmacy') return { ok: false, reason: t('ledger.buy.iodineShop'), spent: 0 };
   const bought = iodineBoughtCount(run);
-  if (bought >= IODINE_BOX_LIMIT) return { ok: false, reason: '柜台只剩这两盒，你已经买过了', spent: 0 };
+  if (bought >= IODINE_BOX_LIMIT) return { ok: false, reason: t('ledger.buy.iodineGone'), spent: 0 };
   const price = Math.max(1, Math.round(IODINE_BOX_PRICE * run.world.priceIndex));
-  if (run.res.cash < price) return { ok: false, reason: '现金不够', spent: 0 };
+  if (run.res.cash < price) return { ok: false, reason: t('ledger.buy.noCash'), spent: 0 };
   run.res.cash -= price;
   if (bought === 0) run.flags.push('flag:iodineStock1');
   else {
@@ -612,12 +656,12 @@ export function commitHaul(run: RunState, picked: HaulItem[]): { notes: string[]
   for (const it of picked) {
     if (it.res === 'water') {
       if (room <= 0) {
-        notes.push(`储水已满（上限 ${waterCapacity(run)} L），水没装下`);
+        notes.push(t('ledger.buy.haulNoWater', { cap: waterCapacity(run) }));
         continue;
       }
       const take = Math.min(it.amount, room);
       if (take < it.amount - 0.01) {
-        notes.push(`只装了 ${take.toFixed(1)} L 水，桶满了`);
+        notes.push(t('ledger.buy.haulPartial', { take: take.toFixed(1) }));
       }
       run.res.water += take;
       room = Math.max(0, room - take);

@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import './copy';
+import { t } from './copy/t';
+
 import { HEALTH, STAMINA, TIME } from './balance';
 import { CLASS_BY_ID } from './content/classes';
 import { ENDING_BY_ID } from './content/endings';
@@ -8,7 +11,7 @@ import { FAMILY_BY_ID } from './content/events';
 import { LOCATION_BY_ID } from './content/locations';
 import { PERK_BY_ID, UNLOCK_COST } from './content/perks';
 import {
-  advanceProjects,
+  completeReadyProjects,
   cancelProject as engineCancelProject,
   doMaintenance,
   doSalvage,
@@ -213,7 +216,7 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const r = engineChooseSite(next, siteId);
           if (!r.ok) {
-            pushToast(r.reason ?? '无法选择这个站点', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noSite'), 'bad');
             return;
           }
           set({ run: next });
@@ -226,7 +229,7 @@ export const useGame = create<GameState>()(
             return;
           }
           const next = structuredClone(run) as RunState;
-          const ending = resolveEnding(next, '放弃');
+          const ending = resolveEnding(next, t('ledger.cause.abandon'));
           next.endingId = ending.id;
           next.phase = 'ended';
           set({ run: next, settlement: settle(next, ending, get().meta), screen: 'summary' });
@@ -236,7 +239,7 @@ export const useGame = create<GameState>()(
           const run = get().run;
           if (!run) return;
           if (run.queue.length > 0) {
-            pushToast('还有事情等着你处理', 'bad');
+            pushToast(t('ledger.toast.queue'), 'bad');
             return;
           }
           const next = structuredClone(run) as RunState;
@@ -286,6 +289,7 @@ export const useGame = create<GameState>()(
             relics: meta.relics + settlement.relics,
             unlocked: [...new Set([...meta.unlocked, ...settlement.newUnlocks])],
             seenFamilies: [...new Set([...meta.seenFamilies, ...Object.keys(run.eventHistory)])],
+            seenVariants: [...new Set([...meta.seenVariants, ...(run.seenVariants ?? [])])],
             seenEndings: [...new Set([...meta.seenEndings, settlement.ending.id])],
             seenDisasters: [...new Set([...meta.seenDisasters, run.world.disaster])],
             bestDays: Math.max(meta.bestDays, settlement.daysSurvived),
@@ -300,9 +304,20 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const result = engineResolveChoice(next, familyId, variantId, choiceId);
           const last = next.log[next.log.length - 1];
+          const meta = get().meta;
+          const seenKey = `${familyId}/${variantId}`;
           const patch: Partial<GameState> = {
             run: next,
             lastChoice: { ...result, title: last?.text ?? '' },
+            meta: {
+              ...meta,
+              seenFamilies: meta.seenFamilies.includes(familyId)
+                ? meta.seenFamilies
+                : [...meta.seenFamilies, familyId],
+              seenVariants: meta.seenVariants.includes(seenKey)
+                ? meta.seenVariants
+                : [...meta.seenVariants, seenKey],
+            },
           };
           // 破门是唯一能当场致死的事件，所以这里也要能收尾
           if (next.phase === 'ended') {
@@ -323,31 +338,31 @@ export const useGame = create<GameState>()(
           const run = get().run;
           if (!run) return;
           if (run.day < TIME.COLLAPSE_DAY) {
-            pushToast('商店还开着，没必要翻别人的东西', 'bad');
+            pushToast(t('ledger.toast.shopOpen'), 'bad');
             return;
           }
           const loc = LOCATION_BY_ID[locationId];
           if (!loc) return;
           if (run.ap < 1) {
-            pushToast('行动点不足', 'bad');
+            pushToast(t('ledger.toast.noAp'), 'bad');
             return;
           }
           if (loc.needsVehicle && !run.hasVehicle) {
-            pushToast('太远了，没有车去不了', 'bad');
+            pushToast(t('ledger.toast.needCar'), 'bad');
             return;
           }
           const shelf = run.locations.find((l) => l.id === locationId)?.stock ?? loc.stock;
           if (shelf <= 0) {
-            pushToast('这里已经被翻空了', 'bad');
+            pushToast(t('ledger.toast.empty'), 'bad');
             return;
           }
           const cost = travelCost(run, loc);
           if (cost.fuel > 0 && run.res.fuel < cost.fuel) {
-            pushToast(`这一趟要 ${cost.fuel} L 燃料，你不够`, 'bad');
+            pushToast(t('ledger.toast.needFuel', { fuel: cost.fuel }), 'bad');
             return;
           }
           if (run.stats.stamina < Math.min(12, cost.stamina * 0.5)) {
-            pushToast('你累得走不出门', 'bad');
+            pushToast(t('ledger.toast.tired'), 'bad');
             return;
           }
           const next = structuredClone(run) as RunState;
@@ -364,10 +379,10 @@ export const useGame = create<GameState>()(
           emitHook(next, night ? 'scavengeNight' : 'scavengeDay', rng);
           next.rngCursor = rng.cursor();
           set({ run: next, haul });
-          if (risk.exposure > 0) pushToast(`暴露度 +${risk.exposure}`, risk.exposure >= 6 ? 'bad' : 'neutral');
-          if (risk.hpLost > 0) pushToast(`路上受了伤，生命 -${risk.hpLost}`, 'bad');
-          if (risk.lostRes && risk.lostAmt) pushToast(`跑的时候掉了战利品`, 'bad');
-          if (risk.scheduledRaid) pushToast('你觉得有人跟了你一段。', 'bad');
+          if (risk.exposure > 0) pushToast(t('ledger.toast.exposure', { n: risk.exposure }), risk.exposure >= 6 ? 'bad' : 'neutral');
+          if (risk.hpLost > 0) pushToast(t('ledger.toast.hurt', { n: risk.hpLost }), 'bad');
+          if (risk.lostRes && risk.lostAmt) pushToast(t('ledger.toast.droppedLoot'), 'bad');
+          if (risk.scheduledRaid) pushToast(t('ledger.toast.followed'), 'bad');
         },
 
         takeHaul: (picked) => {
@@ -384,7 +399,7 @@ export const useGame = create<GameState>()(
           if (total > 0) {
             addLog(
               next,
-              `你从${LOCATION_BY_ID[haul.locationId]?.name ?? '外面'}带回了一些东西。`,
+              t('ledger.toast.haul', { name: LOCATION_BY_ID[haul.locationId]?.name ?? t('ledger.toast.haulOutside') }),
               'good',
             );
           }
@@ -407,7 +422,7 @@ export const useGame = create<GameState>()(
             return;
           }
           if (run.ap < 1) {
-            pushToast('行动点不足', 'bad');
+            pushToast(t('ledger.toast.noAp'), 'bad');
             return;
           }
           const next = structuredClone(run) as RunState;
@@ -432,7 +447,7 @@ export const useGame = create<GameState>()(
           const hasClerk = next.abilities.includes('clerk_network');
           const r = enginePurchase(next, locationId, res, qty, hasClerk);
           if (!r.ok) {
-            pushToast(r.reason ?? '买不到', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.buyFail'), 'bad');
             return;
           }
           clampResources(next);
@@ -441,9 +456,9 @@ export const useGame = create<GameState>()(
           next.rngCursor = rng.cursor();
           set({ run: next });
           if (r.capped && res === 'water') {
-            pushToast(`只买了 ${r.got} L，桶满了（花了 ${r.spent} 元）`, 'neutral');
+            pushToast(t('ledger.toast.buyPartial', { got: r.got, spent: r.spent }), 'neutral');
           } else {
-            pushToast(`买到 ${r.got}，花了 ${r.spent} 元`, 'good');
+            pushToast(t('ledger.toast.buyOk', { got: r.got, spent: r.spent }), 'good');
           }
         },
 
@@ -453,7 +468,7 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const r = engineBuyIodine(next, locationId);
           if (!r.ok) {
-            pushToast(r.reason ?? '买不到碘片', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.iodineFail'), 'bad');
             return;
           }
           clampResources(next);
@@ -461,13 +476,13 @@ export const useGame = create<GameState>()(
           emitHook(next, 'buy', rng);
           next.rngCursor = rng.cursor();
           set({ run: next });
-          pushToast(`买到一盒碘片（不是普通药品），花了 ${r.spent} 元`, 'good');
+          pushToast(t('ledger.toast.iodineOk', { spent: r.spent }), 'good');
         },
 
         rest: () => {
           const run = get().run;
           if (!run || run.ap < 1) {
-            pushToast('行动点不足', 'bad');
+            pushToast(t('ledger.toast.noAp'), 'bad');
             return;
           }
           mutate((r) => {
@@ -486,9 +501,7 @@ export const useGame = create<GameState>()(
           const medbay = run.modules.medbay ?? 0;
           const hpBonus = HEALTH.MEDBAY_REST_HP[medbay] ?? 0;
           pushToast(
-            hpBonus > 0
-              ? '歇了一会儿。体力、理智回了一些，生命也回了 1 点'
-              : '歇了一会儿。体力与理智回了一些，生命不会因为躺着涨回来',
+            hpBonus > 0 ? t('ledger.toast.restHeal') : t('ledger.toast.rest'),
             'good',
           );
         },
@@ -499,7 +512,7 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const r = startProject(next, moduleId, path);
           if (!r.ok) {
-            pushToast(r.reason ?? '无法开工', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noBuild'), 'bad');
             return;
           }
           const rng = makeRng(next.seed, next.rngCursor);
@@ -516,11 +529,11 @@ export const useGame = create<GameState>()(
           const r = engineInvestLabor(next, moduleId, rng);
           next.rngCursor = rng.cursor();
           if (!r.ok) {
-            pushToast(r.reason ?? '无法施工', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noWork'), 'bad');
             return;
           }
           // 立刻检查是否完工
-          const done = advanceProjects(next, rng);
+          const done = completeReadyProjects(next, rng);
           emitHook(next, 'work', rng);
           next.rngCursor = rng.cursor();
           set({ run: next });
@@ -545,7 +558,7 @@ export const useGame = create<GameState>()(
           const r = doSalvage(next, targetId, rng);
           next.rngCursor = rng.cursor();
           if (!r.ok) {
-            pushToast(r.reason ?? '不能这么做', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noSalvage'), 'bad');
             return;
           }
           emitHook(next, 'salvage', rng);
@@ -560,7 +573,7 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const r = doMaintenance(next, kind);
           if (!r.ok) {
-            pushToast(r.reason ?? '现在不能做', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noMaint'), 'bad');
             return;
           }
           const rng = makeRng(next.seed, next.rngCursor);
@@ -576,14 +589,14 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const r = treatCondition(next, conditionId);
           if (!r.ok) {
-            pushToast(r.reason ?? '治不了', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noTreat'), 'bad');
             return;
           }
           const rng = makeRng(next.seed, next.rngCursor);
           emitHook(next, 'treat', rng);
           next.rngCursor = rng.cursor();
           set({ run: next });
-          pushToast('处理完了', 'good');
+          pushToast(t('ledger.toast.treated'), 'good');
         },
 
         verifyIntel: (intelId) => {
@@ -592,7 +605,7 @@ export const useGame = create<GameState>()(
           const next = structuredClone(run) as RunState;
           const r = engineVerifyIntel(next, intelId);
           if (!r.ok) {
-            pushToast(r.reason ?? '无法核实', 'bad');
+            pushToast(r.reason ?? t('ledger.toast.noIntel'), 'bad');
             return;
           }
           const rng = makeRng(next.seed, next.rngCursor);
@@ -656,11 +669,11 @@ export const useGame = create<GameState>()(
           const cost = UNLOCK_COST[id] ?? 999999;
           if (meta.unlocked.includes(id)) return;
           if (meta.relics < cost) {
-            pushToast('遗物不够', 'bad');
+            pushToast(t('ledger.toast.noRelic'), 'bad');
             return;
           }
           set({ meta: { ...meta, relics: meta.relics - cost, unlocked: [...meta.unlocked, id] } });
-          pushToast('已解锁', 'good');
+          pushToast(t('ledger.toast.unlocked'), 'good');
         },
 
         buyPerk: (id) => {
@@ -668,15 +681,15 @@ export const useGame = create<GameState>()(
           const perk = PERK_BY_ID[id];
           if (!perk || perk.wip || meta.perks.includes(id)) return;
           if (perk.requires && !perk.requires.every((r) => meta.perks.includes(r))) {
-            pushToast('需要先点前置天赋', 'bad');
+            pushToast(t('ledger.toast.perkReq'), 'bad');
             return;
           }
           if (meta.relics < perk.cost) {
-            pushToast('遗物不够', 'bad');
+            pushToast(t('ledger.toast.noRelic'), 'bad');
             return;
           }
           set({ meta: { ...meta, relics: meta.relics - perk.cost, perks: [...meta.perks, id] } });
-          pushToast(`已获得：${perk.name}`, 'good');
+          pushToast(t('ledger.toast.perkGot', { name: perk.name }), 'good');
         },
 
         resetMeta: () => set({ meta: EMPTY_META }),
@@ -689,6 +702,18 @@ export const useGame = create<GameState>()(
     },
     {
       name: 'seven-days-save-v1',
+      version: 2,
+      migrate: (persisted) => {
+        const p = (persisted ?? {}) as Partial<GameState>;
+        if (p.run) ensureRunDefaults(p.run);
+        if (p.meta) {
+          p.meta.seenVariants = p.meta.seenVariants ?? [];
+          p.meta.seenFamilies = p.meta.seenFamilies ?? [];
+          p.meta.seenEndings = p.meta.seenEndings ?? [];
+          p.meta.seenDisasters = p.meta.seenDisasters ?? [];
+        }
+        return p as GameState;
+      },
       partialize: (s) => ({ run: s.run, meta: s.meta, screen: s.screen }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<GameState>;
@@ -747,6 +772,6 @@ export function pruneOrphanQueue(run: RunState): number {
   const dropped = run.queue.length - kept.length;
   if (dropped === 0) return 0;
   run.queue = kept;
-  addLog(run, `${dropped} 件事没有下文，像是被谁忘了。`, 'neutral');
+  addLog(run, t('ledger.run.orphan', { n: dropped }), 'neutral');
   return dropped;
 }

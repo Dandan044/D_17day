@@ -6,6 +6,7 @@
  */
 
 import { AIR, COLD, FILTER, HEALTH, RAD, RATION_EFFECT, WATER_EFFECT } from '../balance';
+import { t } from '../copy/t';
 import { CONDITION_BY_ID } from '../content/conditions';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
@@ -91,20 +92,41 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   // ---------- 1. 吃喝 ----------
   const rationEff = RATION_EFFECT[run.ration];
   const waterEff = WATER_EFFECT[run.waterUse];
-  hit(rationEff.hp, rationEff.hp > 0 ? '充足口粮' : rationEff.hp < 0 ? '口粮不足' : '口粮');
-  hit(waterEff.hp, waterEff.hp > 0 ? '充足饮水' : waterEff.hp < 0 ? '饮水限量' : '饮水');
-  run.stats.sanity = clamp(run.stats.sanity + rationEff.sanity + waterEff.sanity, 0, 100);
-  for (const s of run.survivors) s.morale = clamp(s.morale + rationEff.morale, 0, 100);
+  const actuallyFed = consume.foodRatio >= 0.35;
+  const actuallyHydrated = consume.waterRatio >= 0.4;
+
+  if (actuallyFed || rationEff.hp < 0) {
+    if (!(rationEff.hp > 0 && !actuallyFed)) {
+      hit(rationEff.hp, rationEff.hp > 0 ? t('ledger.cause.rationFull') : rationEff.hp < 0 ? t('ledger.cause.rationLow') : t('ledger.cause.ration'));
+    }
+  }
+  if (actuallyHydrated || waterEff.hp < 0) {
+    if (!(waterEff.hp > 0 && !actuallyHydrated)) {
+      hit(waterEff.hp, waterEff.hp > 0 ? t('ledger.cause.waterFull') : waterEff.hp < 0 ? t('ledger.cause.waterLow') : t('ledger.cause.water'));
+    }
+  }
+  if (actuallyFed) {
+    run.stats.sanity = clamp(run.stats.sanity + rationEff.sanity, 0, 100);
+    for (const s of run.survivors) s.morale = clamp(s.morale + rationEff.morale, 0, 100);
+  } else if (rationEff.sanity < 0) {
+    run.stats.sanity = clamp(run.stats.sanity + rationEff.sanity, 0, 100);
+    for (const s of run.survivors) s.morale = clamp(s.morale + rationEff.morale, 0, 100);
+  }
+  if (actuallyHydrated) {
+    run.stats.sanity = clamp(run.stats.sanity + waterEff.sanity, 0, 100);
+  } else if (waterEff.sanity < 0) {
+    run.stats.sanity = clamp(run.stats.sanity + waterEff.sanity, 0, 100);
+  }
 
   if (consume.foodRatio < 0.35) {
-    gainCond('starving', '你开始挨饿');
-    hit(HEALTH.STARVE_HP * (1 - consume.foodRatio), '饥饿');
+    gainCond('starving', t('ledger.health.starveStart'));
+    hit(HEALTH.STARVE_HP * (1 - consume.foodRatio), t('ledger.cause.hunger'));
   } else {
     removeCondition(run, 'starving');
   }
   if (consume.waterRatio < 0.4) {
-    gainCond('dehydrated', '你开始脱水');
-    hit(HEALTH.THIRST_HP * (1 - consume.waterRatio), '脱水');
+    gainCond('dehydrated', t('ledger.health.thirstStart'));
+    hit(HEALTH.THIRST_HP * (1 - consume.waterRatio), t('ledger.cause.thirst'));
   } else if (consume.waterRatio > 0.85) {
     removeCondition(run, 'dehydrated');
   }
@@ -112,7 +134,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   if (run.ration === 'half' || run.ration === 'none') {
     run.streaks.lowRation += 1;
     run.streaks.goodRation = 0;
-    if (run.streaks.lowRation >= HEALTH.MALNOURISH_DAYS && gainCond('malnourished', '长期节食开始留下痕迹：营养不良')) {
+    if (run.streaks.lowRation >= HEALTH.MALNOURISH_DAYS && gainCond('malnourished', t('ledger.health.malnourish'))) {
       // already noted
     }
   } else {
@@ -129,22 +151,22 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     if (has(run, 'nurse_care')) mult *= 0.75;
     mult *= 1 / (1 + effectiveModule(run, 'medbay') * 0.2);
 
+    if (addedTonight.has(id)) continue;
+
     hit((def.daily.hp ?? 0) * mult, def.name);
     run.stats.stamina = clamp(run.stats.stamina + (def.daily.stamina ?? 0) * mult, 0, 100);
     run.stats.sanity = clamp(run.stats.sanity + (def.daily.sanity ?? 0) * mult, 0, 100);
 
     if (def.autoCure === 'food' && run.streaks.goodRation >= HEALTH.MALN_CURE_DAYS) {
       removeCondition(run, id);
-      notes.push(ledger(`${def.name}：因口粮恢复而好转`, 'good'));
+      notes.push(ledger(t('ledger.health.foodHeal', { name: def.name }), 'good'));
       continue;
     }
     if (def.autoCure === 'water' && consume.waterRatio > 0.85) {
       removeCondition(run, id);
-      notes.push(ledger(`${def.name}：因饮水恢复而好转`, 'good'));
+      notes.push(ledger(t('ledger.health.waterHeal', { name: def.name }), 'good'));
       continue;
     }
-
-    if (addedTonight.has(id)) continue;
 
     // 病程天数：今晚结算时 +1（今日新得的不加）
     run.conditionAge[id] = (run.conditionAge[id] ?? 0) + 1;
@@ -152,7 +174,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
 
     if (def.selfHeal && rng.chance(def.selfHeal * (1 + effectiveModule(run, 'medbay') * 0.3))) {
       removeCondition(run, id);
-      notes.push(ledger(`${def.name}：好转了`, 'good'));
+      notes.push(ledger(t('ledger.health.healed', { name: def.name }), 'good'));
       continue;
     }
     if (def.worsen) {
@@ -164,7 +186,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
         // 肾伤：脱水拖坏且当天走了回用
         if (def.worsen.into === 'kidneyStrain' && !consume.recycling) chance = 0;
         if (chance > 0 && rng.chance(chance)) {
-          if (gainCond(def.worsen.into, `${def.name}恶化为${CONDITION_BY_ID[def.worsen.into].name}`)) {
+          if (gainCond(def.worsen.into, t('ledger.health.worsen', { from: def.name, to: CONDITION_BY_ID[def.worsen.into].name }))) {
             // noted
           }
         }
@@ -172,7 +194,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     }
     // 痢疾拖久了也会黄疸（与脱水恶化并存）
     if (id === 'dysentery' && age >= 5 && rng.chance(0.12)) {
-      gainCond('jaundice', '痢疾拖了太久，眼白开始发黄');
+      gainCond('jaundice', t('ledger.health.dysenteryJaundice'));
     }
   }
 
@@ -182,9 +204,9 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   const floor = COLD.INSULATE_FLOOR[insulate] ?? COLD.INSULATE_FLOOR[0]!;
   if (felt < floor) {
     const gap = floor - felt;
-    hit(-gap * COLD.HP_PER_DEGREE, '失温');
-    notes.push(ledger(`保温不足：室内 ${felt}°C，当前配置只能扛到 ${floor}°C`, 'bad'));
-    if (gap >= COLD.HYPOTHERMIA_GAP) gainCond('hypothermia', '你出现了失温症状');
+    hit(-gap * COLD.HP_PER_DEGREE, t('ledger.cause.cold'));
+    notes.push(ledger(t('ledger.health.cold', { felt, floor }), 'bad'));
+    if (gap >= COLD.HYPOTHERMIA_GAP) gainCond('hypothermia', t('ledger.health.hypo'));
   } else if (felt > floor + 4) {
     removeCondition(run, 'hypothermia');
   }
@@ -196,15 +218,15 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   if (run.flags.includes('flag:mask')) airTol += AIR.MASK_BONUS;
   if (run.world.airPollution > airTol) {
     const over = run.world.airPollution - airTol;
-    hit(-over * AIR.HP_PER_POINT, '吸入污染物');
-    notes.push(ledger(`空气污染 ${Math.round(run.world.airPollution)}：超出防护 ${Math.round(over)}`, 'bad'));
+    hit(-over * AIR.HP_PER_POINT, t('ledger.cause.air'));
+    notes.push(ledger(t('ledger.health.air', { pollution: Math.round(run.world.airPollution), over: Math.round(over) }), 'bad'));
   }
 
   const sealed = insulate >= 2;
   if (sealed && consume.heated && consume.heatKind === 'fuel' && !run.flags.includes('flag:coAlarm')) {
     if (rng.chance(AIR.CO_RISK)) {
-      if (gainCond('coPoisoning', '屋里密不透风，炉子烧了一夜——你在头痛中醒来')) {
-        addLog(run, '密封做得太好了。你忘了燃烧要消耗氧气，也会产生别的东西。', 'bad');
+      if (gainCond('coPoisoning', t('ledger.health.co'))) {
+        addLog(run, t('ledger.health.coLog'), 'bad');
       }
     }
   }
@@ -215,18 +237,18 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
     const iodine = iodineActive(run);
     if (airFilter > 0 && !loadOnline(run, 'airFilter')) {
-      notes.push(ledger('空气过滤缺电停摆：辐射屏蔽按未开机计算', 'bad'));
+      notes.push(ledger(t('ledger.health.filterOff'), 'bad'));
     }
     if (run.world.radiation > tol) {
       const over = (run.world.radiation - tol) * (iodine ? 0.45 : 1);
       const dmg = -over * RAD.HP_PER_POINT;
-      hit(dmg, '辐射');
-      if (over > 12 && gainCond('radiationSickness', '你开始呕吐，牙龈在渗血')) {
+      hit(dmg, t('ledger.cause.radiation'));
+      if (over > 12 && gainCond('radiationSickness', t('ledger.health.radSickness'))) {
         // noted
       } else if (over > 0) {
         notes.push(
           ledger(
-            `辐射屏蔽不足：辐射 ${Math.round(run.world.radiation)}，只能挡到 ${tol}（生命 ${dmg.toFixed(1)}）`,
+            t('ledger.health.rad', { rad: Math.round(run.world.radiation), tol, dmg: dmg.toFixed(1) }),
             'bad',
           ),
         );
@@ -235,16 +257,16 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   }
 
   if (run.flags.includes('flag:iodine') && run.iodineUntil !== undefined && run.day + 1 >= run.iodineUntil) {
-    notes.push(ledger('碘片保护今晚到期：明天甲状腺要自己扛', 'bad'));
+    notes.push(ledger(t('ledger.health.iodineEnd'), 'bad'));
   }
 
   // ---------- 6. 灯光 ----------
   if (loadOnline(run, 'lights')) {
     run.stats.sanity = clamp(run.stats.sanity + HEALTH.LIGHTS_SANITY_ON, 0, 100);
-    notes.push(ledger(`灯开着：理智 +${HEALTH.LIGHTS_SANITY_ON}`, 'good'));
+    notes.push(ledger(t('ledger.health.lightsOn', { amt: HEALTH.LIGHTS_SANITY_ON }), 'good'));
   } else {
     run.stats.sanity = clamp(run.stats.sanity + HEALTH.LIGHTS_SANITY_OFF, 0, 100);
-    notes.push(ledger(`灯关着：理智 ${HEALTH.LIGHTS_SANITY_OFF}`, 'bad'));
+    notes.push(ledger(t('ledger.health.lightsOff', { amt: HEALTH.LIGHTS_SANITY_OFF }), 'bad'));
   }
 
   // ---------- 7. 水源与疾病 ----------
@@ -252,7 +274,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     let p = HEALTH.RAW_WATER_SICK;
     if (has(run, 'chemist_consumables')) p *= 0.5;
     if (run.world.waterTable !== 'normal') p *= 1.35;
-    if (rng.chance(p) && gainCond('dysentery', '那口水的代价来得很快')) {
+    if (rng.chance(p) && gainCond('dysentery', t('ledger.health.dirtyWater'))) {
       // noted
     }
   } else if (consume.drankFiltered) {
@@ -267,9 +289,9 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     if (p > 0 && rng.chance(p)) {
       const useGiardia = filterLv >= 2 && rng.chance(FILTER.GIARDIA_SHARE);
       if (useGiardia) {
-        gainCond('giardia', '肚子开始绞痛，滤过的水也不干净');
+        gainCond('giardia', t('ledger.health.giardia'));
       } else {
-        gainCond('dysentery', '滤过的水仍让你跑了两趟卫生间');
+        gainCond('dysentery', t('ledger.health.filterDysentery'));
       }
     }
   }
@@ -279,24 +301,24 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     if (airFilter >= 2) p *= 0.4;
     if (has(run, 'nurse_care')) p *= 0.75;
     if (run.survivors.length > 0) p *= 1 + run.survivors.length * 0.2;
-    if (rng.chance(p) && gainCond('flu', '你开始发烧')) {
+    if (rng.chance(p) && gainCond('flu', t('ledger.health.flu'))) {
       // noted
     }
   }
 
   if (site.tags.includes('site:damp') && rng.chance(0.05)) {
-    gainCond('moldLung', '潮湿终于收了它的租：你开始咳嗽');
+    gainCond('moldLung', t('ledger.health.mold'));
   }
 
   if (effectiveModule(run, 'filter') === 0 && rng.chance(HEALTH.POOR_HYGIENE_SICK)) {
     const pick: ConditionId = rng.chance(0.5) ? 'dysentery' : 'flu';
-    gainCond(pick, `卫生条件太差：${CONDITION_BY_ID[pick].name}`);
+    gainCond(pick, t('ledger.health.hygiene', { name: CONDITION_BY_ID[pick].name }));
   }
 
   // ---------- 8. 理智 ----------
   if (run.stats.sanity < HEALTH.SANITY_BREAK) {
-    hit(HEALTH.SANITY_BREAK_HP, '精神崩溃');
-    gainCond('despair', '你已经不太确定明天为什么要起床');
+    hit(HEALTH.SANITY_BREAK_HP, t('ledger.cause.sanity'));
+    gainCond('despair', t('ledger.health.despair'));
   } else if (run.stats.sanity > 45) {
     removeCondition(run, 'despair');
   }
@@ -310,18 +332,16 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   recover += HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0;
   run.stats.stamina = clamp(run.stats.stamina + Math.max(6, recover), 0, 100);
   const sleepSan = HEALTH.MEDBAY_SLEEP_SANITY[medbay] ?? 0;
-  if (sleepSan > 0) {
-    run.stats.sanity = clamp(run.stats.sanity + sleepSan, 0, 100);
-    notes.push(
-      ledger(
-        `医疗站过夜：体力 +${HEALTH.MEDBAY_SLEEP_STAMINA[medbay]}，理智 +${sleepSan}`,
-        'good',
-      ),
-    );
-  } else if ((HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0) > 0) {
-    notes.push(
-      ledger(`医疗站过夜：体力 +${HEALTH.MEDBAY_SLEEP_STAMINA[medbay]}`, 'good'),
-    );
+  const sleepSta = HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0;
+  if (sleepSan > 0) run.stats.sanity = clamp(run.stats.sanity + sleepSan, 0, 100);
+  if (sleepSan > 0 || sleepSta > 0) {
+    if (felt < floor) {
+      notes.push(ledger(t('ledger.health.medbayCold'), 'neutral'));
+    } else if (sleepSan > 0) {
+      notes.push(ledger(t('ledger.health.medbayFull', { sta: sleepSta, san: sleepSan }), 'good'));
+    } else {
+      notes.push(ledger(t('ledger.health.medbaySta', { sta: sleepSta }), 'good'));
+    }
   }
 
   // ---------- 10. 同伴 ----------
@@ -339,13 +359,13 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
 /** 主动治疗：消耗药品处理一个状态，不额外回血 */
 export function treatCondition(run: RunState, id: ConditionId): { ok: boolean; reason?: string } {
   const def = CONDITION_BY_ID[id];
-  if (!def.medsCure) return { ok: false, reason: '这个状态没法用药解决' };
+  if (!def.medsCure) return { ok: false, reason: t('ledger.health.treatNo') };
   if (def.needsMedbay && run.modules.medbay < def.needsMedbay) {
-    return { ok: false, reason: `需要 ${def.needsMedbay} 级医疗站` };
+    return { ok: false, reason: t('ledger.health.treatMedbay', { lvl: def.needsMedbay }) };
   }
   let cost = def.medsCure;
   if (has(run, 'nurse_care')) cost = Math.max(1, Math.round(cost * 0.6));
-  if (run.res.meds < cost) return { ok: false, reason: `需要 ${cost} 组药品` };
+  if (run.res.meds < cost) return { ok: false, reason: t('ledger.health.treatMeds', { cost }) };
   run.res.meds -= cost;
   removeCondition(run, id);
   return { ok: true };

@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { COLD, THREAT_DESC, TIME } from '../game/balance';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { LOCATION_BY_ID, RES_NAME, RES_UNIT } from '../game/content/locations';
+import { SKILL_NAME } from '../game/copy/names';
+import { t } from '../game/copy/t';
 import type { HaulItem } from '../game/engine/economy';
 import { waterRoom } from '../game/engine/economy';
 import { waterCapacity } from '../game/engine/tags';
@@ -26,7 +28,7 @@ export function CollapseScreen({ run }: { run: RunState }) {
     <div className="scroll-y h-full">
       <div className="mx-auto max-w-2xl px-4 py-10 sm:py-16">
         <div className="anim-rise mb-8 text-center">
-          <div className="label mb-3 text-alarm">第 {TIME.COLLAPSE_DAY} 天 · 灾难降临</div>
+          <div className="label mb-3 text-alarm">{t('ui.collapse.day', { n: TIME.COLLAPSE_DAY })}</div>
           <h1 className="title-stamp mb-2 text-3xl font-bold text-paper sm:text-4xl">{def.revealTitle}</h1>
           <div className="mt-3 flex items-center justify-center gap-3">
             <div className="h-px w-10 bg-alarmdim" />
@@ -45,19 +47,19 @@ export function CollapseScreen({ run }: { run: RunState }) {
 
         {step === 0 && (
           <button className="btn btn-primary w-full py-3" onClick={() => setStep(1)}>
-            清点一下你手里有什么
+            {t('ui.collapse.count')}
           </button>
         )}
 
         {step >= 1 && report && (
           <div className="anim-rise space-y-3">
-            <Panel title="准备度清算" mark right={<Chip tone={scoreTone as 'good'}>{report.score} / 100</Chip>}>
+            <Panel title={t('ui.collapse.score')} mark right={<Chip tone={scoreTone as 'good'}>{report.score} / 100</Chip>}>
               <Bar value={report.score} tone={scoreTone} />
               <p className="mt-2 text-[12.5px] leading-relaxed text-amberhi">{def.thesis}</p>
 
               {report.hits.length > 0 && (
                 <div className="mt-3">
-                  <SectionLabel>你做对的</SectionLabel>
+                  <SectionLabel>{t('ui.collapse.hits')}</SectionLabel>
                   <div className="space-y-1">
                     {report.hits.map((h, i) => (
                       <div key={i} className="flex gap-1.5 text-[12.5px] leading-snug text-safehi">
@@ -71,7 +73,7 @@ export function CollapseScreen({ run }: { run: RunState }) {
 
               {report.misses.length > 0 && (
                 <div className="mt-3">
-                  <SectionLabel>你要还的</SectionLabel>
+                  <SectionLabel>{t('ui.collapse.misses')}</SectionLabel>
                   <div className="space-y-1">
                     {report.misses.map((h, i) => (
                       <div key={i} className="flex gap-1.5 text-[12.5px] leading-snug text-alarmhi">
@@ -85,7 +87,7 @@ export function CollapseScreen({ run }: { run: RunState }) {
 
               {report.losses.length > 0 && (
                 <div className="mt-3 border-t border-line pt-3">
-                  <SectionLabel>这一夜的损失</SectionLabel>
+                  <SectionLabel>{t('ui.collapse.losses')}</SectionLabel>
                   <div className="space-y-1">
                     {report.losses.map((h, i) => (
                       <div key={i} className="text-[12.5px] leading-snug text-dim">
@@ -97,22 +99,22 @@ export function CollapseScreen({ run }: { run: RunState }) {
               )}
             </Panel>
 
-            <Panel title="从今天起" mark>
+            <Panel title={t('ui.collapse.fromNow')} mark>
               <p className="text-[12.5px] leading-relaxed text-dim">
-                自来水停了，电网{run.world.powerGrid === 'off' ? '彻底断了' : '开始轮流限电'}
-                ，超市不会再上货。从现在开始，你每天要决定吃多少、喝多少、开不开灯——
-                以及外面那些人什么时候会注意到这里还有活人。
+                {t('ui.collapse.fromNowBody', {
+                  grid: run.world.powerGrid === 'off' ? t('ui.collapse.gridOff') : t('ui.collapse.gridRot'),
+                })}
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                <Chip tone="bad">末世等级 1 · 恐慌期</Chip>
-                <Chip tone="warn">配给制度生效</Chip>
-                <Chip tone="warn">暴露度开始累积</Chip>
-                <Chip tone="info">还有 {TIME.FINAL_DAY - TIME.COLLAPSE_DAY + 1} 天</Chip>
+                <Chip tone="bad">{t('ui.collapse.chipThreat')}</Chip>
+                <Chip tone="warn">{t('ui.collapse.chipRation')}</Chip>
+                <Chip tone="warn">{t('ui.collapse.chipExposure')}</Chip>
+                <Chip tone="info">{t('ui.collapse.chipDays', { n: TIME.FINAL_DAY - TIME.COLLAPSE_DAY + 1 })}</Chip>
               </div>
             </Panel>
 
             <button className="btn btn-primary w-full py-3" onClick={acknowledgeCollapse}>
-              开始第一天
+              {t('ui.collapse.ack')}
             </button>
           </div>
         )}
@@ -133,27 +135,27 @@ export function NightReportModal({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title={`第 ${r.day} 天 · 夜`}
-      subtitle={isPrepNight ? `还剩 ${TIME.PREP_DAYS - r.day} 天` : THREAT_DESC[run.threat]}
+      title={t('ui.night.title', { n: r.day })}
+      subtitle={isPrepNight ? t('ui.night.leftover', { n: TIME.PREP_DAYS - r.day }) : THREAT_DESC[run.threat]}
       width="max-w-xl"
       footer={
         <button className="btn btn-primary w-full py-2.5" onClick={dismissNight}>
-          {r.died ? '结算' : r.collapsed ? '……' : `进入第 ${r.day + 1} 天`}
+          {r.died ? t('ui.common.settle') : r.collapsed ? t('ui.night.ellipsis') : t('ui.night.enter', { n: r.day + 1 })}
         </button>
       }
     >
       {r.weekly && (
         <div className="mb-3 border-l-2 border-alarm bg-alarm/8 px-3 py-2.5">
-          <div className="label mb-1 text-alarm">一周过去了</div>
+          <div className="label mb-1 text-alarm">{t('ui.night.week')}</div>
           <p className="text-[13px] leading-relaxed text-paper">
-            末世等级上升到 {run.threat}：{THREAT_DESC[run.threat]}
+            {t('ui.night.weekBody', { n: run.threat, desc: THREAT_DESC[run.threat] })}
           </p>
         </div>
       )}
 
       {r.notes.length > 0 && (
         <>
-          <SectionLabel>结算</SectionLabel>
+          <SectionLabel>{t('ui.night.settle')}</SectionLabel>
           <div className="mb-3 space-y-1">
             {r.notes.map((n, i) => (
               <div
@@ -171,7 +173,7 @@ export function NightReportModal({ run }: { run: RunState }) {
 
       {r.healthNotes.length > 0 && (
         <>
-          <SectionLabel>身体</SectionLabel>
+          <SectionLabel>{t('ui.night.body')}</SectionLabel>
           <div className="mb-3 space-y-1">
             {r.healthNotes.map((n, i) => (
               <div
@@ -191,7 +193,7 @@ export function NightReportModal({ run }: { run: RunState }) {
         <div className="mb-3 space-y-1 border-t border-line pt-3 text-[12.5px] leading-snug text-dim">
           {r.hpAfter !== undefined && (
             <div>
-              生命 {r.hpAfter}
+              {t('ui.night.hp')} {r.hpAfter}
               {r.hpParts && r.hpParts.length > 0 && (
                 <span>
                   （
@@ -205,7 +207,7 @@ export function NightReportModal({ run }: { run: RunState }) {
           )}
           {r.indoor !== undefined && r.outdoor !== undefined && (
             <div>
-              室外 {r.outdoor}°C / 室内 {r.indoor}°C / 目标 {COLD.TARGET}°C
+              {t('ui.night.outdoor', { out: r.outdoor, in: r.indoor, target: COLD.TARGET })}
             </div>
           )}
         </div>
@@ -214,22 +216,25 @@ export function NightReportModal({ run }: { run: RunState }) {
       {!isPrepNight && (
         <div className="grid grid-cols-3 gap-3 border-t border-line pt-3">
           <div>
-            <div className="label">生命</div>
+            <div className="label">{t('ui.night.hp')}</div>
             <div className="num text-lg text-paper">{Math.round(run.stats.hp)}</div>
           </div>
           <div>
-            <div className="label">理智</div>
+            <div className="label">{t('ui.night.sanity')}</div>
             <div className="num text-lg text-paper">{Math.round(run.stats.sanity)}</div>
           </div>
           <div>
-            <div className="label">暴露度</div>
+            <div className="label">{t('ui.night.exposure')}</div>
             <div className="num text-lg text-paper">
-              {Math.round(run.world.exposure)}
+              {Math.round((r.exposureAfter ?? run.world.exposure) * 10) / 10}
               {r.exposureAdded !== 0 && (
                 <span className={`ml-1 text-[11px] ${r.exposureAdded > 0 ? 'text-alarmhi' : 'text-safehi'}`}>
                   {r.exposureAdded > 0 ? '+' : ''}
                   {r.exposureAdded}
                 </span>
+              )}
+              {!!r.exposureDecay && r.exposureDecay > 0 && (
+                <span className="ml-1 text-[11px] text-safehi">{t('ui.night.decay', { n: r.exposureDecay })}</span>
               )}
             </div>
           </div>
@@ -238,7 +243,8 @@ export function NightReportModal({ run }: { run: RunState }) {
 
       {r.died && (
         <div className="mt-3 border-l-2 border-alarm bg-alarm/10 px-3 py-2.5 text-[13px] leading-relaxed text-alarmhi">
-          你没能撑过这一夜。{r.cause ? `死因：${r.cause}。` : ''}
+          {t('ui.night.died')}
+          {r.cause ? t('ui.night.cause', { cause: r.cause }) : ''}
         </div>
       )}
     </Modal>
@@ -288,7 +294,7 @@ export function HaulModal({ run }: { run: RunState }) {
     if (res === 'water') {
       const maxByRoom = room;
       if (amount > maxByRoom + 0.01) {
-        toast(`储水还能装 ${maxByRoom.toFixed(1)} L（上限 ${waterCapacity(run)} L）`, 'bad');
+        toast(t('ledger.toast.waterRoom', { room: maxByRoom.toFixed(1), cap: waterCapacity(run) }), 'bad');
         setPicked((p) => ({ ...p, [res]: Math.max(0, maxByRoom) }));
         return;
       }
@@ -309,33 +315,31 @@ export function HaulModal({ run }: { run: RunState }) {
 
   return (
     <Modal
-      title={`${loc?.name ?? '外面'} · 你找到了这些`}
+      title={t('ui.haul.title', { name: loc?.name ?? t('ui.haul.outside') })}
       subtitle={
         haul.items.length === 0
-          ? '什么都没有。这里已经被翻过了。'
-          : `背得回去的才算你的 · 负重上限 ${cap} kg${haul.night ? ' · 夜间行动' : ''}`
+          ? t('ui.haul.emptySub')
+          : `${t('ui.haul.capSub', { cap })}${haul.night ? t('ui.haul.nightBit') : ''}`
       }
       width="max-w-xl"
       footer={
         <div className="flex gap-2">
           <button className="btn btn-ghost flex-1 py-2" onClick={discardHaul}>
-            全部丢下
+            {t('ui.haul.dropAll')}
           </button>
           <button className="btn btn-primary flex-[2] py-2" disabled={over} onClick={commit}>
-            {over ? '超重了' : '带回去'}
+            {over ? t('ui.haul.overweight') : t('ui.haul.take')}
           </button>
         </div>
       }
     >
       {haul.items.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-faint">
-          你在货架之间走了一圈，只有翻倒的塑料筐和一地碎玻璃。
-        </p>
+        <p className="py-6 text-center text-[13px] text-faint">{t('ui.haul.emptyBody')}</p>
       ) : (
         <>
           <div className="mb-3">
             <div className="mb-1 flex items-baseline justify-between">
-              <span className="label">负重</span>
+              <span className="label">{t('ui.haul.weight')}</span>
               <span className={`num text-[12.5px] ${over ? 'text-alarmhi' : 'text-paper'}`}>
                 {totalWeight.toFixed(1)} / {cap} kg
               </span>
@@ -354,12 +358,16 @@ export function HaulModal({ run }: { run: RunState }) {
                     <div>
                       <span className="text-[13px] text-paper">{RES_NAME[it.res as ResourceId]}</span>
                       <span className="num ml-2 text-[11.5px] text-faint">
-                        找到 {it.amount} {RES_UNIT[it.res as ResourceId]} · {unitW.toFixed(2)} kg/单位
-                        {it.res === 'water' ? ` · 还能装 ${room.toFixed(1)} L` : ''}
+                        {t('ui.haul.found', {
+                          amt: it.amount,
+                          unit: RES_UNIT[it.res as ResourceId],
+                          w: unitW.toFixed(2),
+                        })}
+                        {it.res === 'water' ? t('ui.haul.waterRoom', { room: room.toFixed(1) }) : ''}
                       </span>
                     </div>
                     <span className="num text-[13px] text-amberhi">
-                      带 {Math.round(cur * 10) / 10}
+                      {t('ui.haul.takeAmt', { n: Math.round(cur * 10) / 10 })}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -379,7 +387,7 @@ export function HaulModal({ run }: { run: RunState }) {
                       className="btn btn-ghost px-2 py-0.5 text-[10.5px]"
                       onClick={() => set(it.res, waterMax)}
                     >
-                      全
+                      {t('ui.haul.all')}
                     </button>
                   </div>
                 </div>
@@ -389,11 +397,11 @@ export function HaulModal({ run }: { run: RunState }) {
 
           {haul.danger > 0 && (
             <p className="mt-3 border-l-2 border-alarmdim bg-alarm/5 px-3 py-2 text-[12px] leading-snug text-alarmhi">
-              这一趟的危险度是 {haul.danger}
-              {haul.night ? '（夜间更高）' : ''}
-              。暴露已经结算进你的档案
-              {haul.danger >= 40 ? '；路上可能受伤或丢掉东西' : ''}
-              {haul.danger >= 55 ? '，高危地段还有人会跟着你回家。' : '。'}
+              {t('ui.haul.danger', { n: haul.danger })}
+              {haul.night ? t('ui.haul.nightHigher') : ''}
+              {t('ui.haul.exposed')}
+              {haul.danger >= 40 ? t('ui.haul.riskHurt') : ''}
+              {haul.danger >= 55 ? t('ui.haul.riskFollow') : t('ui.haul.period')}
             </p>
           )}
         </>
@@ -411,21 +419,13 @@ export function ChoiceResultModal() {
   if (!lastChoice) return null;
   const { checkRoll, notes, title, raid, died } = lastChoice;
 
-  const SKILL_NAME: Record<string, string> = {
-    medicine: '医疗',
-    mechanics: '机械',
-    negotiation: '谈判',
-    fitness: '体能',
-    stealth: '隐蔽',
-  };
-
   return (
     <Modal
-      title="结果"
+      title={t('ui.result.title')}
       width="max-w-lg"
       footer={
         <button className="btn btn-primary w-full py-2.5" onClick={dismissChoice}>
-          {died ? '结算' : '继续'}
+          {died ? t('ui.common.settle') : t('ui.common.continue')}
         </button>
       }
     >
@@ -439,10 +439,17 @@ export function ChoiceResultModal() {
         >
           <div className="flex items-baseline justify-between gap-2">
             <span className={`text-[13px] ${checkRoll.success ? 'text-safehi' : 'text-alarmhi'}`}>
-              {SKILL_NAME[checkRoll.skill]}判定 {checkRoll.success ? '成功' : '失败'}
+              {checkRoll.success
+                ? t('ui.result.checkOk', { skill: SKILL_NAME[checkRoll.skill] })
+                : t('ui.result.checkBad', { skill: SKILL_NAME[checkRoll.skill] })}
             </span>
             <span className="num text-[12px] text-dim">
-              d20 {checkRoll.roll} + 技能 {checkRoll.total - checkRoll.roll} = {checkRoll.total} vs {checkRoll.dc}
+              {t('ui.result.d20', {
+                roll: checkRoll.roll,
+                skill: checkRoll.total - checkRoll.roll,
+                total: checkRoll.total,
+                dc: checkRoll.dc,
+              })}
             </span>
           </div>
         </div>
@@ -459,13 +466,13 @@ export function ChoiceResultModal() {
           }}
         >
           <div className="label mb-1" style={{ color: raid.repelled ? 'var(--color-safe)' : 'var(--color-alarm)' }}>
-            {raid.repelled ? '守住了' : '门被打开了'}
+            {raid.repelled ? t('ui.result.held') : t('ui.result.broken')}
           </div>
           <p className="text-[13px] leading-relaxed text-paper">{raid.narrative}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {raid.hpLost > 0 && <Chip tone="bad">生命 -{raid.hpLost}</Chip>}
-            {raid.usedAmmo > 0 && <Chip tone="warn">弹药 -{raid.usedAmmo}</Chip>}
-            {raid.moduleDamaged && <Chip tone="bad">{raid.moduleDamaged}受损</Chip>}
+            {raid.hpLost > 0 && <Chip tone="bad">{t('ui.result.hp', { n: raid.hpLost })}</Chip>}
+            {raid.usedAmmo > 0 && <Chip tone="warn">{t('ui.result.ammo', { n: raid.usedAmmo })}</Chip>}
+            {raid.moduleDamaged && <Chip tone="bad">{t('ui.result.module', { name: raid.moduleDamaged })}</Chip>}
             {Object.entries(raid.lost).map(([k, v]) => (
               <Chip key={k} tone="bad">
                 {RES_NAME[k as ResourceId]} -{v}
@@ -498,7 +505,7 @@ export function ChoiceResultModal() {
 
       {died && (
         <div className="mt-3 border-l-2 border-alarm bg-alarm/10 px-3 py-2.5 text-[13px] leading-relaxed text-alarmhi">
-          你没有从这一场里走出来。
+          {t('ui.result.died')}
         </div>
       )}
     </Modal>
@@ -515,17 +522,17 @@ export function Toasts() {
   if (list.length === 0) return null;
   return (
     <div className="pointer-events-none fixed bottom-16 right-4 z-50 flex w-72 flex-col gap-1.5">
-      {list.map((t) => (
+      {list.map((item) => (
         <div
-          key={t.id}
+          key={item.id}
           className="anim-rise border-l-2 bg-panel2/95 px-3 py-2 text-[12.5px] leading-snug shadow-lg backdrop-blur"
           style={{
             borderColor:
-              t.tone === 'good' ? 'var(--color-safe)' : t.tone === 'bad' ? 'var(--color-alarm)' : 'var(--color-line2)',
-            color: t.tone === 'bad' ? 'var(--color-alarmhi)' : 'var(--color-paper)',
+              item.tone === 'good' ? 'var(--color-safe)' : item.tone === 'bad' ? 'var(--color-alarm)' : 'var(--color-line2)',
+            color: item.tone === 'bad' ? 'var(--color-alarmhi)' : 'var(--color-paper)',
           }}
         >
-          {t.text}
+          {item.text}
         </div>
       ))}
     </div>

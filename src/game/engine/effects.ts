@@ -4,6 +4,8 @@
  */
 
 import { EXPOSURE, HEALTH } from '../balance';
+import { HOOK_NAME, RES_NAME, STAT_NAME } from '../copy/names';
+import { t } from '../copy/t';
 import { CONDITION_BY_ID } from '../content/conditions';
 import { LOCATION_BY_ID } from '../content/locations';
 import { MODULE_BY_ID } from '../content/modules';
@@ -11,29 +13,10 @@ import { SITE_BY_ID } from '../content/sites';
 import { SURVIVORS, SURVIVOR_BY_ID } from '../content/survivors';
 import type { Rng } from '../rng';
 import type { ActionHook, ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor } from '../types';
+import { clampBattery, batteryCapacity } from './power';
 import { grantIodine, waterCapacity } from './tags';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-const RES_LABEL: Record<string, string> = {
-  water: '水',
-  foodStaple: '罐头',
-  foodFresh: '生鲜',
-  meds: '药品',
-  fuel: '燃料',
-  materials: '建材',
-  parts: '零件',
-  ammo: '弹药',
-  cash: '现金',
-};
-
-const STAT_LABEL: Record<string, string> = {
-  hp: '生命',
-  stamina: '体力',
-  sanity: '理智',
-  humanity: '人性',
-  reputation: '名声',
-};
 
 export function clampResources(run: RunState): void {
   const waterCap = waterCapacity(run);
@@ -44,26 +27,6 @@ export function clampResources(run: RunState): void {
   }
   run.res.cash = Math.round(run.res.cash);
 }
-
-const HOOK_NAME: Record<string, string> = {
-  endDay: '过完这一天',
-  scavenge: '外出搜刮',
-  scavengeNight: '夜间搜刮',
-  buy: '采购',
-  visitShop: '进店',
-  rest: '休息',
-  build: '施工',
-  work: '动手干活',
-  maintain: '保养',
-  treat: '治疗',
-  verifyIntel: '核实情报',
-  setRation: '改口粮',
-  setWaterUse: '改用水',
-  setPowerMode: '改供电',
-  setPowerPriority: '改供电优先级',
-  setHeatMode: '改取暖',
-  raid: '遭遇袭击',
-};
 
 function waitForLabel(hooks: ActionHook | ActionHook[] | undefined): string {
   if (!hooks) return '';
@@ -125,7 +88,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       if (!delta) continue;
       run.res[k as ResourceId] += delta;
       const shown = Math.round(delta * 10) / 10;
-      notes.push(`${RES_LABEL[k] ?? k} ${shown > 0 ? '+' : ''}${shown}`);
+      notes.push(`${RES_NAME[k as ResourceId] ?? k} ${shown > 0 ? '+' : ''}${shown}`);
     }
     clampResources(run);
   }
@@ -133,7 +96,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   // 行动点不像资源那样有储量上限，只需保证不为负
   if (eff.ap) {
     run.ap = Math.max(0, run.ap + eff.ap);
-    notes.push(`行动点 ${eff.ap > 0 ? '+' : ''}${eff.ap}`);
+    notes.push(t('ledger.effect.ap', { delta: `${eff.ap > 0 ? '+' : ''}${eff.ap}` }));
   }
 
   if (eff.stats) {
@@ -142,7 +105,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       const key = k as StatId;
       const hi = key === 'humanity' || key === 'reputation' ? 100 : HEALTH.MAX;
       run.stats[key] = clamp(run.stats[key] + delta, 0, hi);
-      notes.push(`${STAT_LABEL[key] ?? key} ${delta > 0 ? '+' : ''}${delta}`);
+      notes.push(`${STAT_NAME[key] ?? key} ${delta > 0 ? '+' : ''}${delta}`);
     }
   }
 
@@ -156,12 +119,12 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
 
   if (eff.addCond) {
     for (const c of eff.addCond) {
-      if (addCondition(run, c)) notes.push(`获得状态：${CONDITION_BY_ID[c].name}`);
+      if (addCondition(run, c)) notes.push(t('ledger.effect.condAdd', { name: CONDITION_BY_ID[c].name }));
     }
   }
   if (eff.removeCond) {
     for (const c of eff.removeCond) {
-      if (removeCondition(run, c)) notes.push(`解除状态：${CONDITION_BY_ID[c].name}`);
+      if (removeCondition(run, c)) notes.push(t('ledger.effect.condRemove', { name: CONDITION_BY_ID[c].name }));
     }
   }
 
@@ -175,7 +138,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       run.modules[id] = clamp(before + delta, 0, cap);
       if (run.modules[id] !== before) {
         const name = MODULE_BY_ID[id].name;
-        notes.push(delta > 0 ? `${name} → ${run.modules[id]} 级` : `${name}受损 → ${run.modules[id]} 级`);
+        notes.push(delta > 0 ? t('ledger.effect.moduleUp', { name, lvl: run.modules[id] }) : t('ledger.effect.moduleDown', { name, lvl: run.modules[id] }));
       }
     }
   }
@@ -183,8 +146,12 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   if (eff.wear) {
     if (eff.wear.filterLife) run.wear.filterLife = Math.max(0, run.wear.filterLife + eff.wear.filterLife);
     if (eff.wear.generatorOil) run.wear.generatorOil = Math.max(0, run.wear.generatorOil + eff.wear.generatorOil);
-    if (eff.wear.batteryCharge)
-      run.wear.batteryCharge = Math.max(0, run.wear.batteryCharge + eff.wear.batteryCharge);
+    if (eff.wear.batteryCharge) {
+      run.wear.batteryCharge = Math.max(0, (run.wear.batteryCharge ?? 0) + eff.wear.batteryCharge);
+      clampBattery(run);
+      const shown = Math.round(eff.wear.batteryCharge * 10) / 10;
+      notes.push(t('ledger.effect.battery', { shown: `${shown > 0 ? '+' : ''}${shown}`, stored: run.wear.batteryCharge.toFixed(1), cap: batteryCapacity(run) }));
+    }
   }
 
   if (eff.world) {
@@ -194,7 +161,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     if (eff.world.neighborhood) w.neighborhood = clamp(w.neighborhood + eff.world.neighborhood, -100, 100);
     if (eff.world.exposure) {
       w.exposure = clamp(w.exposure + eff.world.exposure, 0, EXPOSURE.MAX);
-      notes.push(`暴露度 ${eff.world.exposure > 0 ? '+' : ''}${eff.world.exposure}`);
+      notes.push(t('ledger.effect.exposure', { delta: `${eff.world.exposure > 0 ? '+' : ''}${eff.world.exposure}` }));
     }
     if (eff.world.airPollution) w.airPollution = clamp(w.airPollution + eff.world.airPollution, 0, 100);
     if (eff.world.radiation) w.radiation = clamp(w.radiation + eff.world.radiation, 0, 100);
@@ -220,14 +187,14 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   if (eff.survivor) {
     if (eff.survivor.recruit) {
       const s = recruit(run, eff.survivor.recruit, rng);
-      if (s) notes.push(`${s.name} 加入了你`);
-      else notes.push('已经住不下更多人了');
+      if (s) notes.push(t('ledger.effect.join', { name: s.name }));
+      else notes.push(t('ledger.effect.full'));
     }
     if (eff.survivor.lose) {
       for (let i = 0; i < eff.survivor.lose && run.survivors.length > 0; i++) {
         const idx = rng.int(0, run.survivors.length - 1);
         const gone = run.survivors.splice(idx, 1)[0]!;
-        notes.push(`${gone.name} 离开了`);
+        notes.push(t('ledger.effect.leave', { name: gone.name }));
       }
     }
     if (eff.survivor.morale) {
@@ -241,8 +208,8 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   if (eff.setFlags) {
     for (const f of eff.setFlags) if (!run.flags.includes(f)) run.flags.push(f);
     if (eff.setFlags.includes('flag:iodine')) grantIodine(run);
-    if (eff.setFlags.includes('flag:knowsNorthRoute')) notes.push('北上路线已知');
-    else if (eff.setFlags.length) notes.push('已记入日记');
+    if (eff.setFlags.includes('flag:knowsNorthRoute')) notes.push(t('ledger.effect.north'));
+    else if (eff.setFlags.length) notes.push(t('ledger.effect.flagged'));
   }
   if (eff.clearFlags) {
     run.flags = run.flags.filter((f) => !eff.clearFlags!.includes(f));
@@ -257,13 +224,13 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       }
       if (loc.stock !== undefined) {
         st.stock = Math.max(0, Math.min(100, loc.stock));
-        notes.push(`${LOCATION_BY_ID[loc.id]?.name ?? loc.id} 存量变为 ${Math.round(st.stock)}%`);
+        notes.push(t('ledger.effect.stock', { name: LOCATION_BY_ID[loc.id]?.name ?? loc.id, pct: Math.round(st.stock) }));
       }
       if (loc.blocked === null) {
         delete st.blocked;
       } else if (loc.blocked) {
         st.blocked = loc.blocked;
-        notes.push(`地图：${LOCATION_BY_ID[loc.id]?.name ?? loc.id} 设卡（${loc.blocked}）`);
+        notes.push(t('ledger.effect.blocked', { name: LOCATION_BY_ID[loc.id]?.name ?? loc.id, why: loc.blocked }));
       }
     }
   }
@@ -283,8 +250,15 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       const w = waitForLabel(s.waitFor);
       if (w) waitHints.push(w);
     }
-    if (waitHints.length) notes.push(`续篇将在你【${waitHints.join('、')}】之后出现`);
-    else notes.push('这件事还没有结束');
+    if (waitHints.length) notes.push(t('ledger.effect.sequelWait', { hooks: waitHints.join('、') }));
+    else notes.push(t('ledger.effect.sequel'));
+  }
+
+  if (eff.unlock?.length) {
+    if (!run.pendingUnlocks) run.pendingUnlocks = [];
+    for (const u of eff.unlock) {
+      if (!run.pendingUnlocks.includes(u)) run.pendingUnlocks.push(u);
+    }
   }
 
   if (eff.log) addLog(run, eff.log, eff.tone ?? 'neutral');

@@ -1,4 +1,8 @@
 import type { IntelItem } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import '../copy';
+
+export { SOURCE_NAME } from '../copy/names';
 
 /**
  * 情报池。
@@ -77,11 +81,8 @@ export const INTEL_POOL: IntelItem[] = [
   { id: 'noise_12', source: 'official', points: 'none', text: '交警提示：受活动影响，本周末市中心部分路段将实施交通管制。' },
 ];
 
-export const INTEL_BY_ID: Record<string, IntelItem> = Object.fromEntries(INTEL_POOL.map((i) => [i.id, i]));
+for (const item of INTEL_POOL) {
+  Object.assign(item, hydrateNamed('intel', item, ['text']));
+}
 
-export const SOURCE_NAME: Record<IntelItem['source'], string> = {
-  official: '官方通报',
-  social: '社交媒体',
-  rumor: '邻里传闻',
-  shortwave: '短波电台',
-};
+export const INTEL_BY_ID: Record<string, IntelItem> = Object.fromEntries(INTEL_POOL.map((i) => [i.id, i]));

@@ -1,3 +1,5 @@
+import '../../copy';
+import { hydrateFamilies } from '../../copy/hydrate';
 import type { EventFamily } from '../../types';
 import { DAILY_EVENTS } from './daily';
 import { ECHO_SLICE_EVENTS } from './echo_flags';
@@ -13,7 +15,7 @@ import { SURV_BEAT_EVENTS } from './surv_beats';
 import { STAT_ARC_EVENTS } from './stat_arcs';
 import { SURVIVAL_EVENTS } from './survival';
 
-export const ALL_FAMILIES: EventFamily[] = [
+export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
   ...PREP_EVENTS,
   ...PREP_SLICE_EVENTS,
   ...SURVIVAL_EVENTS,
@@ -27,7 +29,7 @@ export const ALL_FAMILIES: EventFamily[] = [
   ...ECHO_SLICE_EVENTS,
   ...DAILY_EVENTS,
   ...STAT_ARC_EVENTS,
-];
+]);
 
 export const FAMILY_BY_ID: Record<string, EventFamily> = Object.fromEntries(ALL_FAMILIES.map((f) => [f.id, f]));
 

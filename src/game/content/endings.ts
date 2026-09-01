@@ -1,4 +1,7 @@
 import type { EndingDef } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import { pickCopy } from '../copy/t';
+import '../copy';
 
 /**
  * 结局。priority 高的先判，所以特殊结局会盖过通用的"活下来了"。
@@ -173,5 +176,10 @@ export const ENDINGS: EndingDef[] = [
     relics: 0,
   },
 ];
+
+for (const e of ENDINGS) {
+  Object.assign(e, hydrateNamed('ending', e, ['name', 'subtitle', 'text']));
+  if (e.require?.reason) e.require = { ...e.require, reason: pickCopy(`ending.${e.id}.reason`, e.require.reason) };
+}
 
 export const ENDING_BY_ID: Record<string, EndingDef> = Object.fromEntries(ENDINGS.map((e) => [e.id, e]));

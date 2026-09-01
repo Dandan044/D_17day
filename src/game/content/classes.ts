@@ -1,4 +1,7 @@
 import type { CharacterClass, ResourceId } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import { pickCopy } from '../copy/t';
+import '../copy';
 
 /**
  * 职业。perk 是一个被引擎识别的能力 id，不是纯文本。
@@ -103,6 +106,10 @@ export const CLASSES: CharacterClass[] = [
   },
 ];
 
+for (const c of CLASSES) {
+  Object.assign(c, hydrateNamed('world.class', c, ['name', 'title', 'desc']));
+}
+
 export const CLASS_BY_ID: Record<string, CharacterClass> = Object.fromEntries(CLASSES.map((c) => [c.id, c]));
 
 /** 职业能力的说明文本，UI 直接显示 */
@@ -116,6 +123,10 @@ export const PERK_TEXT: Record<string, string> = {
   trucker_vehicle: '自带车辆：可去远距离地点，负重上限 +40 kg。',
   chemist_consumables: '化学储备：滤芯与药品消耗速度 -40%，生水患病率减半。',
 };
+
+for (const id of Object.keys(PERK_TEXT)) {
+  PERK_TEXT[id] = pickCopy(`world.classPerk.${id}`, PERK_TEXT[id]);
+}
 
 // ============================================================
 // 起手物资包
@@ -165,5 +176,9 @@ export const SUPPLY_PACKS: SupplyPack[] = [
     res: { cash: 12000 },
   },
 ];
+
+for (const p of SUPPLY_PACKS) {
+  Object.assign(p, hydrateNamed('world.pack', p, ['name', 'desc']));
+}
 
 export const PACK_BY_ID: Record<string, SupplyPack> = Object.fromEntries(SUPPLY_PACKS.map((p) => [p.id, p]));

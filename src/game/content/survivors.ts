@@ -1,4 +1,7 @@
 import type { SurvivorTemplate } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import { pickCopy } from '../copy/t';
+import '../copy';
 
 /**
  * 同伴模板。
@@ -83,5 +86,10 @@ export const SURVIVORS: SurvivorTemplate[] = [
     upkeep: 1,
   },
 ];
+
+for (const s of SURVIVORS) {
+  Object.assign(s, hydrateNamed('world.survivor', s, ['name', 'bio']));
+  if (s.secret) s.secret = { ...s.secret, text: pickCopy(`world.survivor.${s.id}.secret`, s.secret.text) };
+}
 
 export const SURVIVOR_BY_ID: Record<string, SurvivorTemplate> = Object.fromEntries(SURVIVORS.map((s) => [s.id, s]));

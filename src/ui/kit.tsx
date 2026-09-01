@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { t } from '../game/copy/t';
+
 // ============================================================
 // 面板
 // ============================================================
@@ -145,7 +147,7 @@ export function Modal({
           </div>
           {onClose && (
             <button className="btn-ghost btn px-2 py-0.5 text-[11px]" onClick={onClose}>
-              关闭
+              {t('ui.common.close')}
             </button>
           )}
         </div>

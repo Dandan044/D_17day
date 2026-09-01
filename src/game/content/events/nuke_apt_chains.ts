@@ -16,38 +16,36 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 9,
     require: HIGH,
-    title: '对门有人隔着门咳，停一下又咳',
-    body: '你听见拖鞋在门垫上蹭。他没有按门铃，只是站着。\n"有退烧的吗？"声音哑，像含着棉花。"我不到你屋里。隔着门递也行。"',
+
+
     choices: [
       ch(
         'pass_meds',
-        '从门缝递出两片药',
         {
           res: { meds: -1 },
           stats: { humanity: 4, sanity: 2 },
           world: { exposure: 3, contagion: 2 },
           setFlags: ['flag:gaveCoughMeds'],
           schedule: [{ familyId: 'nuke_chain_cough_2', inDays: 2 }],
-          log: '药板从门缝出去。他道谢，声音贴着门板。拖鞋声下了半层就听不见了。',
+
           tone: 'good',
         },
         { requires: { res: { meds: 1 } } },
       ),
       ch(
         'pass_water',
-        '只递一瓶水',
         {
           res: { water: -2 },
           stats: { humanity: 2 },
           world: { exposure: 2 },
           setFlags: ['flag:gaveCoughWater'],
           schedule: [{ familyId: 'nuke_chain_cough_2', inDays: 3 }],
-          log: '瓶子被接走。他说"也行"，咳着走了。',
+
           tone: 'neutral',
         },
         { requires: { res: { water: 2 } } },
       ),
-      skip('你不出声。咳了很久，终于有人下楼。', {
+      skip({
         stats: { humanity: -3, sanity: -2 },
         setFlags: ['flag:ignoredCough'],
         schedule: [{ familyId: 'nuke_chain_cough_2', inDays: 4 }],
@@ -64,25 +62,25 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:gaveCoughMeds', 'flag:gaveCoughWater', 'flag:ignoredCough'],
     },
-    title: '门缝里塞进来一张折过的纸',
-    body: '字很抖。"还活着。药吃了。楼上 602 的收音机别整夜开，整层都听得见。"\n没有署名。纸边有一点黄渍。',
+
+
     choices: [
-      ch('reply', '回一张：收到，电台我会关小', {
+      ch('reply', {
         stats: { sanity: 3, reputation: 2 },
         world: { neighborhood: 3 },
         setFlags: ['flag:coughReplied'],
         schedule: [{ familyId: 'nuke_chain_cough_3', waitFor: 'endDay' }],
-        log: '你把纸条塞回去。门外没有脚步声，也许他一直站着。',
+
         tone: 'good',
       }),
-      ch('keep_quiet', '把纸收进抽屉，不回', {
+      ch('keep_quiet', {
         stats: { sanity: 1 },
         setFlags: ['flag:coughNoteKept'],
         schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 3 }],
-        log: '纸进了抽屉。你把电台音量拧到几乎听不见。',
+
         tone: 'neutral',
       }),
-      skip('你把纸撕了。字跟着碎。', {
+      skip({
         stats: { humanity: -2 },
         setFlags: ['flag:coughNoteTorn'],
         schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 2 }],
@@ -100,23 +98,23 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:coughReplied', 'flag:coughNoteKept', 'flag:coughNoteTorn'],
     },
-    title: '对门的猫眼被什么挡住了，一直黑着',
-    body: '你敲了两下。没有咳，也没有拖鞋声。门缝底下露出一只鞋尖，不动。\n楼道里有消毒水的味道，很淡，像谁泼过又干了。',
+
+
     choices: [
-      ch('force_check', '叫名字，再敲重一点', {
+      ch('force_check', {
         stats: { stamina: -6, sanity: -6, humanity: 2 },
         world: { exposure: 6 },
-        log: '没有人应。鞋尖收进去了。里面有人还活着，不想开门。',
+
         tone: 'grim',
       }),
-      ch('leave_food', '在门外放半份罐头就走', {
+      ch('leave_food', {
         res: { foodStaple: -1 },
         stats: { humanity: 4 },
         world: { exposure: 4 },
-        log: '罐头放在门垫上。你下楼时没有回头。晚上罐头不见了。',
+
         tone: 'good',
       }, { requires: { res: { foodStaple: 1 } } }),
-      skip('你回到自己门后。对门继续黑着。', {
+      skip({
         stats: { sanity: -4, humanity: -2 },
       }),
     ],
@@ -131,25 +129,25 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
-    title: '对面那栋楼，有人拿手电朝这边闪',
-    body: '三短一长。停半分钟，又来一遍。对面像在对口令，也可能只是乱闪。\n你的窗帘只留一条缝。手电光扫过窗台内侧的灰。',
+
+
     choices: [
-      ch('answer', '用手电回两短', {
+      ch('answer', {
         stats: { sanity: 2 },
         world: { exposure: 4 },
         setFlags: ['flag:answeredFlash'],
         schedule: [{ familyId: 'nuke_chain_flash_2', inDays: 1 }],
-        log: '你闪了两下。对面停了很久，又闪了一长。然后黑了。',
+
         tone: 'neutral',
       }),
-      ch('ignore_flash', '拉严窗帘', {
+      ch('ignore_flash', {
         world: { exposure: -2 },
         setFlags: ['flag:hidFromFlash'],
         schedule: [{ familyId: 'nuke_chain_flash_2', inDays: 2 }],
-        log: '布一合，光没了。你听见自己的呼吸。',
+
         tone: 'good',
       }),
-      skip('你看着它闪完一整轮。没有回。', {
+      skip({
         stats: { sanity: -2 },
         setFlags: ['flag:watchedFlash'],
         schedule: [{ familyId: 'nuke_chain_flash_2', inDays: 3 }],
@@ -166,27 +164,27 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:answeredFlash', 'flag:hidFromFlash', 'flag:watchedFlash'],
     },
-    title: '有人敲你的门，说自己是对面闪灯的',
-    body: '男的，四十上下，袖子上有灰印。"我从消防通道爬过来的。想换一壶能喝的水。我可以给你电池。"\n他站得离门很远，两只手空着，举到你能从猫眼看见的高度。',
+
+
     choices: [
-      ch('trade', '隔门换：水换电池', {
+      ch('trade', {
         res: { water: -4, parts: 2 },
         stats: { sanity: 2 },
         world: { exposure: 5 },
         setFlags: ['flag:tradedFlashMan'],
         schedule: [{ familyId: 'nuke_chain_flash_3', inDays: 4 }],
-        log: '水出去，两节电池从门缝推进来。他道谢，下楼的步子很快。',
+
         tone: 'good',
       }, { requires: { res: { water: 4 } } }),
-      ch('refuse_door', '隔着门说没有余粮', {
+      ch('refuse_door', {
         stats: { humanity: -1 },
         world: { exposure: 3 },
         setFlags: ['flag:refusedFlashMan'],
         schedule: [{ familyId: 'nuke_chain_flash_3', waitFor: 'raid' }],
-        log: '他说"行"。脚步声在楼梯口停了一下，又继续下。',
+
         tone: 'neutral',
       }),
-      skip('你不开口。他敲了第三次，走了。', {
+      skip({
         stats: { sanity: -3 },
         world: { exposure: 4 },
         setFlags: ['flag:silentFlashMan'],
@@ -204,20 +202,20 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:tradedFlashMan', 'flag:refusedFlashMan', 'flag:silentFlashMan'],
     },
-    title: '对面那扇窗今晚没有再闪',
-    body: '你等了二十分钟。楼是黑的。只有远处有人在烧什么，火光一下一下。\n窗台上多了一层灰，像谁用脏手指抹过。',
+
+
     choices: [
-      ch('watch_more', '再守一晚', {
+      ch('watch_more', {
         stats: { stamina: -10, sanity: -2 },
-        log: '你守到眼干。对面一直黑着。电池还在抽屉里。',
+
         tone: 'neutral',
       }),
-      ch('write_note', '在本子上记：对面停了', {
+      ch('write_note', {
         stats: { sanity: 2 },
-        log: '你写了日期。字很小。写完你把本子合上。',
+
         tone: 'good',
       }),
-      skip('你去睡觉。窗帘拉着。', { stats: { sanity: -2 } }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
 
@@ -230,26 +228,26 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 9,
     require: HIGHFLOOR,
-    title: '水龙头只冒气，没有水',
-    body: '你拧到最大。管子里咕一声，然后什么都没有。马桶水箱还剩半箱。\n楼下隐约有人在接水，桶碰桶的声音顺着管道上来。',
+
+
     choices: [
-      ch('carry_down', '提空桶下楼去看', {
+      ch('carry_down', {
         stats: { stamina: -14 },
         world: { exposure: 5 },
         setFlags: ['flag:checkedDownstairsWater'],
         schedule: [{ familyId: 'nuke_chain_nopressure_2', inDays: 1 }],
-        log: '四楼消防栓旁围了人。有人用管子接，有人收钱。水浑，但在流。',
+
         tone: 'neutral',
       }),
-      ch('save_tank', '先把马桶水箱的水舀进壶', {
+      ch('save_tank', {
         res: { water: 3 },
         stats: { stamina: -6, sanity: -2 },
         setFlags: ['flag:scoopedTank'],
         schedule: [{ familyId: 'nuke_chain_nopressure_2', waitFor: 'endDay' }],
-        log: '你舀了三壶。马桶盖关上，屋里有一点味道。',
+
         tone: 'good',
       }),
-      skip('你把龙头关死。明天再说。', {
+      skip({
         stats: { sanity: -3 },
         setFlags: ['flag:ignoredNoPressure'],
         schedule: [{ familyId: 'nuke_chain_nopressure_2', inDays: 2 }],
@@ -266,27 +264,27 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:checkedDownstairsWater', 'flag:scoopedTank', 'flag:ignoredNoPressure'],
     },
-    title: '四楼有人上门，说可以给你送两桶水',
-    body: '"一百一桶。现钱。我不进门，放门口你自己提。"他穿着反光背心，袖标是撕掉的。\n桶是蓝色的，盖子用绳勒着。他的手很干净，不像刚接过消防栓。',
+
+
     choices: [
-      ch('buy_two', '买两桶', {
+      ch('buy_two', {
         res: { cash: -200, water: 16 },
         stats: { stamina: -8 },
         world: { exposure: 4 },
         setFlags: ['flag:boughtStairWater'],
         schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 2 }],
-        log: '两桶进门。水有铁锈味。你盖紧，离食物远一点放。',
+
         tone: 'neutral',
       }, { requires: { res: { cash: 200 } } }),
-      ch('buy_one', '只买一桶', {
+      ch('buy_one', {
         res: { cash: -100, water: 8 },
         world: { exposure: 3 },
         setFlags: ['flag:boughtStairWater'],
         schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 3 }],
-        log: '一桶。他说下次涨价。你没应。',
+
         tone: 'neutral',
       }, { requires: { res: { cash: 100 } } }),
-      skip('你说不需要。他耸肩下楼。', {
+      skip({
         stats: { sanity: -2 },
         setFlags: ['flag:refusedStairWater'],
         schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 2 }],
@@ -303,22 +301,22 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:boughtStairWater', 'flag:refusedStairWater'],
     },
-    title: '夜里肚子开始拧',
-    body: '你跑了两趟卫生间。水是烧过的，还是这样。可能是那桶，也可能是别的。\n门外有人又在敲门，声音像上次卖水的。',
+
+
     choices: [
-      ch('meds_rest', '吃药，躺下，不开门', {
+      ch('meds_rest', {
         res: { meds: -1 },
         stats: { hp: 4, stamina: -8, sanity: -2 },
-        log: '药咽下去。敲门停了。你盯着天花板到天亮。',
+
         tone: 'good',
       }, { requires: { res: { meds: 1 } } }),
-      ch('open_yell', '开门骂他水有问题', {
+      ch('open_yell', {
         stats: { stamina: -6, sanity: -4, reputation: -2 },
         world: { exposure: 8 },
-        log: '楼道空着。他不在。你的声音撞在水泥墙上。',
+
         tone: 'bad',
       }),
-      skip('你蜷着，等它自己过去。门没有开。', {
+      skip({
         stats: { hp: -6, stamina: -12, sanity: -4 },
         addCond: ['dysentery'],
       }),
@@ -334,27 +332,27 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: APT,
-    title: '楼道拐角有个小孩在灰里画线',
-    body: '女孩，七八岁，口罩戴歪了。手指黑的。她把灰捏成一小撮，吹开，又捏。\n没有大人。电梯口的告示牌倒在地上。',
+
+
     choices: [
-      ch('take_up', '拉她上楼，让她洗手', {
+      ch('take_up', {
         res: { water: -2 },
         stats: { humanity: 5, stamina: -6 },
         world: { exposure: 4 },
         setFlags: ['flag:washedAshKid'],
         schedule: [{ familyId: 'nuke_chain_ashkid_2', inDays: 1 }],
-        log: '她不说话。洗完手，黑还在指甲缝。你给她一块饼干，她放进口袋。',
+
         tone: 'good',
       }, { requires: { res: { water: 2 } } }),
-      ch('shoo', '让她回家，别玩灰', {
+      ch('shoo', {
         stats: { humanity: 1 },
         world: { exposure: 2 },
         setFlags: ['flag:shooedAshKid'],
         schedule: [{ familyId: 'nuke_chain_ashkid_2', inDays: 2 }],
-        log: '她看了你一眼，下楼了。灰手印留在扶手上。',
+
         tone: 'neutral',
       }),
-      skip('你绕开她上楼。她还在吹。', {
+      skip({
         stats: { humanity: -3, sanity: -2 },
         setFlags: ['flag:ignoredAshKid'],
         schedule: [{ familyId: 'nuke_chain_ashkid_2', inDays: 2 }],
@@ -371,27 +369,27 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:washedAshKid', 'flag:shooedAshKid', 'flag:ignoredAshKid'],
     },
-    title: '有个女人找上门，说孩子说起过你',
-    body: '她站在门外，手按着门框，不进来。"昨天下午她在楼道。你要是看见她玩灰……灰不能进嘴。"\n她停了一下。"我们住三楼。夜里要是太吵，你敲门。我可以帮你看一晚门。"',
+
+
     choices: [
-      ch('accept_watch', '答应：有事互相敲门', {
+      ch('accept_watch', {
         stats: { sanity: 4, reputation: 3 },
         world: { neighborhood: 5, exposure: 2 },
         setFlags: ['flag:ashMomWatch'],
         schedule: [{ familyId: 'nuke_chain_ashkid_3', waitFor: 'raid' }],
-        log: '她点头。孩子从楼梯探出半个脸，又缩回去。',
+
         tone: 'good',
       }),
-      ch('give_mask', '塞给她一只口罩', {
+      ch('give_mask', {
         res: { meds: -0.5 },
         stats: { humanity: 3 },
         world: { neighborhood: 3 },
         setFlags: ['flag:gaveKidMask'],
         schedule: [{ familyId: 'nuke_chain_ashkid_3', inDays: 5 }],
-        log: '口罩太大。她给孩子戴上，松紧带勒出红印。',
+
         tone: 'good',
       }, { requires: { res: { meds: 1 } } }),
-      skip('你说没看见。她看了你两秒，下楼了。', {
+      skip({
         stats: { humanity: -2, reputation: -2 },
         setFlags: ['flag:liedToAshMom'],
         schedule: [{ familyId: 'nuke_chain_ashkid_3', inDays: 4 }],
@@ -409,22 +407,22 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:ashMomWatch', 'flag:gaveKidMask', 'flag:liedToAshMom'],
     },
-    title: '夜里楼道有人砸三楼的门',
-    body: '骂声很短，像怕惊动整栋楼。孩子哭了一声，被捂住。\n你的门很近。你可以当没听见。',
+
+
     choices: [
-      ch('bang_pots', '敲自己的门框，把声势做大', {
+      ch('bang_pots', {
         stats: { stamina: -8, sanity: -3 },
         world: { exposure: 10 },
-        log: '你用锅盖敲门框。砸门的人停了，下楼，骂了一句什么。三楼门开了一条缝又关上。',
+
         tone: 'good',
       }),
-      ch('go_help', '下楼去看', {
+      ch('go_help', {
         stats: { stamina: -12, hp: -4, humanity: 4 },
         world: { exposure: 12 },
-        log: '两个人跑了。门框裂了。女人把孩子抱在身后，跟你说了声谢谢，没请你进去。',
+
         tone: 'grim',
       }),
-      skip('你躺着，数砸门的次数。数到第七下，停了。', {
+      skip({
         stats: { sanity: -8, humanity: -4 },
       }),
     ],
@@ -440,26 +438,26 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     weight: 8,
     require: APT,
     minThreat: 2,
-    title: '有人用钥匙开了单元门，钥匙串很响',
-    body: '铁门吱一声。进来两个男人，一个拎编织袋，一个晃着一串钥匙，物业的标还在。\n他们抬头数楼层。你的猫眼对着楼梯拐角。',
+
+
     choices: [
-      ch('watch', '在猫眼后看他们上到哪层', {
+      ch('watch', {
         stats: { stamina: -4, sanity: -2 },
         world: { exposure: -2 },
         setFlags: ['flag:watchedKeyman'],
         schedule: [{ familyId: 'nuke_chain_keyman_2', inDays: 1 }],
-        log: '他们在四楼停了一会儿，敲了两家，没人开。钥匙串一直响。',
+
         tone: 'neutral',
       }),
-      ch('shout', '隔着门问谁的钥匙', {
+      ch('shout', {
         stats: { reputation: 1 },
         world: { exposure: 6 },
         setFlags: ['flag:shoutedKeyman'],
         schedule: [{ familyId: 'nuke_chain_keyman_2', inDays: 1 }],
-        log: '"值夜的。"下面有人喊。不像值夜。他们加快了脚步。',
+
         tone: 'bad',
       }),
-      skip('你离开猫眼。钥匙声远了。', {
+      skip({
         stats: { sanity: -2 },
         setFlags: ['flag:ignoredKeyman'],
         schedule: [{ familyId: 'nuke_chain_keyman_2', inDays: 2 }],
@@ -476,27 +474,27 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:watchedKeyman', 'flag:shoutedKeyman', 'flag:ignoredKeyman'],
     },
-    title: '有人在你门外试钥匙，金属碰锁芯',
-    body: '一下，两下。不对。换另一把。你的防盗链还在。\n外面有人低声说："这层没有黄纸。"',
+
+
     choices: [
-      ch('barricade', '把冰箱顶上门', {
+      ch('barricade', {
         ap: -1,
         stats: { stamina: -16 },
         setFlags: ['flag:blockedKeyman'],
         schedule: [{ familyId: 'nuke_chain_keyman_3', inDays: 3 }],
-        log: '冰箱就位。外面的人骂了一句，下楼了。钥匙串响到一楼。',
+
         tone: 'good',
       }, { requires: { ap: 1 } }),
-      ch('pay_off', '开门缝，塞出两份罐头让他们走', {
+      ch('pay_off', {
         res: { foodStaple: -2 },
         world: { exposure: -4 },
         stats: { sanity: -4 },
         setFlags: ['flag:paidKeyman'],
         schedule: [{ familyId: 'nuke_chain_keyman_3', inDays: 5 }],
-        log: '罐头被接走。他说"钥匙是捡的"。你把门关上，反锁两道。',
+
         tone: 'grim',
       }, { requires: { res: { foodStaple: 2 } } }),
-      skip('你贴着墙，不吭声。试了第四把，他们走了。', {
+      skip({
         stats: { sanity: -8 },
         world: { exposure: 6 },
         setFlags: ['flag:enduredKeyman'],
@@ -514,22 +512,22 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:blockedKeyman', 'flag:paidKeyman', 'flag:enduredKeyman'],
     },
-    title: '单元门换了一把新挂锁，钥匙孔被胶堵了',
-    body: '挂锁是新的，没商标。胶还没干透。门缝里夹着半张纸："今晚起轮流守门，自愿。"\n名单空着。只有一行铅笔：6F——后面没写完。',
+
+
     choices: [
-      ch('sign', '在名单上写自己的门牌', {
+      ch('sign', {
         stats: { reputation: 4, stamina: -4 },
         world: { neighborhood: 4, exposure: 3 },
-        log: '你写了 6F。铅笔尖断了。你用指甲把铅芯搓尖，写完。',
+
         tone: 'good',
       }),
-      ch('cut_glue', '把胶抠开，挂锁留下', {
+      ch('cut_glue', {
         stats: { stamina: -8 },
         world: { exposure: 2 },
-        log: '胶粘在指甲上。门能开了。挂锁还在，像个警告。',
+
         tone: 'neutral',
       }),
-      skip('你绕过告示上楼。名单仍是空的。', {
+      skip({
         stats: { sanity: -2, humanity: -1 },
       }),
     ],
@@ -544,26 +542,26 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: NUC,
-    title: '楼道里有人压低声音说碘片',
-    body: '"六楼那户搬上来过两箱。"\n"你看见了？"\n"我听见箱子响。"\n你正提着水上楼。他们看见你，话题换成天气。',
+
+
     choices: [
-      ch('pass_by', '低头走过，不接话', {
+      ch('pass_by', {
         stats: { sanity: -2 },
         world: { exposure: 3 },
         setFlags: ['flag:heardIodineRumor'],
         schedule: [{ familyId: 'nuke_chain_iodinerumor_2', inDays: 2 }],
-        log: '你走过。箱子声还在他们的句子里，你听得见。',
+
         tone: 'neutral',
       }),
-      ch('deny', '停住说：那是水', {
+      ch('deny', {
         stats: { reputation: -1 },
         world: { exposure: 5 },
         setFlags: ['flag:deniedIodineRumor'],
         schedule: [{ familyId: 'nuke_chain_iodinerumor_2', inDays: 1 }],
-        log: '他们点头太快。你把水提回家，手心是湿的。',
+
         tone: 'bad',
       }),
-      skip('你装作没听见，多爬两级再停。', {
+      skip({
         stats: { stamina: -4 },
         setFlags: ['flag:avoidedIodineTalk'],
         schedule: [{ familyId: 'nuke_chain_iodinerumor_2', inDays: 3 }],
@@ -580,28 +578,28 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:heardIodineRumor', 'flag:deniedIodineRumor', 'flag:avoidedIodineTalk'],
     },
-    title: '有人敲门，开口就要碘片',
-    body: '"不是抢。我家孩子脖子肿。你要是有，卖也行，借也行。"\n猫眼里三个人。一个抱着小孩，小孩没哭，眼睛睁得很干。',
+
+
     choices: [
-      ch('sell', '卖一小瓶，收现金', {
+      ch('sell', {
         res: { meds: -1, cash: 200 },
         stats: { humanity: -2, sanity: -2 },
         world: { exposure: 8 },
         setFlags: ['flag:soldIodineDoor'],
         schedule: [{ familyId: 'nuke_chain_iodinerumor_3', inDays: 4 }],
-        log: '药出去，钱进来。小孩还是不哭。他们下楼时有人看了你家门牌。',
+
         tone: 'grim',
       }, { requires: { res: { meds: 1 } } }),
-      ch('give_free', '白给，让他们快走', {
+      ch('give_free', {
         res: { meds: -1 },
         stats: { humanity: 5, sanity: 2 },
         world: { exposure: 6, neighborhood: 4 },
         setFlags: ['flag:gaveIodineDoor'],
         schedule: [{ familyId: 'nuke_chain_iodinerumor_3', inDays: 5 }],
-        log: '他们道谢。女人把药塞进怀里。楼道里很快又安静了。',
+
         tone: 'good',
       }, { requires: { res: { meds: 1 } } }),
-      skip('你说没有。他们站了一会儿，走了。', {
+      skip({
         stats: { humanity: -4, sanity: -6 },
         world: { exposure: 10 },
         setFlags: ['flag:refusedIodineDoor'],
@@ -619,23 +617,23 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:soldIodineDoor', 'flag:gaveIodineDoor', 'flag:refusedIodineDoor'],
     },
-    title: '你家门上被人用粉笔写了两个字',
-    body: '写的是"有药"。字歪，像夜里写的。楼下有人经过时会抬头看一眼。\n粉笔灰掉在门垫上，一蹭就没，字还在。',
+
+
     choices: [
-      ch('erase', '擦掉，再贴一层纸', {
+      ch('erase', {
         res: { materials: -1 },
         stats: { stamina: -6 },
         world: { exposure: -4 },
-        log: '字没了。纸是旧报纸。油墨味盖过粉笔。',
+
         tone: 'good',
       }, { requires: { res: { materials: 1 } } }),
-      ch('rewrite', '改写成"无"', {
+      ch('rewrite', {
         stats: { sanity: -2 },
         world: { exposure: 2 },
-        log: '你加了一笔。现在像"有药无"。更难看，也更像玩笑。',
+
         tone: 'neutral',
       }),
-      skip('你留着。进出时侧身，避免蹭到。', {
+      skip({
         stats: { sanity: -4 },
         world: { exposure: 4 },
       }),
@@ -651,25 +649,25 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: { all: ['disaster:nuclear', 'mod:radio>=1'] },
-    title: '短波里有个嗓音很像你以前的同事',
-    body: '他念的是库存数字：水、柴油、床位。中间咳了一下，那个咳法你听过，在茶水间。\n呼号你不熟。频率你抄下来了。',
+
+
     choices: [
-      ch('copy_freq', '把频率和内容抄进日记', {
+      ch('copy_freq', {
         stats: { sanity: 2 },
         setFlags: ['flag:copiedColleagueFreq'],
         schedule: [{ familyId: 'nuke_chain_voice_2', waitFor: 'verifyIntel' }],
-        log: '纸上的数字比嗓音稳。你写了名字的缩写，又划掉。',
+
         tone: 'good',
       }),
-      ch('call_out', '试着叫他的名字', {
+      ch('call_out', {
         world: { exposure: 4 },
         stats: { sanity: -3 },
         setFlags: ['flag:calledColleagueOnAir'],
         schedule: [{ familyId: 'nuke_chain_voice_2', inDays: 2 }],
-        log: '沙沙声里没有人答。你的名字你自己听着都大。',
+
         tone: 'neutral',
       }),
-      skip('你换台。那个咳还在耳朵里。', {
+      skip({
         stats: { sanity: -2 },
         setFlags: ['flag:leftColleagueVoice'],
         schedule: [{ familyId: 'nuke_chain_voice_2', inDays: 4 }],
@@ -686,24 +684,24 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:copiedColleagueFreq', 'flag:calledColleagueOnAir', 'flag:leftColleagueVoice'],
     },
-    title: '同一频率，换成女声念撤离点',
-    body: '她说城北体育场。说带证件。说不要私人无线电呼叫。\n你以前的同事的咳没有再出现。背景里有发电机。',
+
+
     choices: [
-      ch('believe', '按这个点记进地图', {
+      ch('believe', {
         setFlags: ['flag:knowsNorthRoute', 'flag:stadiumEvac'],
         stats: { sanity: 2 },
         schedule: [{ familyId: 'nuke_chain_voice_3', inDays: 5 }],
-        log: '你画了个圈。圈太大。你又在旁边写：未核实。',
+
         tone: 'good',
       }),
-      ch('doubt', '当假的，只留频率', {
+      ch('doubt', {
         stats: { sanity: 1 },
         setFlags: ['flag:doubtedStadium'],
         schedule: [{ familyId: 'nuke_chain_voice_3', waitFor: 'endDay' }],
-        log: '频率留着。圈没画。你关小音量。',
+
         tone: 'neutral',
       }),
-      skip('你听完，关机。屋里一下子很静。', {
+      skip({
         stats: { sanity: -3 },
         setFlags: ['flag:shutOffVoice'],
         schedule: [{ familyId: 'nuke_chain_voice_3', inDays: 3 }],
@@ -720,22 +718,22 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     require: {
       any: ['flag:stadiumEvac', 'flag:doubtedStadium', 'flag:shutOffVoice'],
     },
-    title: '有人从门缝塞进一张手写的频率表',
-    body: '和你抄过的那行一样，多了一注：体育场改到西侧门。字迹不像女声念的那样整齐。\n背面写："别回呼。回呼会被定位。"',
+
+
     choices: [
-      ch('update', '改掉日记里的门', {
+      ch('update', {
         stats: { sanity: 2 },
-        log: '你把"北"改成"西侧"。墨水晕开一点。',
+
         tone: 'good',
       }),
-      ch('burn', '烧掉这张纸', {
+      ch('burn', {
         res: { fuel: -0.2 },
         world: { exposure: -2 },
         stats: { sanity: -2 },
-        log: '纸烧得很快。味道像油墨。你开窗一条缝，又立刻关上。',
+
         tone: 'neutral',
       }, { requires: { res: { fuel: 1 } } }),
-      skip('你把纸夹进日记最后一页。', {
+      skip({
         stats: { sanity: -1 },
       }),
     ],

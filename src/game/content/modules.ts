@@ -1,5 +1,8 @@
 import type { ModuleDef, ModuleId } from '../types';
 import { AIR, CAPS, COLD, FILTER, POWER } from '../balance';
+import { hydrateNamed } from '../copy/hydrate';
+import { pickCopy, t } from '../copy/t';
+import '../copy';
 
 /**
  * 避难所模块。
@@ -158,6 +161,13 @@ export const MODULES: ModuleDef[] = [
   },
 ];
 
+for (const m of MODULES) {
+  Object.assign(m, hydrateNamed('world.module', m, ['name', 'short', 'desc', 'zero', 'buildPenaltyDesc']));
+  m.levels.forEach((lv, i) => {
+    lv.desc = pickCopy(`world.module.${m.id}.level.${i + 1}`, lv.desc);
+  });
+}
+
 export const MODULE_BY_ID: Record<ModuleId, ModuleDef> = Object.fromEntries(
   MODULES.map((m) => [m.id, m]),
 ) as Record<ModuleId, ModuleDef>;
@@ -178,39 +188,37 @@ export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1):
     case 'cistern': {
       const cap = Math.round((CAPS.WATER[lv] ?? 20) * waterCapMult);
       const days = Math.round((cap / 3) * 10) / 10;
-      return `储水 ${cap} L（约 ${days} 天）`;
+      return t('ledger.module.cistern', { cap, days });
     }
     case 'filter': {
-      if (lv <= 0) return '无';
+      if (lv <= 0) return t('ledger.module.none');
       const rain = FILTER.RAIN_OUTPUT[lv] ?? 0;
       const save = Math.round((1 - (FILTER.RECYCLE_NEED[lv] ?? 1)) * 100);
       const wear = FILTER.WEAR_LEVEL_MULT[lv] ?? 1;
-      return `雨日产 ${rain} L；旱天耗水 −${save}%；滤芯损耗 ×${wear}`;
+      return t('ledger.module.filter', { rain, save, wear });
     }
-    case 'power':
-      return `光伏约 ${POWER.BASE_OUTPUT[lv] ?? 0} kWh/日${lv >= 3 ? '；可开柴油机补缺口' : ''}`;
+    case 'power': {
+      const cap = POWER.BATTERY_CAP[lv] ?? 0;
+      return t('ledger.module.power', { out: POWER.BASE_OUTPUT[lv] ?? 0, cap }) + (lv >= 3 ? t('ledger.module.powerDiesel') : '');
+    }
     case 'insulate':
       return (
-        `失温下限 ${COLD.INSULATE_FLOOR[lv]}°C` +
-        (lv >= 1 ? `；烧油 ${COLD.FUEL_PER_DEGREE[lv]} L/°C` : '') +
-        (lv >= 2 ? `；电热 ${COLD.ELECTRIC_PER_DEGREE[lv]} kWh/°C` : '')
+        t('ledger.module.insulate', { floor: COLD.INSULATE_FLOOR[lv] }) +
+        (lv >= 1 ? t('ledger.module.insulateFuel', { fuel: COLD.FUEL_PER_DEGREE[lv] }) : '') +
+        (lv >= 2 ? t('ledger.module.insulateElec', { elec: COLD.ELECTRIC_PER_DEGREE[lv] }) : '')
       );
     case 'airFilter':
-      return `挡污染至 ${AIR.FILTER_TOLERANCE[lv]}；辐射屏蔽贡献 +${lv}（停摆按 0 级计）`;
+      return t('ledger.module.air', { tol: AIR.FILTER_TOLERANCE[lv], lvl: lv });
     case 'radio':
-      return lv > 0 ? '有电时提高情报与预报准确度' : '无';
+      return lv > 0 ? t('ledger.module.radio') : t('ledger.module.none');
     case 'garden':
-      return `日产生鲜 ${CAPS.GARDEN_YIELD[lv] ?? 0} 份`;
+      return t('ledger.module.garden', { n: CAPS.GARDEN_YIELD[lv] ?? 0 });
     case 'medbay':
-      return lv >= 3
-        ? '减轻病情日损；主动休息 +1 生命'
-        : lv > 0
-          ? '减轻病情日损；提高自愈；过夜恢复略好'
-          : '无';
+      return lv >= 3 ? t('ledger.module.medbay3') : lv > 0 ? t('ledger.module.medbay') : t('ledger.module.none');
     case 'fortify':
-      return '降低袭击成功率';
+      return t('ledger.module.fortify');
     case 'conceal':
-      return '降低每日暴露度';
+      return t('ledger.module.conceal');
     default:
       return '';
   }

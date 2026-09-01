@@ -10,12 +10,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '水管里有人用你的声音说话',
-    body: '你把耳朵贴上去。它说了一句你早上刚说过的话，然后笑了一下。\n窗外的灰落得很整齐，一粒一粒，像有人在排队往下撒。',
+
+
     choices: [
-      ch('listen', '再听一句', { stats: { sanity: -4 }, setFlags: ['flag:listenedPipe'], schedule: [{ familyId: 'stat_arc_sanity_2', waitFor: 'rest' }], log: '第二句不是你的声音。你把耳朵拿开。', tone: 'grim' }),
-      ch('tap', '敲两下让它停', { stats: { sanity: 2, stamina: -2 }, setFlags: ['flag:tappedPipe'], schedule: [{ familyId: 'stat_arc_sanity_2', inDays: 2 }], log: '它停了。你不确定是吓走了，还是换了地方。', tone: 'neutral' }),
-      skip('你把水龙头开到最大，用流水盖过它。', { stats: { sanity: -2 }, res: { water: -1 }, schedule: [{ familyId: 'stat_arc_sanity_2', inDays: 3 }] }),
+      ch('listen', { stats: { sanity: -4 }, setFlags: ['flag:listenedPipe'], schedule: [{ familyId: 'stat_arc_sanity_2', waitFor: 'rest' }],  tone: 'grim' }),
+      ch('tap', { stats: { sanity: 2, stamina: -2 }, setFlags: ['flag:tappedPipe'], schedule: [{ familyId: 'stat_arc_sanity_2', inDays: 2 }],  tone: 'neutral' }),
+      skip({ stats: { sanity: -2 }, res: { water: -1 }, schedule: [{ familyId: 'stat_arc_sanity_2', inDays: 3 }] }),
     ],
   }),
   beat({
@@ -25,12 +25,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '落灰一声一声，你听成了脚步',
-    body: '灰打在窗台上，一下一下。你听成有人在上一层轻轻走。你数到十七停了——十七是你门牌。',
+
+
     choices: [
-      ch('write', '写在纸上：落的是灰', { stats: { sanity: 4 }, log: '你写了：落的是灰。把纸条贴在门上，免得夜里又听错。', tone: 'good' }),
-      ch('wait', '等到真有脚步再反应', { stats: { sanity: -3 }, world: { exposure: 2 }, log: '你等了一夜。没有人。灰还在落。', tone: 'neutral' }),
-      skip('你把枕头压在耳朵上。', { stats: { stamina: -4 } }),
+      ch('write', { stats: { sanity: 4 },  tone: 'good' }),
+      ch('wait', { stats: { sanity: -3 }, world: { exposure: 2 },  tone: 'neutral' }),
+      skip({ stats: { stamina: -4 } }),
     ],
   }),
   beat({
@@ -40,12 +40,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '日历自己往回翻',
-    body: '你看见准备期的自己在超市排队。她回头看你，嘴巴动了，说的是今天的日期。\n药品柜里的碘片包装在反光。你不记得有没有买。',
+
+
     choices: [
-      ch('sit', '坐到数字不再跳', { stats: { sanity: 6, stamina: -8 }, log: '你坐着。日历上的数字先停下来。', tone: 'good' }),
-      ch('eat', '强迫自己吃一口', { res: { foodStaple: -1 }, stats: { sanity: 3, hp: 0 }, log: '咸的。嘴里有味道之后，日历上的数字也停了。', tone: 'neutral' }, { requires: { res: { foodStaple: 1 } } }),
-      skip('你让它翻。反正也不准。', { stats: { sanity: -6, hp: -2 } }),
+      ch('sit', { stats: { sanity: 6, stamina: -8 },  tone: 'good' }),
+      ch('eat', { res: { foodStaple: -1 }, stats: { sanity: 3, hp: 0 },  tone: 'neutral' }, { requires: { res: { foodStaple: 1 } } }),
+      skip({ stats: { sanity: -6, hp: -2 } }),
     ],
   }),
   beat({
@@ -55,12 +55,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '上楼走到一半，腿软了，你坐下来',
-    body: '你本想一口气走完。腿先软了，人跟着坐在台阶上。心跳比平时响。\n药箱还在屋里原来的位置。',
+
+
     choices: [
-      ch('slow', '承认今天只能慢着走', { stats: { sanity: 2, stamina: 4 }, setFlags: ['flag:admittedHurt'], schedule: [{ familyId: 'stat_arc_hp_2', waitFor: 'treat' }], log: '你把步子改小。小步也能到家。', tone: 'good' }),
-      ch('ignore', '站起来继续走', { stats: { hp: -2, stamina: -8 }, schedule: [{ familyId: 'stat_arc_hp_2', inDays: 2 }], log: '你走完了。膝盖在疼，你假装听不见。', tone: 'grim' }),
-      skip('你在楼梯上坐到腿麻。', { stats: { stamina: 6, sanity: -2 } }),
+      ch('slow', { stats: { sanity: 2, stamina: 4 }, setFlags: ['flag:admittedHurt'], schedule: [{ familyId: 'stat_arc_hp_2', waitFor: 'treat' }],  tone: 'good' }),
+      ch('ignore', { stats: { hp: -2, stamina: -8 }, schedule: [{ familyId: 'stat_arc_hp_2', inDays: 2 }],  tone: 'grim' }),
+      skip({ stats: { stamina: 6, sanity: -2 } }),
     ],
   }),
   beat({
@@ -70,11 +70,11 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '伤口不疼了，你更慌',
-    body: '疼的时候你至少知道那块肉还连着。现在按下去像按别人的胳膊，没什么感觉。你还是按了几下。药箱就在旁边。',
+
+
     choices: [
-      ch('clean', '清洗、包扎、少出门', { res: { meds: -1, water: -1 }, stats: { sanity: 3 }, log: '纱布是干净的。你还能管这具身体。', tone: 'good' }, { requires: { res: { meds: 1, water: 1 } } }),
-      skip('你把袖子放下来。看不见就不去想。', { stats: { sanity: -3, hp: -1 } }),
+      ch('clean', { res: { meds: -1, water: -1 }, stats: { sanity: 3 },  tone: 'good' }, { requires: { res: { meds: 1, water: 1 } } }),
+      skip({ stats: { sanity: -3, hp: -1 } }),
     ],
   }),
   beat({
@@ -84,12 +84,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '你开始给自己留纸条：如果倒了',
-    body: '字写得很慢。你写了水在哪、钥匙在哪、不要开窗。写完你把纸条反过来，怕自己先读到。',
+
+
     choices: [
-      ch('keep', '把纸条夹进日记', { stats: { sanity: 2, humanity: 1 }, log: '日记变厚了一页。你希望用不到。', tone: 'neutral' }),
-      ch('tear', '撕掉，当它没写过', { stats: { sanity: -4 }, log: '你撕了。纸屑掉在脚边。字没了，内容你还记得。', tone: 'grim' }),
-      skip('你盯着那张纸，直到天又暗了。', { stats: { stamina: -6 } }),
+      ch('keep', { stats: { sanity: 2, humanity: 1 },  tone: 'neutral' }),
+      ch('tear', { stats: { sanity: -4 },  tone: 'grim' }),
+      skip({ stats: { stamina: -6 } }),
     ],
   }),
   beat({
@@ -99,12 +99,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '背包刚拎起来，肩就软了',
-    body: '包没比昨天重，是你没力气了。你把包放下，又拎起来，又放下。光是这样就已经喘。',
+
+
     choices: [
-      ch('half', '减负，只带必要的', { stats: { stamina: 8, sanity: 1 }, setFlags: ['flag:lightPack'], schedule: [{ familyId: 'stat_arc_stamina_2', waitFor: 'scavenge' }], log: '包轻了。门口的风还是那么大。', tone: 'good' }),
-      ch('push', '咬牙出门', { stats: { stamina: -10, hp: -1 }, schedule: [{ familyId: 'stat_arc_stamina_2', waitFor: 'scavenge' }], log: '你出了门。第三层楼梯你又坐下来。', tone: 'grim' }),
-      skip('今天不出。包在门口等。', { stats: { stamina: 10, sanity: -2 } }),
+      ch('half', { stats: { stamina: 8, sanity: 1 }, setFlags: ['flag:lightPack'], schedule: [{ familyId: 'stat_arc_stamina_2', waitFor: 'scavenge' }],  tone: 'good' }),
+      ch('push', { stats: { stamina: -10, hp: -1 }, schedule: [{ familyId: 'stat_arc_stamina_2', waitFor: 'scavenge' }],  tone: 'grim' }),
+      skip({ stats: { stamina: 10, sanity: -2 } }),
     ],
   }),
   beat({
@@ -114,12 +114,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '你在外面中途坐倒，有人从旁边走过去',
-    body: '他们看了你一眼。没有停。你理解。你要是有力气，也不会停。',
+
+
     choices: [
-      ch('wave', '抬手表示你还活着', { stats: { humanity: 2, reputation: 1, stamina: -2 }, log: '有人点了下头。然后走了。', tone: 'good' }),
-      ch('hide', '把脸埋进膝盖', { stats: { sanity: -2, reputation: -1 }, log: '脚步远了。你的脸很烫。', tone: 'neutral' }),
-      skip('你等到自己能站起来。没有人回头。', { stats: { stamina: 4 } }),
+      ch('wave', { stats: { humanity: 2, reputation: 1, stamina: -2 },  tone: 'good' }),
+      ch('hide', { stats: { sanity: -2, reputation: -1 },  tone: 'neutral' }),
+      skip({ stats: { stamina: 4 } }),
     ],
   }),
   beat({
@@ -130,12 +130,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: { all: ['humanity:low'] },
-    title: '楼道里有人看见你，把孩子转到自己身后',
-    body: '动作很小。你还是看见了。你想起自己以前也会这样护着谁，现在轮到别人护着谁躲开你。',
+
+
     choices: [
-      ch('nod', '点头，表示你懂', { stats: { sanity: -2, humanity: 2 }, setFlags: ['flag:seenFlinch'], schedule: [{ familyId: 'stat_arc_humanity_2', inDays: 2 }], log: '你点头。他们把孩子护得更紧，脚步加快了。', tone: 'grim' }),
-      ch('speak', '说一句"我没有恶意"', { stats: { reputation: 1, sanity: -3 }, log: '你的声音在楼梯间发空。没有人回答。', tone: 'neutral' }),
-      skip('你假装没看见那个转身。', { stats: { humanity: -2, sanity: -1 } }),
+      ch('nod', { stats: { sanity: -2, humanity: 2 }, setFlags: ['flag:seenFlinch'], schedule: [{ familyId: 'stat_arc_humanity_2', inDays: 2 }],  tone: 'grim' }),
+      ch('speak', { stats: { reputation: 1, sanity: -3 },  tone: 'neutral' }),
+      skip({ stats: { humanity: -2, sanity: -1 } }),
     ],
   }),
   beat({
@@ -145,12 +145,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '有人来求助，你一秒就算完了：不帮',
-    body: '以前你会为算得这么快觉得丢脸。现在你只是确认：算完了，答案是不。',
+
+
     choices: [
-      ch('hate', '把这个速度当成病', { stats: { humanity: 3, sanity: -2 }, log: '你讨厌自己算得这么快。至少你还知道该讨厌。', tone: 'good' }),
-      ch('keep', '承认这就是新规矩', { stats: { humanity: -3, sanity: 2 }, log: '你没有改答案。一秒够了，你走开了。', tone: 'grim' }),
-      skip('你去洗手。刚才那一下计算还停在脑子里。', { stats: { stamina: -2 } }),
+      ch('hate', { stats: { humanity: 3, sanity: -2 },  tone: 'good' }),
+      ch('keep', { stats: { humanity: -3, sanity: 2 },  tone: 'grim' }),
+      skip({ stats: { stamina: -2 } }),
     ],
   }),
   beat({
@@ -161,12 +161,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: { all: ['rep:low'] },
-    title: '你敲门，里面有脚步，没有人开',
-    body: '脚步停在门后。呼吸很近。然后退远。你认识这扇门，以前借过盐。',
+
+
     choices: [
-      ch('leave', '留下半瓶水就走', { res: { water: -2 }, stats: { reputation: 3, humanity: 2 }, schedule: [{ familyId: 'stat_arc_rep_2', inDays: 3 }], log: '瓶子在门口。你下楼的时候没有回头。', tone: 'good' }, { requires: { res: { water: 2 } } }),
-      ch('wait', '再敲一次', { world: { exposure: 3 }, stats: { sanity: -2, reputation: -1 }, log: '你敲了。脚步更远。', tone: 'bad' }),
-      skip('你离开。门后的人松了一口气，你听见了。', { stats: { sanity: -3 } }),
+      ch('leave', { res: { water: -2 }, stats: { reputation: 3, humanity: 2 }, schedule: [{ familyId: 'stat_arc_rep_2', inDays: 3 }],  tone: 'good' }, { requires: { res: { water: 2 } } }),
+      ch('wait', { world: { exposure: 3 }, stats: { sanity: -2, reputation: -1 },  tone: 'bad' }),
+      skip({ stats: { sanity: -3 } }),
     ],
   }),
   beat({
@@ -176,11 +176,11 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '门口的瓶子不见了，换了一张字条：谢谢，别再来',
-    body: '字很工整。谢谢是真的。别再来也是真的。',
+
+
     choices: [
-      ch('keep', '把字条夹进日记', { stats: { sanity: 2, reputation: 1 }, log: '两句话都夹进日记：谢谢，别再来。', tone: 'neutral' }),
-      skip('你把字条揉了。', { stats: { sanity: -2 } }),
+      ch('keep', { stats: { sanity: 2, reputation: 1 },  tone: 'neutral' }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -191,12 +191,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: { all: ['light:off'] },
-    title: '半夜被楼上的脚步声吵醒',
-    body: '灯关着。半夜你被吵醒了，楼上有人在走，地板咯吱响。冰箱不转，屋里特别静，所以脚步听得格外清楚。过了几分钟眼睛才适应，你差点把墙角那团椅子的影子看成个人。',
+
+
     choices: [
-      ch('candle', '点蜡烛，把窗帘拉严', { stats: { sanity: 3 }, world: { exposure: 1 }, setFlags: ['flag:darkCandle'], schedule: [{ familyId: 'stat_arc_dark_2', inDays: 2 }], log: '蜡烛点了。窗帘拉严。楼上又走了两步。', tone: 'good' }),
-      ch('sit', '在黑里坐到不怕', { stats: { sanity: -3, stamina: 4 }, schedule: [{ familyId: 'stat_arc_dark_2', waitFor: 'setPowerPriority' }], log: '你坐着。后来不怕了，只是眼睛酸。', tone: 'neutral' }),
-      skip('去供电表把灯排上去。', { stats: { sanity: 1 } }),
+      ch('candle', { stats: { sanity: 3 }, world: { exposure: 1 }, setFlags: ['flag:darkCandle'], schedule: [{ familyId: 'stat_arc_dark_2', inDays: 2 }],  tone: 'good' }),
+      ch('sit', { stats: { sanity: -3, stamina: 4 }, schedule: [{ familyId: 'stat_arc_dark_2', waitFor: 'setPowerPriority' }],  tone: 'neutral' }),
+      skip({ stats: { sanity: 1 } }),
     ],
   }),
   beat({
@@ -206,12 +206,12 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '窗外有人问：还亮灯吗',
-    body: '灯还是关着。窗外有人喊，问这屋还亮不亮灯。你听不清是对面楼还是楼下。你要是答了，不管亮不亮，外面的人都知道这间屋子有人。',
+
+
     choices: [
-      ch('no', '说不亮', { stats: { sanity: 2 }, world: { exposure: -2 }, log: '你说了不亮。窗外没有第二句。', tone: 'good' }),
-      ch('yes', '说亮，然后立刻后悔', { stats: { sanity: -2 }, world: { exposure: 4 }, log: '你说了亮。窗帘缝外有人停了一下。', tone: 'bad' }),
-      skip('不回答。问了一会儿，外面自己停了。', { stats: { stamina: 4, sanity: -1 } }),
+      ch('no', { stats: { sanity: 2 }, world: { exposure: -2 },  tone: 'good' }),
+      ch('yes', { stats: { sanity: -2 }, world: { exposure: 4 },  tone: 'bad' }),
+      skip({ stats: { stamina: 4, sanity: -1 } }),
     ],
   }),
 ];

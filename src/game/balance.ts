@@ -4,6 +4,8 @@
 
 import type { EventKind, PowerLoadId, ResourceId, StatId } from './types';
 
+export { THREAT_NAMES, THREAT_DESC } from './copy/names';
+
 // ============================================================
 // 时间轴
 // ============================================================
@@ -25,18 +27,6 @@ export function threatOfDay(day: number): number {
   const w = Math.floor((day - TIME.COLLAPSE_DAY) / TIME.WEEK) + 1;
   return Math.min(TIME.MAX_THREAT, w);
 }
-
-export const THREAT_NAMES = ['备灾期', '恐慌期', '匮乏期', '掠夺期', '严冬期', '荒芜期', '死寂期'] as const;
-
-export const THREAT_DESC = [
-  '一切看起来还正常。',
-  '秩序在崩解，超市已经被搬空，警笛整夜不停。',
-  '货架彻底空了。人们开始为一箱水动手。',
-  '有组织的武装团体控制了街区。他们收"税"。',
-  '气温断崖下跌。冻死的人比饿死的多。',
-  '街上几乎见不到活人。能烧的都烧了。',
-  '只剩风声。你已经很久没听到别人的声音。',
-] as const;
 
 // ============================================================
 // 行动点与体力
@@ -323,7 +313,12 @@ export const POWER = {
     flood: 0.7,
     chemSpill: 0.8,
   } as Record<string, number>,
-  BATTERY_CAP: [0, 0, 4, 10],
+  /**
+   * 各发电等级的蓄电上限 (kWh)。
+   * 0 级也能靠充电宝/铅酸存一点；2 级铁锂、3 级大储能再加容量。
+   * 夜间有缺口时放电，光伏/市电有富余时回充，受此上限约束。
+   */
+  BATTERY_CAP: [8, 8, 12, 18],
   /** 缺电时默认的保障优先级 */
   DEFAULT_PRIORITY: [
     'filter',

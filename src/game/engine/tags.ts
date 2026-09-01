@@ -6,6 +6,8 @@
  */
 
 import { AIR, CAPS, EXPOSURE, HEALTH, RAD, THREAT_NAMES } from '../balance';
+import { RES_NAME, SKILL_NAME } from '../copy/names';
+import { t } from '../copy/t';
 import { MODULE_BY_ID, MODULE_IDS } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { parseTag } from '../tags';
@@ -148,6 +150,7 @@ export function deriveFacts(run: RunState): Facts {
   if (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0)) add('filter:expired');
   if (power.deficit > 0) add('power:deficit');
   if (power.generator > 0) add('power:generator');
+  if ((run.wear?.batteryCharge ?? 0) >= 0.5) add('power:battery');
   if (!loadOnline(run, 'lights', power)) add('light:off');
 
   const heads = headcount(run);
@@ -158,7 +161,8 @@ export function deriveFacts(run: RunState): Facts {
   {
     const filterOn = effectiveModule(run, 'filter', power) > 0;
     const hasWell = site.tags.includes('site:hasWell');
-    if (filterOn && !isPrecipWeather(w.weather) && !hasWell) add('water:recycling');
+    const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
+    if (filterOn && !isPrecipWeather(w.weather) && !hasWell && !cisternBusy) add('water:recycling');
   }
 
   // --- 玩家 ---
@@ -274,26 +278,6 @@ export interface RequirementResult {
   reason?: string;
 }
 
-const RES_NAMES: Record<string, string> = {
-  water: '水',
-  foodStaple: '罐头',
-  foodFresh: '生鲜',
-  meds: '药品',
-  fuel: '燃料',
-  materials: '建材',
-  parts: '零件',
-  ammo: '弹药',
-  cash: '现金',
-};
-
-const SKILL_NAMES: Record<string, string> = {
-  medicine: '医疗',
-  mechanics: '机械',
-  negotiation: '谈判',
-  fitness: '体能',
-  stealth: '隐蔽',
-};
-
 export function checkRequirement(req: Requirement | undefined, run: RunState, facts?: Facts): RequirementResult {
   if (!req) return { ok: true };
   const f = facts ?? deriveFacts(run);
@@ -303,36 +287,36 @@ export function checkRequirement(req: Requirement | undefined, run: RunState, fa
       const have = run.res[k as keyof typeof run.res] ?? 0;
       if (have < (need ?? 0)) {
         const short = Math.ceil((need ?? 0) - have);
-        return { ok: false, reason: `缺 ${short} ${RES_NAMES[k] ?? k}` };
+        return { ok: false, reason: t('ledger.req.res', { short, name: RES_NAME[k as keyof typeof RES_NAME] ?? k }) };
       }
     }
   }
   if (req.stats) {
     for (const [k, need] of Object.entries(req.stats)) {
       if ((run.stats[k as keyof typeof run.stats] ?? 0) < (need ?? 0)) {
-        return { ok: false, reason: req.reason ?? '状态不足' };
+        return { ok: false, reason: req.reason ?? t('ledger.req.stats') };
       }
     }
   }
   if (req.skills) {
     for (const [k, need] of Object.entries(req.skills)) {
       if ((run.skills[k as keyof typeof run.skills] ?? 0) < (need ?? 0)) {
-        return { ok: false, reason: `需要${SKILL_NAMES[k] ?? k} ${need} 级` };
+        return { ok: false, reason: t('ledger.req.skill', { name: SKILL_NAME[k as keyof typeof SKILL_NAME] ?? k, need }) };
       }
     }
   }
   if (req.modules) {
     for (const [k, need] of Object.entries(req.modules)) {
       if (run.modules[k as keyof typeof run.modules] < (need ?? 0)) {
-        return { ok: false, reason: req.reason ?? '避难所设施不足' };
+        return { ok: false, reason: req.reason ?? t('ledger.req.modules') };
       }
     }
   }
   if (req.ap !== undefined && run.ap < req.ap) {
-    return { ok: false, reason: `需要 ${req.ap} 行动点` };
+    return { ok: false, reason: t('ledger.req.ap', { ap: req.ap }) };
   }
   if (req.tags && !matchQuery(req.tags, f)) {
-    return { ok: false, reason: req.reason ?? '条件不满足' };
+    return { ok: false, reason: req.reason ?? t('ledger.req.tags') };
   }
   return { ok: true };
 }

@@ -104,10 +104,10 @@
 
 其中两项玩家能直接感知，建议优先：
 
-- **没有游戏内帮助** —— `Overlay` 类型里有 `'help'`，`App.tsx` 却没有渲染分支。一个 47 事件家族 / 10 模块 / 12 种状态的游戏没有规则说明
-- **保电优先级不可调** —— `setPowerPriority` 引擎已实现但 UI 零引用，玩家无法决定停电时先保什么
+- **没有游戏内帮助** —— 已接线：底栏「规则」打开 `HelpPanel`。
+- **保电优先级不可调** —— **已过期**：`PowerPanel` 已提供开关与上下排序。
 
-其余 5 项：施工进度条写死 50%（雇工/采购路径永远半满）、`Project.startedDay` 只写不读、`MetaState.seenVariants` 从不写入（图鉴恒空）、`Effect.unlock` 引擎不处理、`EXPOSURE.SRC_SALVAGE` 未使用。
+其余 5 项：施工进度条写死 50%（雇工/采购路径永远半满）、`Project.startedDay` 只写不读、`MetaState.seenVariants` 已在选项结算时写入、`Effect.unlock` 已进入 `pendingUnlocks` 并在结局结算并入、`EXPOSURE.SRC_SALVAGE` 已用于拆车暴露。
 
 ### P3 — 引擎健壮性（6 项）
 
@@ -115,7 +115,7 @@
 
 1. **pending 延期逻辑失效** —— `director.ts` 里 `dueDay` 每次被重写为 `run.day + 1` 而 `run.day` 单调递增，条件近乎恒真，「最多拖 5 天」永不生效
 2. **lint 与引擎行为不一致** —— `matchesForbid` 不处理 `none`，但 lint 的 `hasUsableVariant` 处理了。lint 认为能触发的，引擎认为不能
-3. **persist 无 version / migrate** —— key 带 `-v1` 但没用 zustand 的迁移机制，`RunState` 一改结构旧存档必崩且无提示
+3. **persist 无 version / migrate** —— 已加 `version: 2` 与 `migrate`，载入时走 `ensureRunDefaults`。
 
 ### P4 — lint / sim 覆盖盲区（8 项）
 

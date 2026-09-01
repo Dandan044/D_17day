@@ -9,11 +9,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['prep', 'survival'],
     once: true,
     weight: 7,
-    title: '你出门前把购物单又改了一遍',
-    body: '改到最后只剩三样：米、水和电池。货架上的货每天都不一样，纸上的单子也跟不上。\n真买到了，你得记得自己划掉过哪一行。',
+
+
     choices: [
-      ch('go', '带着改过的单子出门', { stats: { sanity: 2 }, setFlags: ['flag:rewroteList'], schedule: [{ familyId: 'hook_follow_buy', waitFor: 'buy' }], log: '单子折好塞进口袋。纸边已经软了。', tone: 'good' }),
-      skip('你把单子揉成一团。出门只靠脑子记。', { schedule: [{ familyId: 'hook_follow_buy', waitFor: 'visitShop' }] }),
+      ch('go', { stats: { sanity: 2 }, setFlags: ['flag:rewroteList'], schedule: [{ familyId: 'hook_follow_buy', waitFor: 'buy' }],  tone: 'good' }),
+      skip({ schedule: [{ familyId: 'hook_follow_buy', waitFor: 'visitShop' }] }),
     ],
   }),
   beat({
@@ -22,12 +22,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['prep', 'survival'],
     once: true,
     weight: 0,
-    title: '收银的时候单子上有一样你没买',
-    body: '货架上那一格是空的。单子上那一行还在，墨水比旁边的字更深。\n你可以再排一次队，也可以把这一行划掉。',
+
+
     choices: [
-      ch('sub', '用相近的东西替代', { res: { cash: -80, foodStaple: 2 }, stats: { sanity: 2 }, log: '替代品更贵，也更咸。单子上那一行你划掉了。', tone: 'good' }, { requires: { res: { cash: 80 } } }),
-      ch('empty', '让它空着', { stats: { sanity: -3 }, setFlags: ['flag:listHole'], log: '你把单子折回去。空着的那一行没有划掉。', tone: 'neutral' }),
-      skip('你把单子丢进柜台下的纸篓。', { stats: { sanity: 1 } }),
+      ch('sub', { res: { cash: -80, foodStaple: 2 }, stats: { sanity: 2 },  tone: 'good' }, { requires: { res: { cash: 80 } } }),
+      ch('empty', { stats: { sanity: -3 }, setFlags: ['flag:listHole'],  tone: 'neutral' }),
+      skip({ stats: { sanity: 1 } }),
     ],
   }),
   beat({
@@ -37,11 +37,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 7,
-    title: '你开始盘算要不要夜里出门',
-    body: '白天有人在路口看过往的包。夜里人少，看见你的人也少。\n你把鞋子放在门口，还没有穿。',
+
+
     choices: [
-      ch('plan', '把夜出路线在脑子里走一遍', { stats: { stamina: -4 }, setFlags: ['flag:plannedNight'], schedule: [{ familyId: 'hook_follow_night', waitFor: 'scavengeNight' }], log: '你在脑子里走了一遍。拐角有一盏还亮的灯，你决定绕开它。', tone: 'neutral' }),
-      skip('你把鞋收回去。今晚不出。', { schedule: [{ familyId: 'hook_follow_night', waitFor: ['scavengeNight', 'scavenge'] }] }),
+      ch('plan', { stats: { stamina: -4 }, setFlags: ['flag:plannedNight'], schedule: [{ familyId: 'hook_follow_night', waitFor: 'scavengeNight' }],  tone: 'neutral' }),
+      skip({ schedule: [{ familyId: 'hook_follow_night', waitFor: ['scavengeNight', 'scavenge'] }] }),
     ],
   }),
   beat({
@@ -51,12 +51,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '回来的路上有人喊你，喊的是"楼上的"',
-    body: '"喂，楼上的。"声音就在身后不远。你平时不回头，这次脚停了半步。\n停的那一下够对面看清你的背影。',
+
+
     choices: [
-      ch('run', '加快步子，不回头', { stats: { stamina: -10, sanity: -3 }, world: { exposure: 6 }, setFlags: ['flag:nightCalled'], log: '你上楼。钥匙孔找了两次。喊声没有跟上来。', tone: 'bad' }),
-      ch('answer', '隔着很远回一句"有事白天说"', { stats: { humanity: 1 }, world: { exposure: 8 }, log: '对方笑了一下。笑声比喊声更近。', tone: 'grim' }),
-      skip('你当没听见。脚步声和你的重叠了一会儿，分开了。', { world: { exposure: 4 }, stats: { sanity: -2 } }),
+      ch('run', { stats: { stamina: -10, sanity: -3 }, world: { exposure: 6 }, setFlags: ['flag:nightCalled'],  tone: 'bad' }),
+      ch('answer', { stats: { humanity: 1 }, world: { exposure: 8 },  tone: 'grim' }),
+      skip({ world: { exposure: 4 }, stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -67,11 +67,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     minThreat: 2,
-    title: '你把堵门的家具又试了一次角度',
-    body: '柜子能挡住门的下半截。上半截挡不住，你得自己顶着。你希望用不上。\n锤子还是放在手能够到的地方。',
+
+
     choices: [
-      ch('ready', '保持这个角度', { stats: { stamina: -6 }, setFlags: ['flag:bracedDoor'], schedule: [{ familyId: 'hook_follow_raid', waitFor: ['raid', 'raidFailed', 'raidRepelled'] }], log: '你推了一下柜子。推不动。锤子放在门边。', tone: 'neutral' }),
-      skip('你把锤子放回抽屉。抽屉关不上。', { schedule: [{ familyId: 'hook_follow_raid', waitFor: 'raid' }] }),
+      ch('ready', { stats: { stamina: -6 }, setFlags: ['flag:bracedDoor'], schedule: [{ familyId: 'hook_follow_raid', waitFor: ['raid', 'raidFailed', 'raidRepelled'] }],  tone: 'neutral' }),
+      skip({ schedule: [{ familyId: 'hook_follow_raid', waitFor: 'raid' }] }),
     ],
   }),
   beat({
@@ -81,12 +81,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '袭击过去之后，门框上多了一道新痕',
-    body: '不一定是他们留下的。也可能是你自己把门撞的。你分不清，这让你更烦。\n锤子还在原处。',
+
+
     choices: [
-      ch('fix_frame', '修门框', { res: { materials: -1 }, stats: { stamina: -10, sanity: 4 }, log: '你补了门框。新痕看不见了，木头上还留着一道浅槽。', tone: 'good' }, { requires: { res: { materials: 1 } } }),
-      ch('keep_scar', '留下当提醒', { stats: { sanity: -2 }, setFlags: ['flag:keptScar'], log: '出门时你会碰到那道痕。比在日历上画叉醒目。', tone: 'neutral' }),
-      skip('你在门框上挂了块布。至少不第一眼看见那道痕。', { stats: { sanity: 1 } }),
+      ch('fix_frame', { res: { materials: -1 }, stats: { stamina: -10, sanity: 4 },  tone: 'good' }, { requires: { res: { materials: 1 } } }),
+      ch('keep_scar', { stats: { sanity: -2 }, setFlags: ['flag:keptScar'],  tone: 'neutral' }),
+      skip({ stats: { sanity: 1 } }),
     ],
   }),
   beat({
@@ -96,11 +96,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 6,
-    title: '你答应自己下一回躺下就真的睡',
-    body: '上一回你躺下数管道的声音。上上回你听楼道有没有脚步。\n你答应自己这一回真的睡，话还没说出口。',
+
+
     choices: [
-      ch('permit', '今晚躺下就睡', { setFlags: ['flag:permitSleep'], schedule: [{ familyId: 'hook_follow_rest', waitFor: 'rest' }], log: '你对自己说了一句：睡。屋里没有第二个人。', tone: 'good' }),
-      skip('你又坐了一会儿。今晚先不躺。', { schedule: [{ familyId: 'hook_follow_rest', waitFor: ['rest', 'endDay'] }] }),
+      ch('permit', { setFlags: ['flag:permitSleep'], schedule: [{ familyId: 'hook_follow_rest', waitFor: 'rest' }],  tone: 'good' }),
+      skip({ schedule: [{ familyId: 'hook_follow_rest', waitFor: ['rest', 'endDay'] }] }),
     ],
   }),
   beat({
@@ -110,12 +110,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '你睡着了，中间醒了一次',
-    body: '醒的时候你以为门开了。门没有开。心跳过了一分钟才慢下来。\n外面可能什么都没有。',
+
+
     choices: [
-      ch('up', '起来确认门锁', { stats: { stamina: -6, sanity: 2 }, log: '锁还在。你骂了自己一句，又把门链再扣上。', tone: 'neutral' }),
-      ch('stay', '强迫自己再躺下', { stats: { stamina: 8, sanity: -2 }, log: '你躺下。没有数管道，骂了自己两句。', tone: 'good' }),
-      skip('你睁眼到天亮。没有再睡着。', { stats: { stamina: -8, sanity: -4 } }),
+      ch('up', { stats: { stamina: -6, sanity: 2 },  tone: 'neutral' }),
+      ch('stay', { stats: { stamina: 8, sanity: -2 },  tone: 'good' }),
+      skip({ stats: { stamina: -8, sanity: -4 } }),
     ],
   }),
   beat({
@@ -124,11 +124,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['prep', 'survival'],
     once: true,
     weight: 7,
-    title: '有一条情报你一直没点开核实',
-    body: '那条情报你一直没点开。你已经按自己的判断备了货，怕点开之后整套计划都要改。\n你把它标成未读，跟不想回的短信放在一起。',
+
+
     choices: [
-      ch('mark', '记住它在第几条', { setFlags: ['flag:savedUnreadIntel'], schedule: [{ familyId: 'hook_follow_intel', waitFor: 'verifyIntel' }], log: '你记住了它在第几条。红点还在。', tone: 'neutral' }),
-      skip('你把整页划掉。怕的那条混在里面。', { setFlags: ['flag:assumeWorst'], schedule: [{ familyId: 'hook_follow_intel', waitFor: ['verifyIntel', 'endDay'] }] }),
+      ch('mark', { setFlags: ['flag:savedUnreadIntel'], schedule: [{ familyId: 'hook_follow_intel', waitFor: 'verifyIntel' }],  tone: 'neutral' }),
+      skip({ setFlags: ['flag:assumeWorst'], schedule: [{ familyId: 'hook_follow_intel', waitFor: ['verifyIntel', 'endDay'] }] }),
     ],
   }),
   beat({
@@ -138,12 +138,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: { any: ['flag:savedUnreadIntel', 'flag:assumeWorst'] },
-    title: '核实之后，你原来的判断对不上了',
-    body: '核对完，原先那套判断对不上了。有一条对上，有一条对不上。\n你可以改计划，也可以当没看见。',
+
+
     choices: [
-      ch('widen', '按核实结果改计划', { stats: { sanity: -3 }, setFlags: ['flag:changedThesis'], log: '你改了计划里的一句话。手有点抖。', tone: 'neutral' }),
-      ch('patch', '当核实也有可能错', { stats: { sanity: 3 }, log: '你没改计划。纸上那一行划掉又写回原样。', tone: 'good' }),
-      skip('你休息了一会儿。对不上的那一行先不看。', { stats: { sanity: -2 } }),
+      ch('widen', { stats: { sanity: -3 }, setFlags: ['flag:changedThesis'],  tone: 'neutral' }),
+      ch('patch', { stats: { sanity: 3 },  tone: 'good' }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -152,11 +152,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 6,
-    title: '你把配给旋钮转来转去',
-    body: '旋钮上四个字：满、常、半、无。你的手指停在上面，还没按下。\n胃已经在叫。',
+
+
     choices: [
-      ch('decide', '先按下去，再后悔', { setFlags: ['flag:touchedRation'], schedule: [{ familyId: 'hook_follow_ration', waitFor: 'setRation' }], log: '你按下去了。旋钮停在新的一档。', tone: 'neutral' }),
-      skip('你没按。旋钮还停在原来的位置。', { schedule: [{ familyId: 'hook_follow_ration', waitFor: ['setRation', 'setWaterUse'] }] }),
+      ch('decide', { setFlags: ['flag:touchedRation'], schedule: [{ familyId: 'hook_follow_ration', waitFor: 'setRation' }],  tone: 'neutral' }),
+      skip({ schedule: [{ familyId: 'hook_follow_ration', waitFor: ['setRation', 'setWaterUse'] }] }),
     ],
   }),
   beat({
@@ -165,12 +165,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '改完配给的那一顿，你吃得很慢',
-    body: '这一顿比往常少。你嚼得很慢，心里在算还能吃几天。\n算完了，碗还没空。',
+
+
     choices: [
-      ch('ok', '按这个量吃下去', { stats: { sanity: 4, humanity: 1 }, setFlags: ['flag:acceptedRation'], log: '你把碗洗了。水池里没有剩饭。', tone: 'good' }),
-      ch('undo_feel', '吃完还是觉得不够', { stats: { sanity: -4 }, log: '你躺下。胃还在叫。', tone: 'grim' }),
-      skip('你把碗扣过去。剩的那点先不看。', { stats: { sanity: -2 } }),
+      ch('ok', { stats: { sanity: 4, humanity: 1 }, setFlags: ['flag:acceptedRation'],  tone: 'good' }),
+      ch('undo_feel', { stats: { sanity: -4 },  tone: 'grim' }),
+      skip({ stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -180,11 +180,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 6,
-    title: '柜子里能看见底板了',
-    body: '柜子里的罐子挪到两边，中间露出底板。花纹你以前没注意过。\n还没空，但已经能看见底板了——再少几罐就会见底。',
+
+
     choices: [
-      ch('rehearse', '在本子上写下粮尽之后怎么办', { setFlags: ['flag:rehearsedEmpty'], schedule: [{ familyId: 'hook_follow_low', waitFor: ['foodLow', 'waterLow'] }], log: '你写了：水尽、粮尽、然后怎样。怎样那一行空着。', tone: 'neutral' }),
-      skip('你把前排的罐子往中间挪，挡住底板。', { schedule: [{ familyId: 'hook_follow_low', waitFor: ['foodLow', 'hpLow'] }] }),
+      ch('rehearse', { setFlags: ['flag:rehearsedEmpty'], schedule: [{ familyId: 'hook_follow_low', waitFor: ['foodLow', 'waterLow'] }],  tone: 'neutral' }),
+      skip({ schedule: [{ familyId: 'hook_follow_low', waitFor: ['foodLow', 'hpLow'] }] }),
     ],
   }),
   beat({
@@ -194,12 +194,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '柜子空到能看见底板的那天到了',
-    body: '没有人敲门，也没有警报。就是少了几罐。你站在柜子前，本子上写过的「然后怎样」一句用不上。',
+
+
     choices: [
-      ch('count', '再数一遍，连半罐也算上', { stats: { sanity: -3 }, log: '你数到了半罐豆子。数字比想象的少。', tone: 'neutral' }),
-      ch('out', '立刻计划下一次外出', { stats: { stamina: -4, sanity: 2 }, world: { exposure: 2 }, log: '你把空包放回门口，拉链是开的。', tone: 'good' }),
-      skip('你坐在柜子前，直到腿麻。', { stats: { sanity: -4, stamina: -4 } }),
+      ch('count', { stats: { sanity: -3 },  tone: 'neutral' }),
+      ch('out', { stats: { stamina: -4, sanity: 2 }, world: { exposure: 2 },  tone: 'good' }),
+      skip({ stats: { sanity: -4, stamina: -4 } }),
     ],
   }),
   beat({
@@ -208,11 +208,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 5,
-    title: '你考虑把用电改成更狠的档',
-    body: '灯、收音机、水泵，电不够就得有一样先停。你在纸上排过序，写完自己停了一下。',
+
+
     choices: [
-      ch('list', '把名单写下来', { setFlags: ['flag:powerList'], schedule: [{ familyId: 'hook_follow_power', waitFor: ['setPowerPriority', 'setPowerMode'] }], log: '纸上三样：水泵、收音机、灯。灯排最后，你还要看得见门锁。', tone: 'neutral' }),
-      skip('你没写。今晚先不改档。', { schedule: [{ familyId: 'hook_follow_power', waitFor: ['setPowerPriority', 'setPowerMode', 'maintain'] }] }),
+      ch('list', { setFlags: ['flag:powerList'], schedule: [{ familyId: 'hook_follow_power', waitFor: ['setPowerPriority', 'setPowerMode'] }],  tone: 'neutral' }),
+      skip({ schedule: [{ familyId: 'hook_follow_power', waitFor: ['setPowerPriority', 'setPowerMode', 'maintain'] }] }),
     ],
   }),
   beat({
@@ -221,12 +221,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '改档之后屋子立刻暗了下来',
-    body: '灯暗了，水泵也停了。以前被机器盖住的声音现在听得很清：衣服摩擦、楼上的脚步。',
+
+
     choices: [
-      ch('accept_dark', '在暗处坐一会儿', { stats: { sanity: 3 }, log: '你坐了一会儿。耳朵习惯了，没有再去拧开关。', tone: 'good' }),
-      ch('miss', '开始想念那个嗡嗡', { stats: { sanity: -3 }, log: '你把手放在停掉的机器上。壳还是温的。', tone: 'neutral' }),
-      skip('你去睡觉。黑暗里找牙刷，找了很久。', { stats: { stamina: -4 } }),
+      ch('accept_dark', { stats: { sanity: 3 },  tone: 'good' }),
+      ch('miss', { stats: { sanity: -3 },  tone: 'neutral' }),
+      skip({ stats: { stamina: -4 } }),
     ],
   }),
   beat({
@@ -235,11 +235,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 5,
-    title: '半成品的工程在屋子里占地方',
-    body: '木屑、电线、没拧上的螺丝堆在屋中间。走路得绕开。\n做下去会响，停下就一直挡路。',
+
+
     choices: [
-      ch('commit', '今天必须碰它一下', { setFlags: ['flag:mustWork'], schedule: [{ familyId: 'hook_follow_work', waitFor: ['work', 'build'] }], log: '你把扳手放回手边。今天总得拧两颗。', tone: 'good' }),
-      skip('你拿布盖上。堆还在，只是看不见螺丝。', { schedule: [{ familyId: 'hook_follow_work', waitFor: ['work', 'cancelProject'] }] }),
+      ch('commit', { setFlags: ['flag:mustWork'], schedule: [{ familyId: 'hook_follow_work', waitFor: ['work', 'build'] }],  tone: 'good' }),
+      skip({ schedule: [{ familyId: 'hook_follow_work', waitFor: ['work', 'cancelProject'] }] }),
     ],
   }),
   beat({
@@ -248,12 +248,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '你碰过它了，手还在抖',
-    body: '工程没做完。地上的木屑换了位置，有两颗螺丝已经拧进去了。',
+
+
     choices: [
-      ch('continue', '趁手热再做一会', { stats: { stamina: -8, sanity: 4 }, skills: { mechanics: 1 }, log: '你又拧了两颗。手还在抖，螺丝是紧的。', tone: 'good' }),
-      ch('stop_now', '到此为止，怕出声', { world: { exposure: -2 }, stats: { sanity: 1 }, log: '你停了。手上的热还没散，门已经关上。', tone: 'neutral' }),
-      skip('你去洗手。木屑在纹路里。', { stats: { stamina: -2 } }),
+      ch('continue', { stats: { stamina: -8, sanity: 4 }, skills: { mechanics: 1 },  tone: 'good' }),
+      ch('stop_now', { world: { exposure: -2 }, stats: { sanity: 1 },  tone: 'neutral' }),
+      skip({ stats: { stamina: -2 } }),
     ],
   }),
   beat({
@@ -262,11 +262,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 5,
-    title: '你给背包画了负重刻度',
-    body: '你用笔画了几道线，大概到哪儿该停。称不准，但肩会先疼。\n你还是画了，免得每次都靠感觉。',
+
+
     choices: [
-      ch('scale', '按刻度装包', { setFlags: ['flag:packMarks'], schedule: [{ familyId: 'hook_follow_haul', waitFor: 'takeHaul' }], log: '刻度画歪了。你还是按它装。', tone: 'good' }),
-      skip('你把笔收起来。装多重还是看出门以后肩疼不疼。', { schedule: [{ familyId: 'hook_follow_haul', waitFor: ['takeHaul', 'scavenge'] }] }),
+      ch('scale', { setFlags: ['flag:packMarks'], schedule: [{ familyId: 'hook_follow_haul', waitFor: 'takeHaul' }],  tone: 'good' }),
+      skip({ schedule: [{ familyId: 'hook_follow_haul', waitFor: ['takeHaul', 'scavenge'] }] }),
     ],
   }),
   beat({
@@ -275,12 +275,12 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    title: '东西带回来以后，有一样你不记得捡过',
-    body: '包底多了一件东西，巴掌大。你不记得捡过。可能在暗处抓错了，也可能有人塞进来的。\n你把它拿到灯下看。',
+
+
     choices: [
-      ch('keep', '留下，当运气', { res: { parts: 1 }, stats: { sanity: -2 }, log: '你留下了。说不上是捡到的还是被人塞的。', tone: 'neutral' }),
-      ch('toss', '扔掉，当风险', { stats: { sanity: 3, humanity: 1 }, world: { exposure: -2 }, log: '你扔进楼道。东西碰地响了一下。', tone: 'good' }),
-      skip('你把它放在门口，明天再决定。', { stats: { sanity: -1 } }),
+      ch('keep', { res: { parts: 1 }, stats: { sanity: -2 },  tone: 'neutral' }),
+      ch('toss', { stats: { sanity: 3, humanity: 1 }, world: { exposure: -2 },  tone: 'good' }),
+      skip({ stats: { sanity: -1 } }),
     ],
   }),
 
@@ -296,402 +296,402 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
       {
         id: 'assume',
         require: { all: ['flag:assumeWorst'] },
-        title: '你按最坏的情况安排了一天',
-        body: '水多备一点，窗少开，话少说。最坏的没来，你只是累；来了，你能少慌一会儿。',
+
+
         choices: [
-          { id: 'keep', label: '继续按最坏来', effect: { stats: { stamina: -6, sanity: 3 }, log: '你把窗帘再拉严一寸。', tone: 'neutral' } },
-          { id: 'ease', label: '允许自己松一点', effect: { stats: { sanity: 5, stamina: 4 }, log: '你开了一条窗缝。外面没有人。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你在脑子里把最坏的情况又过了一遍，然后去干活。', tone: 'neutral' } },
+          { id: 'keep',  effect: { stats: { stamina: -6, sanity: 3 },  tone: 'neutral' } },
+          { id: 'ease',  effect: { stats: { sanity: 5, stamina: 4 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'dog',
         require: { all: ['flag:dogWarning'] },
-        title: '狗警告过的那道门，你后来又检查了一次',
-        body: '划痕还在。没有新的。你还是把椅子顶上。',
+
+
         choices: [
-          { id: 'trust', label: '继续听它的', effect: { world: { exposure: -3 }, stats: { sanity: 2 }, log: '椅子顶上了。狗看了你一眼，躺下。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你摸了摸它的头。椅子还顶在门上。', tone: 'neutral' } },
+          { id: 'trust',  effect: { world: { exposure: -3 }, stats: { sanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'lijie_no',
         require: { all: ['flag:refusedLijie'] },
-        title: '你拒绝过的那个人，楼道里不再打招呼',
-        body: '视线会碰一下，立刻分开。两边都假装在看自己的脚。',
+
+
         choices: [
-          { id: 'note', label: '把这记成代价', effect: { stats: { humanity: -1, sanity: -2 }, world: { neighborhood: -2 }, log: '你在本子上记了一笔。她没再叫你的名字。', tone: 'grim' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你们各自走完自己的楼梯。', tone: 'neutral' } },
+          { id: 'note',  effect: { stats: { humanity: -1, sanity: -2 }, world: { neighborhood: -2 },  tone: 'grim' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'gun',
         require: { all: ['flag:hasGun'] },
-        title: '枪在柜子里，你老是想起它在哪一层',
-        body: '你没有拿出来。你知道它垫在哪条毛巾下面。光是知道这件事，干活时就会分神。',
+
+
         choices: [
-          { id: 'check', label: '确认还在', effect: { stats: { sanity: -2, stamina: -2 }, log: '还在。你关柜门时手很轻。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你从柜子旁边走过，没有停。', tone: 'neutral' } },
+          { id: 'check',  effect: { stats: { sanity: -2, stamina: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'family_here',
         require: { all: ['flag:familyHere'] },
-        title: '家里多出来的呼吸声让你睡不沉',
-        body: '你一个人过了很久。现在黑暗里能听见别人翻身、有人磨牙。你不是嫌他们，只是还不习惯。',
+
+
         choices: [
-          { id: 'talk', label: '低声确认彼此都还醒着', effect: { stats: { sanity: 4, humanity: 2 }, log: '有人回了一声。你翻了个身。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你听着他们的呼吸，直到自己也睡着。', tone: 'neutral' } },
+          { id: 'talk',  effect: { stats: { sanity: 4, humanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'quit',
         require: { all: ['flag:quitJob'] },
-        title: '你已经没有上班的地方，闹钟还是响了',
-        body: '手比脑子快。你按掉它，发现自己还在摸工牌该在的那只口袋。',
+
+
         choices: [
-          { id: 'disable', label: '把闹钟扔掉', effect: { stats: { sanity: 3 }, log: '闹钟撞在桶里，响了一下，停了。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你让它再响一次。然后按掉。', tone: 'neutral' } },
+          { id: 'disable',  effect: { stats: { sanity: 3 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'stranger',
         require: { all: ['flag:trustedStranger'] },
-        title: '你放进来过的那个人，后来没有再出现',
-        body: '这可能是好事。你仍然会在敲门时先想那张脸。',
+
+
         choices: [
-          { id: 'lock', label: '以后更慢地开门', effect: { world: { exposure: -2 }, stats: { sanity: 1 }, log: '猫眼你看了三遍。第三遍才拧锁。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '那张脸淡了一点，没有消失。', tone: 'neutral' } },
+          { id: 'lock',  effect: { world: { exposure: -2 }, stats: { sanity: 1 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'notebook',
         require: { all: ['flag:hasNotebook'] },
-        title: '笔记本里有一页你不敢再读',
-        body: '字是你的笔迹。内容像另一个人写的。你把那一页折了角，当它不存在。折角反而更显眼。',
+
+
         choices: [
-          { id: 'read', label: '读完', effect: { stats: { sanity: -4, humanity: 2 }, log: '你读完了。手按在纸上，等到字不再跳。', tone: 'grim' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '折角还在。你把本子合上。', tone: 'neutral' } },
+          { id: 'read',  effect: { stats: { sanity: -4, humanity: 2 },  tone: 'grim' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'locked',
         require: { all: ['flag:lockedStores'] },
-        title: '你把能锁的都锁了，包括自己经常用的',
-        body: '找东西多花一分钟。多出来的一分钟是为了确认：锁还在，东西还在。',
+
+
         choices: [
-          { id: 'keep_lock', label: '继续锁', effect: { stats: { sanity: 2, stamina: -3 }, log: '钥匙串又响了一下。你数了数，一把都在。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你站在锁面前，没有开。', tone: 'neutral' } },
+          { id: 'keep_lock',  effect: { stats: { sanity: 2, stamina: -3 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'marked_f',
         require: { all: ['flag:markedFriendly'] },
-        title: '墙上那句友好的话，被后来的字盖住了',
-        body: '盖住它的人不一定怀敌意。只是地方不够。你的字还在最底下，能看见一截笔画。',
+
+
         choices: [
-          { id: 'rewrite', label: '在旁边再写一次', effect: { stats: { humanity: 2, reputation: 1 }, world: { exposure: 3 }, log: '你写了。字小一点。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '旧字就旧着。你上楼了。', tone: 'neutral' } },
+          { id: 'rewrite',  effect: { stats: { humanity: 2, reputation: 1 }, world: { exposure: 3 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'dj',
         require: { all: ['flag:knowsDJ'] },
-        title: '你还记得那个电台声音，即使它已经不播了',
-        body: '有时你会把收音机拧到那个频率，听沙沙声，假装他还在后台准备下一首歌。',
+
+
         choices: [
-          { id: 'listen', label: '再听一次空频', effect: { stats: { sanity: 2 }, log: '还是沙沙声。你点了下头，像跟熟人打招呼。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你没有拧。那个人的声音你还记得。', tone: 'neutral' } },
+          { id: 'listen',  effect: { stats: { sanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'numbers',
         require: { all: ['flag:numbersStation'] },
-        title: '数字电台的那组数你会在无聊时默念',
-        body: '没有破译。只是嘴里需要念点什么，这组数不伤人。',
+
+
         choices: [
-          { id: 'write', label: '写下来再藏好', effect: { stats: { sanity: 2 }, setFlags: ['flag:knowsNorthRoute'], log: '你写在纸上，夹进贴身的口袋。数字不会自己忘掉。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你默念到一半忘了。忘了也好。', tone: 'neutral' } },
+          { id: 'write',  effect: { stats: { sanity: 2 }, setFlags: ['flag:knowsNorthRoute'],  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'crossed',
         require: { all: ['flag:crossedLine'] },
-        title: '你越过的那条线，会在洗手时回来',
-        body: '肥皂很普通。普通到你更清楚手做过什么。',
+
+
         choices: [
-          { id: 'wash', label: '多洗一遍', effect: { res: { water: -1 }, stats: { sanity: -2, humanity: -1 }, log: '你又洗了一遍。皮肤干净了，那件事还在。', tone: 'grim' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你把水龙头关上。下次洗手还会想起来。', tone: 'neutral' } },
+          { id: 'wash',  effect: { res: { water: -1 }, stats: { sanity: -2, humanity: -1 },  tone: 'grim' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'watch',
         require: { all: ['flag:joinedWatch'] },
-        title: '巡夜的班次还在，人员已经不齐',
-        body: '有人把你的名字写在值班表上。你没有去认领，表还是写着。',
+
+
         choices: [
-          { id: 'go', label: '去站一晚', effect: { stats: { stamina: -12, reputation: 3 }, world: { exposure: 4, neighborhood: 4 }, log: '你站了一晚。夜里很冷。表上的名字对上了人。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '表还在楼道墙上。你的名字在上面过了一夜。', tone: 'neutral' } },
+          { id: 'go',  effect: { stats: { stamina: -12, reputation: 3 }, world: { exposure: 4, neighborhood: 4 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'militia',
         require: { all: ['flag:militiaFavor'] },
-        title: '自治队的人在楼下喊过你的外号',
-        body: '外号不是你起的。他们在楼下喊出来，整栋楼都能听见。',
+
+
         choices: [
-          { id: 'hide', label: '这几天少出门', effect: { world: { exposure: -4 }, stats: { sanity: -2 }, log: '你少出门。楼下还有人在用那个外号。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你假装没听见，继续上楼。', tone: 'neutral' } },
+          { id: 'hide',  effect: { world: { exposure: -4 }, stats: { sanity: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'refused_t',
         require: { all: ['flag:refusedTribute'] },
-        title: '拒绝交保护费之后，楼道里看你的眼光多停了一下',
-        body: '没有人明说。只是路过时多盯你一眼，然后才挪开。',
+
+
         choices: [
-          { id: 'prepare', label: '把堵门再加固', effect: { res: { materials: -1 }, world: { exposure: -2 }, log: '你加固了。人进不来，说话声还是能从门缝进来。', tone: 'good' }, requires: { res: { materials: 1 } } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你低着头快步走过。', tone: 'neutral' } },
+          { id: 'prepare',  effect: { res: { materials: -1 }, world: { exposure: -2 },  tone: 'good' }, requires: { res: { materials: 1 } } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'gov_h',
         require: { all: ['flag:govHostile'] },
-        title: '登记处的人把你的名字念错了一次，然后笑',
-        body: '错得不像口误。你没有纠正。纠正就得走到窗前。',
+
+
         choices: [
-          { id: 'correct', label: '走过去更正', effect: { world: { exposure: 5 }, stats: { sanity: -3 }, log: '你更正了。他们记下了正确的名字，也记下了你愿意走近。', tone: 'bad' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '错误的名字也许更安全。你没有去问。', tone: 'neutral' } },
+          { id: 'correct',  effect: { world: { exposure: 5 }, stats: { sanity: -3 },  tone: 'bad' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'collab',
         require: { all: ['flag:markedCollaborator'] },
-        title: '有人把"内应"两个字用粉笔写在你楼下',
-        body: '字很快被鞋蹭花。花了还是能认。',
+
+
         choices: [
-          { id: 'erase', label: '擦掉', effect: { stats: { stamina: -8, sanity: -3 }, world: { exposure: 3 }, log: '你擦了。粉还在砖缝里。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你绕开那块砖上楼。', tone: 'neutral' } },
+          { id: 'erase',  effect: { stats: { stamina: -8, sanity: -3 }, world: { exposure: 3 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'boat',
         require: { all: ['flag:boatAccess'] },
-        title: '你记得那条船的停靠点，即使现在用不上',
-        body: '城里没发大水。那条船的停靠点你还记得，只是用不上。',
+
+
         choices: [
-          { id: 'map', label: '把路线画下来', effect: { stats: { sanity: 2 }, log: '你画了。纸上的河比窗外那条干净。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '路线还在脑子里。你没有下楼。', tone: 'neutral' } },
+          { id: 'map',  effect: { stats: { sanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'rescue',
         require: { all: ['flag:rescueContact'] },
-        title: '救援队留下的呼号你试过，没有人接',
-        body: '没有人接，不等于没人在听。这个想法帮不上忙，但你会反复这么想。',
+
+
         choices: [
-          { id: 'retry', label: '再试一次', effect: { world: { exposure: 3 }, stats: { sanity: -2 }, log: '还是没有人接。你把呼号在纸上又写大了一号。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '电台关着。呼号写在旁边那张纸上。', tone: 'neutral' } },
+          { id: 'retry',  effect: { world: { exposure: 3 }, stats: { sanity: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'fired',
         require: { all: ['flag:firedWarning'] },
-        title: '你开过那一枪之后，耳朵里空了一块',
-        body: '枪声过去之后耳朵里空了一块，像塞了棉花。你甩头也甩不掉。',
+
+
         choices: [
-          { id: 'clean', label: '把枪擦一遍', effect: { stats: { stamina: -4, sanity: -2 }, log: '金属味。棉花还在，枪管凉了。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你没有再碰枪。耳朵里那一块空着。', tone: 'neutral' } },
+          { id: 'clean',  effect: { stats: { stamina: -4, sanity: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'fought',
         require: { all: ['flag:foughtSoldiers'] },
-        title: '跟穿制服的人动手之后，你路过迷彩会停半秒',
-        body: '停的那半秒里你分不清是怕还是怒。半秒已经够被对面看见。',
+
+
         choices: [
-          { id: 'avoid', label: '改道', effect: { stats: { stamina: -6 }, world: { exposure: -2 }, log: '你改道。迷彩还在原处。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你走过去。停了半秒，然后继续走。', tone: 'neutral' } },
+          { id: 'avoid',  effect: { stats: { stamina: -6 }, world: { exposure: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'officer',
         require: { all: ['flag:officerFavor'] },
-        title: '那个官员说可以帮你，你还没有去兑现',
-        body: '名片还在抽屉里。他说可以帮你，你一直没去找。再拖下去，人家可能不认了。',
+
+
         choices: [
-          { id: 'hold', label: '继续留着不用', effect: { stats: { sanity: -2 }, log: '你留着。名片边角已经软了。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '名片还在抽屉里。你没有出门。', tone: 'neutral' } },
+          { id: 'hold',  effect: { stats: { sanity: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'blizzard_open',
         require: { all: ['flag:openedDoorInBlizzard'] },
-        title: '你开过门放人进来的那晚，门缝现在灌风',
-        body: '风是后来的。门缝是你留下的。那晚你开过这扇门。',
+
+
         choices: [
-          { id: 'seal', label: '把缝补上', effect: { res: { materials: -1 }, log: '你补了。风小了。那晚的事还在。', tone: 'good' }, requires: { res: { materials: 1 } } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '风从门缝进来。你没有去堵。', tone: 'neutral' } },
+          { id: 'seal',  effect: { res: { materials: -1 },  tone: 'good' }, requires: { res: { materials: 1 } } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'blizzard_closed',
         require: { all: ['flag:closedDoorInBlizzard'] },
-        title: '你关上的那扇门，外面后来没有声音了',
-        body: '没有声音，可能是人走了，也可能是人停了。你没有开门去看。',
+
+
         choices: [
-          { id: 'live', label: '把这件事当成走了', effect: { stats: { sanity: 3, humanity: -2 }, log: '你当他们走了。门一直关着。', tone: 'grim' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '门关着。你没有去看外面。', tone: 'neutral' } },
+          { id: 'live',  effect: { stats: { sanity: 3, humanity: -2 },  tone: 'grim' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'abandoned',
         require: { all: ['flag:abandonedShelter'] },
-        title: '你弃过一个地方，现在有时会梦见回去',
-        body: '梦里钥匙还管用。醒来你没有那把钥匙。',
+
+
         choices: [
-          { id: 'wake', label: '醒来后把梦写下来', effect: { stats: { sanity: 2 }, log: '写下来之后，梦里的门小了一点。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '梦还会再来。钥匙不会回来。', tone: 'neutral' } },
+          { id: 'wake',  effect: { stats: { sanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'sump',
         require: { all: ['flag:sumpPump'] },
-        title: '你装过的泵，现在轮到你怀疑它还转不转',
-        body: '没有水淹。你还是会走过去看一眼泵，听它转不转。',
+
+
         choices: [
-          { id: 'test', label: '试转一次', effect: { res: { fuel: -0.5 }, stats: { sanity: 2 }, log: '转了。声音难听，但转了。', tone: 'good' }, requires: { res: { fuel: 1 } } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '泵在角落里。你没有去试。', tone: 'neutral' } },
+          { id: 'test',  effect: { res: { fuel: -0.5 }, stats: { sanity: 2 },  tone: 'good' }, requires: { res: { fuel: 1 } } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'trader',
         require: { all: ['flag:metTrader'] },
-        title: '那个推车的人如果再来，你会不会开门',
-        body: '问题先到了。答案你还没有。货也不在门口。',
+
+
         choices: [
-          { id: 'yes', label: '会，但先看货', effect: { stats: { sanity: 2 }, log: '你把决定记在门口：先看货，再开门。货还没来。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '这个问题你留到明天。', tone: 'neutral' } },
+          { id: 'yes',  effect: { stats: { sanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'seeds',
         require: { all: ['flag:hasSeeds'] },
-        title: '种子还在，你没有地可以撒',
-        body: '阳台你不敢用。花盆不够。种子不着急发芽，你着急。',
+
+
         choices: [
-          { id: 'pot', label: '用破盆先养着', effect: { stats: { sanity: 3, stamina: -4 }, log: '几粒下去。土是从楼道角上刮的。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '种子还在纸包里。你没有拆。', tone: 'neutral' } },
+          { id: 'pot',  effect: { stats: { sanity: 3, stamina: -4 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'tintel',
         require: { all: ['flag:traderIntel'] },
-        title: '商人告诉你的那条路，你还没有去验证',
-        body: '他说起来只有两句话。城里那条路可能已经封了。',
+
+
         choices: [
-          { id: 'note', label: '写进出行备选', effect: { stats: { sanity: 1 }, log: '备选名单多了一行。一行不保证能走。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '那条路还只在嘴里。你没有出门。', tone: 'neutral' } },
+          { id: 'note',  effect: { stats: { sanity: 1 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'rob_t',
         require: { all: ['flag:robbedTrader'] },
-        title: '你抢过一个推车的人，后来街上少了轮子声',
-        body: '可能是他走了。可能是别人也不来了。你承担不起出门去查。',
+
+
         choices: [
-          { id: 'live', label: '把这记成你付过的价', effect: { stats: { humanity: -2, sanity: -3 }, log: '本子上多记了一项。没有金额。', tone: 'grim' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '街上没有轮子声。你没有下去看。', tone: 'neutral' } },
+          { id: 'live',  effect: { stats: { humanity: -2, sanity: -3 },  tone: 'grim' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'pump_key',
         require: { all: ['flag:pumpRoomKey'] },
-        title: '泵房钥匙在你这里，你没有告诉任何人',
-        body: '钥匙很轻。楼里的水泵要靠它。你没把这件事告诉任何人。',
+
+
         choices: [
-          { id: 'hide', label: '藏得更深', effect: { stats: { sanity: -2 }, log: '你换了藏处。连自己都要找一会儿。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '钥匙还在原来的抽屉里。你没有动。', tone: 'neutral' } },
+          { id: 'hide',  effect: { stats: { sanity: -2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'dead',
         require: { all: ['flag:tookFromDead'] },
-        title: '从死者那里拿来的东西，你单独放',
-        body: '你把这些东西单独放。怕跟日常用品混在一起之后，每次伸手都会想起来是从哪拿的。',
+
+
         choices: [
-          { id: 'use', label: '还是用，因为需要', effect: { stats: { humanity: -2, sanity: -2 }, log: '你用了。先顾眼前缺的那样。', tone: 'grim' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '东西还单独放着。你没有去拿。', tone: 'neutral' } },
+          { id: 'use',  effect: { stats: { humanity: -2, sanity: -2 },  tone: 'grim' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'fam_found',
         require: { all: ['flag:familyFound'] },
-        title: '你得到过他们还在的消息，之后消息停了',
-        body: '消息停了。停了不等于他们不在了，只是你再也等不到下一条。',
+
+
         choices: [
-          { id: 'keep', label: '把最后一条反复听', effect: { stats: { sanity: -3, humanity: 2 }, log: '你听。录音没有变长。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '收音机关着。最后那条还在脑子里。', tone: 'neutral' } },
+          { id: 'keep',  effect: { stats: { sanity: -3, humanity: 2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'fam_unk',
         require: { all: ['flag:familyUnknown'] },
-        title: '你还不知道他们在哪',
-        body: '没有地址，也没有新消息。你想写信，又不知道往哪寄。这件事整天压在胸口，干活时也会冒出来。',
+
+
         choices: [
-          { id: 'write', label: '写信，即使没有地址', effect: { stats: { sanity: 3, humanity: 2 }, log: '你写了。信放进抽屉。现在没有邮局可去。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你没有写。胸口还是闷。', tone: 'neutral' } },
+          { id: 'write',  effect: { stats: { sanity: 3, humanity: 2 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'convoy_f',
         require: { all: ['flag:convoyFailed'] },
-        title: '车队的消息后来证明是空的',
-        body: '车队的消息是假的。你还在这间屋子里。',
+
+
         choices: [
-          { id: 'stay', label: '把"留下"写成决定，不当失败', effect: { stats: { sanity: 4 }, setFlags: ['flag:choseToStay'], log: '你在本子上写了：留下。字很端正。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '假消息你不再听。人还在屋里。', tone: 'neutral' } },
+          { id: 'stay',  effect: { stats: { sanity: 4 }, setFlags: ['flag:choseToStay'],  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'property',
         require: { all: ['flag:propertyDeal'] },
-        title: '你跟物业做过的那个交易，收据已经皱了',
-        body: '皱收据你还留着，好像留着就能管用。门会不会开，它管不了。',
+
+
         choices: [
-          { id: 'keep', label: '夹进贴身口袋', effect: { stats: { sanity: 2 }, log: '纸贴着胸口。你数了两下心跳，收据还在。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '收据还在原处，更皱了一点。', tone: 'neutral' } },
+          { id: 'keep',  effect: { stats: { sanity: 2 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'robbed',
         require: { all: ['flag:robbedOnce'] },
-        title: '你被抢过一次，现在开门的动作会先停顿',
-        body: '被抢过那次之后，你开门会先停一下。门链还没装上。',
+
+
         choices: [
-          { id: 'chain', label: '加装门链', effect: { res: { materials: -1 }, world: { exposure: -2 }, log: '门链装上了。开门时先只能开一条缝。', tone: 'good' }, requires: { res: { materials: 1 } } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '开门时你还是会先停一下。', tone: 'neutral' } },
+          { id: 'chain',  effect: { res: { materials: -1 }, world: { exposure: -2 },  tone: 'good' }, requires: { res: { materials: 1 } } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'took_fam',
         require: { all: ['flag:tookInFamily'] },
-        title: '你收过人对，屋里说话的回声都不一样了',
-        body: '即使他们已经不在，你有时还会下意识留一双筷子，或者听墙上有没有第二个人的动静。',
+
+
         choices: [
-          { id: 'listen', label: '在墙边站一会儿', effect: { stats: { sanity: 2, humanity: 1 }, log: '墙没有出声。你还是站完了。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你去干活了。屋里只有你的脚步。', tone: 'neutral' } },
+          { id: 'listen',  effect: { stats: { sanity: 2, humanity: 1 },  tone: 'neutral' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
       {
         id: 'fake_script',
         require: { all: ['flag:fakeScript'] },
-        title: '那张旧处方还在钱包里',
-        body: '药店可能已经不在了。处方还夹在钱包夹层，边角磨毛了。',
+
+
         choices: [
-          { id: 'burn', label: '烧掉', effect: { stats: { sanity: 3, humanity: 1 }, log: '灰很小。钱包轻了一点。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '钱包还是那个厚度。', tone: 'neutral' } },
+          { id: 'burn',  effect: { stats: { sanity: 3, humanity: 1 },  tone: 'good' } },
+          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
         ],
       },
     ],

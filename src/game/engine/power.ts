@@ -2,29 +2,16 @@
  * 供电：光伏随天气，柴油机只补缺口，家电走优先级表。
  */
 
-import { POWER, TIME } from '../balance';
+import { POWER, TIME, WEAR } from '../balance';
+import { LOAD_NAME } from '../copy/names';
 import { MODULE_BY_ID, MODULE_IDS, moduleSpec } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import type { ApplianceId, ModuleId, PowerLoadId, RunState } from '../types';
 import { electricHeatKwh } from './climate';
 
-export const APPLIANCE_IDS: ApplianceId[] = ['lights', 'fridge', 'heater'];
+export { LOAD_NAME };
 
-export const LOAD_NAME: Record<PowerLoadId, string> = {
-  fortify: '加固',
-  conceal: '隐蔽',
-  cistern: '储水',
-  filter: '净水',
-  power: '发电',
-  insulate: '保温',
-  airFilter: '空气过滤',
-  medbay: '医疗站',
-  garden: '农圃',
-  radio: '无线电',
-  lights: '灯光照明',
-  fridge: '冰箱',
-  heater: '电热',
-};
+export const APPLIANCE_IDS: ApplianceId[] = ['lights', 'fridge', 'heater'];
 
 export interface PowerDraw {
   id: PowerLoadId;
@@ -38,13 +25,37 @@ export interface PowerReport {
   solar: number;
   grid: number;
   generator: number;
+  /** 今晚从蓄电池抽出的电量 */
   battery: number;
+  /** 结算前的蓄电存量 */
+  batteryStored: number;
+  batteryCap: number;
+  /** 光伏/市电富余将回充的量（预览，不改状态） */
+  batteryGain: number;
   output: number;
   demand: number;
   deficit: number;
   offline: PowerLoadId[];
   fuelBurn: number;
   draws: PowerDraw[];
+}
+
+export function batteryCapacity(run: RunState): number {
+  const lvl = Math.max(0, Math.min(3, run.modules.power ?? 0));
+  return POWER.BATTERY_CAP[lvl] ?? POWER.BATTERY_CAP[0] ?? 8;
+}
+
+export function clampBattery(run: RunState): void {
+  if (!run.wear) run.wear = { filterLife: WEAR.FILTER_LIFE, generatorOil: WEAR.GENERATOR_OIL, batteryCharge: 0 };
+  run.wear.batteryCharge = Math.max(0, Math.min(batteryCapacity(run), run.wear.batteryCharge ?? 0));
+}
+
+/** 按今晚的预览放电并回充。须在健康结算之后调用，避免灯在同一夜里途中熄灭。 */
+export function settleBattery(run: RunState, power?: PowerReport): void {
+  const p = power ?? computePower(run);
+  clampBattery(run);
+  run.wear.batteryCharge = Math.max(0, run.wear.batteryCharge - p.battery + p.batteryGain);
+  clampBattery(run);
 }
 
 export function loadWanted(run: RunState, id: PowerLoadId): boolean {
@@ -110,6 +121,17 @@ export function ensureRunDefaults(run: RunState): void {
     run.iodineUntil = run.day + 3;
   }
   if (!run.conditionAge) run.conditionAge = {};
+  if (!run.wear) {
+    run.wear = { filterLife: WEAR.FILTER_LIFE, generatorOil: WEAR.GENERATOR_OIL, batteryCharge: 0 };
+  } else {
+    if (run.wear.filterLife === undefined) run.wear.filterLife = WEAR.FILTER_LIFE;
+    if (run.wear.generatorOil === undefined) run.wear.generatorOil = WEAR.GENERATOR_OIL;
+    if (run.wear.batteryCharge === undefined) run.wear.batteryCharge = 0;
+  }
+  if (!run.pendingUnlocks) run.pendingUnlocks = [];
+  if (!run.seenVariants) run.seenVariants = [];
+  if (run.world && !run.world.forecast) run.world.forecast = [];
+  clampBattery(run);
 }
 
 export function computePower(run: RunState): PowerReport {
@@ -121,11 +143,13 @@ export function computePower(run: RunState): PowerReport {
   const solar = solarBase * weatherMult * disasterMult;
   const grid =
     run.world.powerGrid === 'on' ? POWER.GRID_ON : run.world.powerGrid === 'rolling' ? POWER.GRID_ROLLING : 0;
-  const battery = Math.max(0, run.wear.batteryCharge);
+  const batteryStored = Math.max(0, run.wear?.batteryCharge ?? 0);
+  const batteryCap = batteryCapacity(run);
 
-  let available = solar + grid + battery;
+  let available = solar + grid;
   let generator = 0;
   let fuelBurn = 0;
+  let battery = 0;
 
   const rewiring = run.projects.some((p) =>
     MODULE_BY_ID[p.moduleId].buildPenaltyTags.includes('power:blackout'),
@@ -135,6 +159,11 @@ export function computePower(run: RunState): PowerReport {
   const draws = collectDraws(run);
   const demand = draws.reduce((s, d) => s + d.kwh, 0);
   const prepGrid = run.day < TIME.COLLAPSE_DAY;
+
+  if (!rewiring && batteryStored > 0 && demand > available) {
+    battery = Math.min(batteryStored, demand - available);
+    available += battery;
+  }
 
   // 准备期市电充足：柴油机不必补缺口；灾难前也不因缺电裁负荷
   if (!rewiring && !prepGrid && lvl >= 3 && run.res.fuel > 0 && demand > available) {
@@ -157,6 +186,13 @@ export function computePower(run: RunState): PowerReport {
     }
   }
 
+  let batteryGain = 0;
+  if (!rewiring) {
+    const surplus = Math.max(0, solar + grid - demand);
+    const afterDraw = batteryStored - battery;
+    batteryGain = Math.min(surplus, Math.max(0, batteryCap - afterDraw));
+  }
+
   return {
     solarBase,
     weatherMult,
@@ -165,6 +201,9 @@ export function computePower(run: RunState): PowerReport {
     grid,
     generator,
     battery,
+    batteryStored,
+    batteryCap,
+    batteryGain,
     output: available,
     demand,
     deficit: Math.max(0, demand - available),

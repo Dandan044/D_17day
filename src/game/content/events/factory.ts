@@ -1,16 +1,18 @@
+import { t } from '../../copy/t';
+import '../../copy/zh/ui';
 import type { Choice, Effect, EventFamily, EventKind, EventVariant, TagQuery } from '../../types';
 
 /** 无条件退路：仍改体力/理智，避免「假选择」 */
-export function skip(log: string, extra?: Partial<Omit<Effect, 'log'>>): Choice {
+export function skip(extra?: Partial<Omit<Effect, 'log'>>): Choice {
   return {
     id: 'skip',
-    label: '什么都不做',
-    effect: { stats: { stamina: 4, sanity: -2 }, tone: 'neutral', ...extra, log },
+    label: t('ui.choice.skip'),
+    effect: { stats: { stamina: 4, sanity: -2 }, tone: 'neutral', log: '', ...extra },
   };
 }
 
-export function ch(id: string, label: string, effect: Effect, extra?: Partial<Choice>): Choice {
-  return { id, label, effect, ...extra };
+export function ch(id: string, effect: Effect, extra?: Partial<Choice>): Choice {
+  return { id, label: '', effect, ...extra };
 }
 
 export function beat(opts: {
@@ -25,7 +27,6 @@ export function beat(opts: {
   forbid?: TagQuery;
   minThreat?: number;
   maxThreat?: number;
-  /** 单变体时必填；传入 variants 时可省略 */
   title?: string;
   body?: string;
   choices?: Choice[];
@@ -37,8 +38,8 @@ export function beat(opts: {
     [
       {
         id: 'main',
-        title: opts.title ?? opts.id,
-        body: opts.body ?? '',
+        title: opts.title,
+        body: opts.body,
         choices: opts.choices ?? [],
       },
     ];

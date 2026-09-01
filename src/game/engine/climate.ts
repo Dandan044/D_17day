@@ -27,6 +27,7 @@ export function heatGap(run: RunState): number {
 }
 
 export function insulateLevel(run: RunState): number {
+  if (run.projects.some((p) => p.moduleId === 'insulate')) return 0;
   return Math.max(0, Math.min(3, run.modules.insulate));
 }
 

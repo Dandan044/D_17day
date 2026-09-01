@@ -6,6 +6,7 @@
  */
 
 import { AP, EXPOSURE, PRICE, STAMINA, TIME, WEAR } from '../balance';
+import { t } from '../copy/t';
 import { MODULE_BY_ID, moduleSpec } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
@@ -44,28 +45,28 @@ export function nextLevel(run: RunState, id: ModuleId): number | null {
 export function blockingReason(run: RunState, id: ModuleId): string | null {
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const cap = site.caps[id] ?? 3;
-  if (run.modules[id] >= cap) return `${site.name}的条件限制，${MODULE_BY_ID[id].name}最高只能到 ${cap} 级`;
-  if (run.projects.some((p) => p.moduleId === id)) return '已在施工队列中';
+  if (run.modules[id] >= cap) return t('ledger.build.capSite', { site: site.name, module: MODULE_BY_ID[id].name, cap });
+  if (run.projects.some((p) => p.moduleId === id)) return t('ledger.build.queued');
 
   const target = nextLevel(run, id);
-  if (target === null) return '已达上限';
+  if (target === null) return t('ledger.build.atCap');
   const spec = moduleSpec(id, target);
-  if (!spec) return '无法升级';
+  if (!spec) return t('ledger.build.cannot');
 
   if (spec.requiresModules) {
     for (const [dep, lvl] of Object.entries(spec.requiresModules)) {
       if (run.modules[dep as ModuleId] < (lvl ?? 0)) {
-        return `需要先把${MODULE_BY_ID[dep as ModuleId].name}升到 ${lvl} 级`;
+        return t('ledger.build.needModule', { module: MODULE_BY_ID[dep as ModuleId].name, lvl: lvl ?? 0 });
       }
     }
   }
   // 无自然光的站点，2 级以上农圃必须有电
   if (id === 'garden' && target >= 2 && site.tags.includes('site:noSunlight') && run.modules.power < 2) {
-    return '这里没有自然光，2 级以上农圃需要 2 级发电供补光灯';
+    return t('ledger.build.gardenLight');
   }
   // 地下与无信号站点的无线电需要外置天线
   if (id === 'radio' && site.tags.includes('site:noSignal') && !run.flags.includes('flag:antenna')) {
-    return '此处无信号，需要先架设外置天线（额外 6 零件）';
+    return t('ledger.build.radioSignal');
   }
   return null;
 }
@@ -99,11 +100,11 @@ export function buildOptions(run: RunState, id: ModuleId): BuildOption[] {
     reason:
       blocked ??
       (run.res.materials < spec.materials
-        ? `缺 ${Math.ceil(spec.materials - run.res.materials)} 建材`
+        ? t('ledger.build.lackMat', { n: Math.ceil(spec.materials - run.res.materials) })
         : run.res.parts < spec.parts
-          ? `缺 ${Math.ceil(spec.parts - run.res.parts)} 零件`
+          ? t('ledger.build.lackParts', { n: Math.ceil(spec.parts - run.res.parts) })
           : undefined),
-    cost: `${spec.materials} 建材 · ${spec.parts} 零件 · ${labor} 工时`,
+    cost: t('ledger.build.diyCost', { mat: spec.materials, parts: spec.parts, labor }),
     materials: spec.materials,
     parts: spec.parts,
     labor,
@@ -118,9 +119,9 @@ export function buildOptions(run: RunState, id: ModuleId): BuildOption[] {
     path: 'hire',
     available: isPrep && !blocked && run.res.cash >= hireCash,
     reason: !isPrep
-      ? '已经没有人接活了'
-      : (blocked ?? (run.res.cash < hireCash ? `缺 ${hireCash - run.res.cash} 元` : undefined)),
-    cost: `${hireCash} 元 · 1 行动点 · 2 天完工`,
+      ? t('ledger.build.noHire')
+      : (blocked ?? (run.res.cash < hireCash ? t('ledger.build.lackCash', { n: hireCash - run.res.cash }) : undefined)),
+    cost: t('ledger.build.hireCost', { cash: hireCash }),
     cash: hireCash,
     days: 2,
   });
@@ -135,9 +136,9 @@ export function buildOptions(run: RunState, id: ModuleId): BuildOption[] {
     path: 'buy',
     available: isPrep && !blocked && run.res.cash >= buyCash,
     reason: !isPrep
-      ? '物流已经停了'
-      : (blocked ?? (run.res.cash < buyCash ? `缺 ${buyCash - run.res.cash} 元` : undefined)),
-    cost: `${buyCash} 元 · ${buyDays} 天到货 · 约 ${Math.round(failChance * 100)}% 概率收不到`,
+      ? t('ledger.build.noBuy')
+      : (blocked ?? (run.res.cash < buyCash ? t('ledger.build.lackCash', { n: buyCash - run.res.cash }) : undefined)),
+    cost: t('ledger.build.buyCost', { cash: buyCash, days: buyDays, pct: Math.round(failChance * 100) }),
     cash: buyCash,
     days: buyDays,
     failRisk: failChance,
@@ -153,9 +154,9 @@ export interface StartResult {
 
 export function startProject(run: RunState, id: ModuleId, path: BuildPath): StartResult {
   const target = nextLevel(run, id);
-  if (target === null) return { ok: false, reason: '已达上限' };
+  if (target === null) return { ok: false, reason: t('ledger.build.atCap') };
   const opt = buildOptions(run, id).find((o) => o.path === path);
-  if (!opt || !opt.available) return { ok: false, reason: opt?.reason ?? '无法开工' };
+  if (!opt || !opt.available) return { ok: false, reason: opt?.reason ?? t('ledger.build.cannotStart') };
 
   const project: Project = {
     moduleId: id,
@@ -169,21 +170,21 @@ export function startProject(run: RunState, id: ModuleId, path: BuildPath): Star
   if (path === 'diy') {
     run.res.materials -= opt.materials ?? 0;
     run.res.parts -= opt.parts ?? 0;
-    addLog(run, `开始动工：${MODULE_BY_ID[id].name} → ${target} 级。${MODULE_BY_ID[id].buildPenaltyDesc}`, 'neutral');
+    addLog(run, t('ledger.build.startDiy', { name: MODULE_BY_ID[id].name, target, penalty: MODULE_BY_ID[id].buildPenaltyDesc }), 'neutral');
   } else if (path === 'hire') {
-    if (run.ap < 1) return { ok: false, reason: '需要 1 行动点' };
+    if (run.ap < 1) return { ok: false, reason: t('ledger.build.needAp') };
     run.ap -= 1;
     run.res.cash -= opt.cash ?? 0;
     project.laborTotal = 0;
     project.etaDay = run.day + (opt.days ?? 2);
     project.paid = true;
-    addLog(run, `雇了施工队做${MODULE_BY_ID[id].name}，说是两天完工。钱已经付了。`, 'neutral');
+    addLog(run, t('ledger.build.startHire', { name: MODULE_BY_ID[id].name }), 'neutral');
   } else if (path === 'buy') {
     run.res.cash -= opt.cash ?? 0;
     project.laborTotal = 0;
     project.etaDay = run.day + (opt.days ?? 1);
     project.paid = true;
-    addLog(run, `下单了${MODULE_BY_ID[id].name}的成品设备，${opt.days} 天后到货。`, 'neutral');
+    addLog(run, t('ledger.build.startBuy', { name: MODULE_BY_ID[id].name, days: opt.days ?? 1 }), 'neutral');
   }
 
   run.projects.push(project);
@@ -193,9 +194,9 @@ export function startProject(run: RunState, id: ModuleId, path: BuildPath): Star
 /** 投入 1 行动点的工时 */
 export function investLabor(run: RunState, id: ModuleId, rng: Rng): { ok: boolean; reason?: string; note?: string } {
   const p = run.projects.find((x) => x.moduleId === id);
-  if (!p) return { ok: false, reason: '没有这个工程' };
-  if (p.path !== 'diy') return { ok: false, reason: '这个工程不需要你动手' };
-  if (run.ap < 1) return { ok: false, reason: '行动点不足' };
+  if (!p) return { ok: false, reason: t('ledger.build.noProject') };
+  if (p.path !== 'diy') return { ok: false, reason: t('ledger.build.notDiy') };
+  if (run.ap < 1) return { ok: false, reason: t('ledger.build.noAp') };
 
   run.ap -= 1;
   run.stats.stamina = Math.max(0, run.stats.stamina - STAMINA.BUILD);
@@ -213,31 +214,35 @@ export function investLabor(run: RunState, id: ModuleId, rng: Rng): { ok: boolea
         gain = Math.max(1, Math.floor(gain * 0.3));
         if (rng.chance(0.25)) {
           run.stats.hp = Math.max(1, run.stats.hp - rng.int(4, 12));
-          return { ok: true, note: `做坏了，浪费 ${wasted} 建材，还划伤了手。` };
+          return { ok: true, note: t('ledger.build.failHurt', { n: wasted }) };
         }
-        return { ok: true, note: `尺寸没对上，浪费了 ${wasted} 建材。` };
+        return { ok: true, note: t('ledger.build.failWaste', { n: wasted }) };
       }
     }
   }
 
   p.laborDone += gain;
-  return { ok: true, note: `投入 ${gain} 工时（${p.laborDone}/${p.laborTotal}）` };
+  return { ok: true, note: t('ledger.build.labor', { gain, done: p.laborDone, total: p.laborTotal }) };
 }
 
 /** 每日结算：同伴自动投工、雇工与成品到货、完工判定 */
-export function advanceProjects(run: RunState, rng: Rng): string[] {
+export function grantCompanionLabor(run: RunState): string[] {
   const notes: string[] = [];
-
-  // 同伴的劳力
   const helpers = run.survivors.filter((s) => s.conditions.length === 0 && s.morale > 25);
   const diyProjects = run.projects.filter((p) => p.path === 'diy');
   if (helpers.length > 0 && diyProjects.length > 0) {
     const perProject = Math.floor((helpers.length * AP.COMPANION_LABOR) / diyProjects.length);
     if (perProject > 0) {
       for (const p of diyProjects) p.laborDone += perProject;
-      notes.push(`同伴投入了 ${perProject * diyProjects.length} 工时`);
+      notes.push(t('ledger.build.companion', { n: perProject * diyProjects.length }));
     }
   }
+  return notes;
+}
+
+/** 立刻检查完工（玩家投工后调用；不含同伴工时） */
+export function completeReadyProjects(run: RunState, rng: Rng): string[] {
+  const notes: string[] = [];
 
   const done: Project[] = [];
   for (const p of run.projects) {
@@ -253,10 +258,10 @@ export function advanceProjects(run: RunState, rng: Rng): string[] {
         if (has(run, 'perk_logistics')) days = Math.max(1, days - 1);
         const failChance = Math.min(0.75, days * PRICE.DELIVERY_FAIL_PER_DAY * (1 + (100 - run.world.lawOrder) / 90));
         if (rng.chance(failChance)) {
-          notes.push(`${MODULE_BY_ID[p.moduleId].name}的货没到`);
+          notes.push(t('ledger.build.noDelivery', { name: MODULE_BY_ID[p.moduleId].name }));
           addLog(
             run,
-            `你订的${MODULE_BY_ID[p.moduleId].name}没有到。客服电话是空号，物流单号查不到。钱是真的付了。`,
+            t('ledger.build.noDeliveryLog', { name: MODULE_BY_ID[p.moduleId].name }),
             'bad',
           );
           run.projects = run.projects.filter((x) => x !== p);
@@ -274,17 +279,21 @@ export function advanceProjects(run: RunState, rng: Rng): string[] {
     run.projects = run.projects.filter((x) => x !== p);
     const name = MODULE_BY_ID[p.moduleId].name;
     const spec = moduleSpec(p.moduleId, p.toLevel);
-    notes.push(`${name}完工，达到 ${p.toLevel} 级`);
-    addLog(run, `${name}完工了。${spec?.desc ?? ''}`, 'good');
+    notes.push(t('ledger.build.done', { name, lvl: p.toLevel }));
+    addLog(run, t('ledger.build.doneLog', { name, desc: spec?.desc ?? '' }), 'good');
     if (p.moduleId === 'filter' || p.moduleId === 'airFilter') {
-      run.wear.filterLife = Math.max(run.wear.filterLife, 20);
+      run.wear.filterLife = Math.max(run.wear.filterLife, WEAR.FILTER_RESTORE);
     }
     if (p.moduleId === 'power' && p.toLevel >= 3) {
-      run.wear.generatorOil = Math.max(run.wear.generatorOil, 24);
+      run.wear.generatorOil = Math.max(run.wear.generatorOil, WEAR.GENERATOR_OIL);
     }
   }
 
   return notes;
+}
+
+export function advanceProjects(run: RunState, rng: Rng): string[] {
+  return [...grantCompanionLabor(run), ...completeReadyProjects(run, rng)];
 }
 
 export function cancelProject(run: RunState, id: ModuleId): void {
@@ -298,7 +307,7 @@ export function cancelProject(run: RunState, id: ModuleId): void {
       run.res.materials += Math.floor(spec.materials * 0.5);
       run.res.parts += Math.floor(spec.parts * 0.5);
     }
-    addLog(run, `${MODULE_BY_ID[id].name}的工程停了。拆下来的材料只回收了一半。`, 'bad');
+    addLog(run, t('ledger.build.cancel', { name: MODULE_BY_ID[id].name }), 'bad');
   }
 }
 
@@ -320,8 +329,8 @@ export interface SalvageTarget {
 export const SALVAGE_TARGETS: SalvageTarget[] = [
   {
     id: 'furniture',
-    name: '拆自己的家具',
-    desc: '衣柜、书架、床板。你亲手装的，现在亲手拆掉。',
+    name: t('ledger.salvage.furniture.name'),
+    desc: t('ledger.salvage.furniture.desc'),
     materials: [3, 7],
     parts: [0, 2],
     exposure: 1,
@@ -329,17 +338,17 @@ export const SALVAGE_TARGETS: SalvageTarget[] = [
   },
   {
     id: 'car',
-    name: '拆一辆废弃汽车',
-    desc: '电瓶、线束、皮带、后备箱的千斤顶。要用到电动工具，很响。',
+    name: t('ledger.salvage.car.name'),
+    desc: t('ledger.salvage.car.desc'),
     materials: [1, 3],
     parts: [4, 9],
-    exposure: 6,
+    exposure: EXPOSURE.SRC_SALVAGE,
     humanity: 0,
   },
   {
     id: 'empty_flat',
-    name: '撬开邻居的空房',
-    desc: '对门那家早就走了。门是锁着的，但门框是木头的。你知道楼里还有人在看着。',
+    name: t('ledger.salvage.empty_flat.name'),
+    desc: t('ledger.salvage.empty_flat.desc'),
     materials: [5, 12],
     parts: [2, 6],
     exposure: 8,
@@ -347,8 +356,8 @@ export const SALVAGE_TARGETS: SalvageTarget[] = [
   },
   {
     id: 'public',
-    name: '拆公共设施',
-    desc: '楼道扶手、消防箱、配电间的铜线。理论上这些属于所有人。',
+    name: t('ledger.salvage.public.name'),
+    desc: t('ledger.salvage.public.desc'),
     materials: [4, 9],
     parts: [3, 7],
     exposure: 5,
@@ -381,16 +390,16 @@ export function maintenanceOptions(run: RunState): MaintenanceInfo[] {
   if (run.abilities.includes('chemist_consumables')) filterParts = Math.max(2, filterParts - 1);
   out.push({
     kind: 'filter',
-    name: '更换滤芯',
-    desc: '净水与空气过滤共用同一套耗材。用尽之后两个模块会同时失效。',
+    name: t('ledger.build.maintFilter'),
+    desc: t('ledger.build.maintFilterDesc'),
     parts: filterParts,
     available: hasFilters && run.res.parts >= filterParts && run.ap >= 1,
     reason: !hasFilters
-      ? '还没有需要滤芯的设备'
+      ? t('ledger.build.maintNoFilter')
       : run.res.parts < filterParts
-        ? `缺 ${Math.ceil(filterParts - run.res.parts)} 零件`
+        ? t('ledger.build.lackParts', { n: Math.ceil(filterParts - run.res.parts) })
         : run.ap < 1
-          ? '需要 1 行动点'
+          ? t('ledger.build.needAp')
           : undefined,
     remaining: Math.max(0, Math.round(run.wear.filterLife)),
   });
@@ -398,16 +407,16 @@ export function maintenanceOptions(run: RunState): MaintenanceInfo[] {
   const hasGen = run.modules.power >= 3;
   out.push({
     kind: 'oil',
-    name: '给发电机换机油',
-    desc: '柴油机组不保养会先掉功率，再彻底抱瓦。',
+    name: t('ledger.build.maintOil'),
+    desc: t('ledger.build.maintOilDesc'),
     parts: WEAR.OIL_PARTS,
     available: hasGen && run.res.parts >= WEAR.OIL_PARTS && run.ap >= 1,
     reason: !hasGen
-      ? '还没有柴油发电机组'
+      ? t('ledger.build.maintNoGen')
       : run.res.parts < WEAR.OIL_PARTS
-        ? `缺 ${Math.ceil(WEAR.OIL_PARTS - run.res.parts)} 零件`
+        ? t('ledger.build.lackParts', { n: Math.ceil(WEAR.OIL_PARTS - run.res.parts) })
         : run.ap < 1
-          ? '需要 1 行动点'
+          ? t('ledger.build.needAp')
           : undefined,
     remaining: Math.max(0, Math.round(run.wear.generatorOil)),
   });
@@ -417,7 +426,7 @@ export function maintenanceOptions(run: RunState): MaintenanceInfo[] {
 
 export function doMaintenance(run: RunState, kind: MaintenanceKind): { ok: boolean; reason?: string; note?: string } {
   const opt = maintenanceOptions(run).find((o) => o.kind === kind);
-  if (!opt || !opt.available) return { ok: false, reason: opt?.reason ?? '现在不能做' };
+  if (!opt || !opt.available) return { ok: false, reason: opt?.reason ?? t('ledger.toast.noMaint') };
 
   run.ap -= 1;
   run.res.parts -= opt.parts;
@@ -427,31 +436,31 @@ export function doMaintenance(run: RunState, kind: MaintenanceKind): { ok: boole
     let restore: number = WEAR.FILTER_RESTORE;
     if (run.abilities.includes('perk_maintainer')) restore = Math.round(restore * 1.5);
     run.wear.filterLife += restore;
-    return { ok: true, note: `滤芯寿命恢复到 ${Math.round(run.wear.filterLife)} 天` };
+    return { ok: true, note: t('ledger.build.filterDone', { days: Math.round(run.wear.filterLife) }) };
   }
   run.wear.generatorOil += WEAR.GENERATOR_OIL;
-  return { ok: true, note: '发电机组安静了下来' };
+  return { ok: true, note: t('ledger.build.oilDone') };
 }
 
 export function doSalvage(run: RunState, targetId: string, rng: Rng): { ok: boolean; reason?: string; note?: string } {
-  if (run.day < TIME.COLLAPSE_DAY) return { ok: false, reason: '现在还买得到东西，没必要拆房子' };
-  const t = SALVAGE_TARGETS.find((x) => x.id === targetId);
-  if (!t) return { ok: false, reason: '没有这个目标' };
-  if (run.ap < 1) return { ok: false, reason: '行动点不足' };
+  if (run.day < TIME.COLLAPSE_DAY) return { ok: false, reason: t('ledger.build.salvagePrep') };
+  const target = SALVAGE_TARGETS.find((x) => x.id === targetId);
+  if (!target) return { ok: false, reason: t('ledger.build.noTarget') };
+  if (run.ap < 1) return { ok: false, reason: t('ledger.build.noAp') };
 
   run.ap -= 1;
   run.stats.stamina = Math.max(0, run.stats.stamina - STAMINA.BUILD);
 
-  const mats = rng.int(t.materials[0], t.materials[1]);
-  const parts = rng.int(t.parts[0], t.parts[1]);
+  const mats = rng.int(target.materials[0], target.materials[1]);
+  const parts = rng.int(target.parts[0], target.parts[1]);
   run.res.materials += mats;
   run.res.parts += parts;
-  run.world.exposure = Math.min(EXPOSURE.MAX, run.world.exposure + t.exposure);
-  if (t.humanity) run.stats.humanity = Math.max(0, run.stats.humanity + t.humanity);
-  if (t.id === 'empty_flat') {
+  run.world.exposure = Math.min(EXPOSURE.MAX, run.world.exposure + target.exposure);
+  if (target.humanity) run.stats.humanity = Math.max(0, run.stats.humanity + target.humanity);
+  if (target.id === 'empty_flat') {
     run.world.neighborhood = Math.max(-100, run.world.neighborhood - 12);
     if (!run.flags.includes('flag:lootedNeighbor')) run.flags.push('flag:lootedNeighbor');
   }
 
-  return { ok: true, note: `拆出 ${mats} 建材、${parts} 零件。暴露度 +${t.exposure}。` };
+  return { ok: true, note: t('ledger.build.salvageOut', { mat: mats, parts, exp: target.exposure }) };
 }

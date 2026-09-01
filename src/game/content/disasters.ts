@@ -1,4 +1,6 @@
 import type { DisasterId, FactionId, ModuleId, WeatherId, WorldState } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import '../copy';
 
 export interface DisasterDef {
   id: DisasterId;
@@ -69,7 +71,7 @@ export const DISASTERS: DisasterDef[] = [
       lawOrder: -1.3,
       scarcity: 1.3,
     }),
-    weather: { clear: 4, overcast: 4, rain: 3, fog: 2, snow: 2, storm: 1 },
+    weather: { clear: 4, overcast: 4, rain: 3, fog: 2, snow: 2, storm: 1, heatwave: 2 },
     tempBias: 0,
     clueTopics: ['不明肺炎', '疾控中心', '封控', '口罩涨价', '医护感染'],
   },
@@ -89,7 +91,7 @@ export const DISASTERS: DisasterDef[] = [
       lawOrder: -2.3 + threat * 0.1,
       scarcity: 1.6,
     }),
-    weather: { clear: 4, overcast: 3, rain: 3, snow: 3, storm: 2, blizzard: 1, fog: 2 },
+    weather: { clear: 4, overcast: 3, rain: 3, snow: 3, storm: 2, blizzard: 1, fog: 2, heatwave: 1 },
     tempBias: -2,
     clueTopics: ['地磁暴', '变电站', '电网检修', '柴油抢购', '通信中断'],
   },
@@ -153,11 +155,18 @@ export const DISASTERS: DisasterDef[] = [
       lawOrder: -1.2,
       scarcity: 1.1,
     }),
-    weather: { fog: 4, overcast: 4, clear: 3, rain: 3, storm: 1, snow: 2 },
+    weather: { fog: 4, overcast: 4, clear: 3, rain: 3, storm: 1, snow: 2, heatwave: 2 },
     tempBias: -1,
     clueTopics: ['化工园区', '环保督查', '刺鼻气味', '疏散演练', '风向预警'],
   },
 ];
+
+for (const d of DISASTERS) {
+  Object.assign(
+    d,
+    hydrateNamed('disaster', d, ['name', 'codename', 'revealTitle', 'reveal', 'thesis'], ['keySupplies', 'clueTopics']),
+  );
+}
 
 export const DISASTER_BY_ID: Record<DisasterId, DisasterDef> = Object.fromEntries(
   DISASTERS.map((d) => [d.id, d]),

@@ -113,6 +113,7 @@ export const FLAG_TAGS = [
   'power:deficit',
   'power:blackout',
   'power:generator',
+  'power:battery',
   'water:stored:low',
   'food:low',
   /** 旱天且净水在线：走回用降耗 */

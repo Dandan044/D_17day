@@ -1,4 +1,8 @@
 import type { Location, ResourceId } from '../types';
+import { hydrateNamed } from '../copy/hydrate';
+import '../copy';
+
+export { RES_NAME, RES_UNIT } from '../copy/names';
 
 /** 每单位重量 (kg)，用于背包负重取舍 */
 export const RES_WEIGHT: Record<ResourceId, number> = {
@@ -11,30 +15,6 @@ export const RES_WEIGHT: Record<ResourceId, number> = {
   parts: 0.6,
   ammo: 0.03,
   cash: 0,
-};
-
-export const RES_NAME: Record<ResourceId, string> = {
-  water: '饮用水',
-  foodStaple: '耐储食物',
-  foodFresh: '生鲜食物',
-  meds: '药品',
-  fuel: '燃料',
-  materials: '建材',
-  parts: '零件',
-  ammo: '弹药',
-  cash: '现金',
-};
-
-export const RES_UNIT: Record<ResourceId, string> = {
-  water: 'L',
-  foodStaple: '份',
-  foodFresh: '份',
-  meds: '组',
-  fuel: 'L',
-  materials: '件',
-  parts: '件',
-  ammo: '发',
-  cash: '元',
 };
 
 /** 准备期基准单价（会乘以物价指数） */
@@ -245,5 +225,9 @@ export const LOCATIONS: Location[] = [
     ],
   },
 ];
+
+for (const loc of LOCATIONS) {
+  Object.assign(loc, hydrateNamed('world.location', loc, ['name', 'desc', 'descSurvival']));
+}
 
 export const LOCATION_BY_ID: Record<string, Location> = Object.fromEntries(LOCATIONS.map((l) => [l.id, l]));

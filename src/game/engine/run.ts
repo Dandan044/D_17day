@@ -2,7 +2,8 @@
  * 单局生命周期：创建、选址、每日推进、阶段切换。
  */
 
-import { AP, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, threatOfDay } from '../balance';
+import { AP, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, WEAR, threatOfDay } from '../balance';
+import { t } from '../copy/t';
 import { CLASS_BY_ID, PACK_BY_ID } from '../content/classes';
 import { DISASTER_BY_ID } from '../content/disasters';
 import { FAMILY_BY_ID } from '../content/events';
@@ -32,8 +33,16 @@ import { emitHook, emitThresholdHooks, collectThresholdForced } from './hooks';
 import { applyDailyExposure, pickPressureFamily, resolveRaid, type RaidResult } from './exposure';
 import { resolveHealth } from './health';
 import { ledger, type LedgerNote } from './ledger';
+import { settleBattery } from './power';
 import { checkRequirement, deriveFacts, effectiveModule } from './tags';
-import { advanceWorldPrep, advanceWorldSurvival, applyOnset, createWorld } from './world';
+import {
+  applyOnset,
+  createWorld,
+  decayExposure,
+  tickClimate,
+  tickPrepEconomy,
+  tickSurvivalPressures,
+} from './world';
 
 export type { LedgerNote, LedgerTone } from './ledger';
 export { ledger } from './ledger';
@@ -103,7 +112,7 @@ export function createRun(opts: CreateRunOptions): RunState {
     conditionAge: {},
     modules,
     projects: [],
-    wear: { filterLife: 20, generatorOil: 24, batteryCharge: 0 },
+    wear: { filterLife: WEAR.FILTER_LIFE, generatorOil: WEAR.GENERATOR_OIL, batteryCharge: 0 },
     streaks: { lowRation: 0, noThreatDays: 0, goodRation: 0 },
     ration: 'normal',
     waterUse: 'normal',
@@ -123,6 +132,8 @@ export function createRun(opts: CreateRunOptions): RunState {
     eventHistory: {},
     recentBeats: [],
     pending: [],
+    pendingUnlocks: [],
+    seenVariants: [],
     queue: [],
     log: [],
     stats_meta: { daysSurvived: 0, scavengeRuns: 0, raidsRepelled: 0, peopleHelped: 0, peopleRefused: 0 },
@@ -131,11 +142,7 @@ export function createRun(opts: CreateRunOptions): RunState {
   if (run.hasVehicle) run.flags.push('flag:hasVehicle');
   clampResources(run);
   generateIntel(run, rng);
-  addLog(
-    run,
-    '新闻里那条消息你已经刷到第四遍了。前三遍你都当成了噪音。这一遍你放下了手机，开始算家里还有多少水。',
-    'neutral',
-  );
+  addLog(run, t('ledger.run.intro'), 'neutral');
   run.rngCursor = rng.cursor();
   return run;
 }
@@ -143,11 +150,11 @@ export function createRun(opts: CreateRunOptions): RunState {
 /** 站点选择：付出成本，继承站点的初始模块 */
 export function chooseSite(run: RunState, siteId: SiteId): { ok: boolean; reason?: string } {
   const site = SITE_BY_ID[siteId];
-  if (!site) return { ok: false, reason: '没有这个站点' };
-  if (site.wip) return { ok: false, reason: '这个住所还在开发中' };
+  if (!site) return { ok: false, reason: t('ledger.run.noSite') };
+  if (site.wip) return { ok: false, reason: t('ledger.run.siteWip') };
 
   if (site.cost.cash && run.res.cash < site.cost.cash) {
-    return { ok: false, reason: `需要 ${site.cost.cash} 元` };
+    return { ok: false, reason: t('ledger.run.needCash', { cash: site.cost.cash }) };
   }
   if (site.cost.requires?.res) {
     for (const [k, v] of Object.entries(site.cost.requires.res)) {
@@ -160,7 +167,7 @@ export function chooseSite(run: RunState, siteId: SiteId): { ok: boolean; reason
     }
   }
   if (site.cost.requires?.tags?.all?.includes('hasVehicle') && !run.hasVehicle) {
-    return { ok: false, reason: site.cost.requires.reason ?? '需要一辆车' };
+    return { ok: false, reason: site.cost.requires.reason ?? t('ledger.run.needCar') };
   }
 
   if (site.cost.cash) run.res.cash -= site.cost.cash;
@@ -174,7 +181,7 @@ export function chooseSite(run: RunState, siteId: SiteId): { ok: boolean; reason
   run.phase = 'prep';
   clampResources(run);
 
-  addLog(run, `你决定把这里作为据点：${site.name}。${site.desc.split('。')[0]}。`, 'neutral');
+  addLog(run, t('ledger.run.choseSite', { name: site.name, desc: site.desc.split('。')[0] }), 'neutral');
   return { ok: true };
 }
 
@@ -193,18 +200,34 @@ export function generateIntel(run: RunState, rng: Rng): void {
 
   const seen = new Set(run.intel.map((i) => i.id));
   const avail = INTEL_POOL.filter((i) => !seen.has(i.id) && (i.minDay ?? 1) <= run.day);
-  const truthful = avail.filter((i) => i.points === actual);
-  const misleading = avail.filter((i) => i.points !== actual && i.points !== 'none');
-  const noise = avail.filter((i) => i.points === 'none');
+
+  const seenToday = new Set<string>();
+  const allTruthful = INTEL_POOL.filter((i) => i.points === actual && (i.minDay ?? 1) <= run.day);
+  const allMisleading = INTEL_POOL.filter((i) => i.points !== actual && i.points !== 'none' && (i.minDay ?? 1) <= run.day);
+  const allNoise = INTEL_POOL.filter((i) => i.points === 'none' && (i.minDay ?? 1) <= run.day);
+
+  const unused = (pool: typeof INTEL_POOL) => pool.filter((i) => !seen.has(i.id) && !seenToday.has(i.id));
 
   const out: IntelReading[] = [];
   for (let i = 0; i < INTEL.PER_DAY; i++) {
     const roll = rng.next();
-    let pool = roll < truthRatio ? truthful : roll < truthRatio + 0.32 ? misleading : noise;
-    if (pool.length === 0) pool = truthful.length ? truthful : misleading.length ? misleading : noise;
-    if (pool.length === 0) break;
-    const item = rng.pick(pool);
-    pool.splice(pool.indexOf(item), 1);
+    const want: 'truth' | 'mislead' | 'noise' = roll < truthRatio ? 'truth' : roll < truthRatio + 0.32 ? 'mislead' : 'noise';
+    const pickFrom = (fresh: typeof INTEL_POOL, fallback: typeof INTEL_POOL) => {
+      const a = unused(fresh);
+      if (a.length > 0) return rng.pick(a);
+      const b = fallback.filter((x) => !seenToday.has(x.id));
+      if (b.length > 0) return rng.pick(b);
+      return null;
+    };
+    let item =
+      want === 'truth'
+        ? pickFrom(avail.filter((x) => x.points === actual), allTruthful)
+        : want === 'mislead'
+          ? pickFrom(avail.filter((x) => x.points !== actual && x.points !== 'none'), allMisleading)
+          : pickFrom(avail.filter((x) => x.points === 'none'), allNoise);
+    if (!item) item = pickFrom(avail, INTEL_POOL);
+    if (!item) break;
+    seenToday.add(item.id);
     out.push({ ...item, day: run.day, truthful: item.points === actual });
   }
   run.intel.push(...out);
@@ -212,10 +235,10 @@ export function generateIntel(run: RunState, rng: Rng): void {
 
 /** 玩家花 1 AP 核实一条情报 */
 export function verifyIntel(run: RunState, intelId: string): { ok: boolean; reason?: string } {
-  if (run.ap < 1) return { ok: false, reason: '行动点不足' };
+  if (run.ap < 1) return { ok: false, reason: t('ledger.run.noAp') };
   const item = run.intel.find((i) => i.id === intelId && i.day === run.day);
-  if (!item) return { ok: false, reason: '这条情报已经过时了' };
-  if (item.verified) return { ok: false, reason: '已经核实过' };
+  if (!item) return { ok: false, reason: t('ledger.run.intelStale') };
+  if (item.verified) return { ok: false, reason: t('ledger.run.intelDone') };
   run.ap -= 1;
   item.verified = true;
   return { ok: true };
@@ -235,6 +258,8 @@ export interface NightReport {
   indoor?: number;
   outdoor?: number;
   exposureAdded: number;
+  exposureDecay?: number;
+  exposureAfter?: number;
   died: boolean;
   cause?: string;
   weekly: boolean;
@@ -273,14 +298,14 @@ export function endDay(run: RunState): NightReport {
     // 准备期自来水和超市还在，不做配给结算
     report.notes.push(...spoilFood(run));
     report.notes.push(...advanceProjects(run, rng).map((t) => ledger(t)));
-    advanceWorldPrep(run, rng);
-    report.notes.push(ledger(`物价指数：升到 ${run.world.priceIndex.toFixed(2)}`));
+    tickPrepEconomy(run, rng);
+    report.notes.push(ledger(t('ledger.run.price', { idx: run.world.priceIndex.toFixed(2) })));
   } else {
     report.notes.push(...applyProduction(run));
     report.notes.push(...spoilFood(run));
     for (const secret of revealSecrets(run)) {
       addLog(run, secret, 'grim');
-      report.notes.push(ledger('有人终于说了实话（见日记）'));
+      report.notes.push(ledger(t('ledger.run.secret')));
     }
     const consume = consumeDaily(run, rng, run.difficulty);
     report.notes.push(...consume.notes);
@@ -291,12 +316,19 @@ export function endDay(run: RunState): NightReport {
     report.hpDelta = health.hpDelta;
     report.hpParts = health.hpParts.filter((p) => p.value !== 0);
     report.hpAfter = Math.round(run.stats.hp);
+    settleBattery(run);
     report.notes.push(...advanceProjects(run, rng).map((t) => ledger(t)));
 
     const exposure = applyDailyExposure(run);
     report.exposureAdded = exposure.total;
+    report.exposureAfter = Math.round(run.world.exposure * 10) / 10;
+    const decay = decayExposure(run);
+    report.exposureDecay = decay;
+    if (decay > 0) {
+      report.notes.push(ledger(t('ledger.run.exposureDecay', { n: decay })));
+    }
 
-    advanceWorldSurvival(run, rng);
+    tickSurvivalPressures(run, rng);
 
     if (health.dead) {
       report.died = true;
@@ -317,14 +349,14 @@ export function endDay(run: RunState): NightReport {
   }
   if (report.died) {
     run.stats.hp = 20;
-    report.notes.push(ledger('（叙事模式）你本该死在这一天。'));
+    report.notes.push(ledger(t('ledger.run.storyLive')));
   }
 
   // ---------- 进入下一天 ----------
   run.day += 1;
   if (run.flags.includes('flag:iodine') && run.iodineUntil !== undefined && run.day >= run.iodineUntil) {
     run.flags = run.flags.filter((f) => f !== 'flag:iodine');
-    addLog(run, '碘片的保护过期了。甲状腺又暴露在外面。', 'bad');
+    addLog(run, t('ledger.run.iodineEnd'), 'bad');
   }
   const newThreat = threatOfDay(run.day);
   if (newThreat > run.threat && run.day > TIME.COLLAPSE_DAY) report.weekly = true;
@@ -370,6 +402,7 @@ export function endDay(run: RunState): NightReport {
     const { picks } = selectEvents(run, rng, Math.max(count, forced.length), forced);
     run.queue = picks;
   }
+  tickClimate(run, rng);
   emitHook(run, 'endDay', rng);
   if (report.weekly) emitHook(run, 'threatUp', rng);
   if (!isPrep) emitThresholdHooks(run, rng);
@@ -418,11 +451,14 @@ export function resolveChoice(
 
   const req = checkRequirement(choice.requires, run, deriveFacts(run));
   if (!req.ok) {
-    out.notes.push(req.reason ?? '现在做不到这一步');
+    out.notes.push(req.reason ?? t('ledger.run.cannot'));
     return out;
   }
 
   const factsBefore = deriveFacts(run);
+  if (!run.seenVariants) run.seenVariants = [];
+  const seenKey = `${familyId}/${variantId}`;
+  if (!run.seenVariants.includes(seenKey)) run.seenVariants.push(seenKey);
   if (choice.check) {
     const roll = rng.d20();
     const skillVal = run.skills[choice.check.skill];
@@ -453,18 +489,18 @@ export function resolveChoice(
       const stolen = Object.entries(raid.lost)
         .map(([k, v]) => `${k} -${v}`)
         .length;
-      if (stolen > 0) out.notes.push('物资被抢走了一部分');
+      if (stolen > 0) out.notes.push(t('ledger.run.stolen'));
     }
-    if (raid.usedAmmo > 0) out.notes.push(`消耗弹药 ${raid.usedAmmo} 发`);
-    if (raid.moduleDamaged) out.notes.push(`${raid.moduleDamaged}被破坏，等级下降`);
+    if (raid.usedAmmo > 0) out.notes.push(t('ledger.run.ammo', { n: raid.usedAmmo }));
+    if (raid.moduleDamaged) out.notes.push(t('ledger.run.moduleBroke', { name: raid.moduleDamaged }));
     emitHook(run, raid.repelled ? 'raidRepelled' : 'raidFailed', rng);
     emitHook(run, 'raid', rng);
     if (run.stats.hp <= 0) {
       if (run.difficulty === 'story') {
         run.stats.hp = 20;
-        out.notes.push('（叙事模式）袭击本可以要了你的命。');
+        out.notes.push(t('ledger.run.storyRaid'));
       } else {
-        const ending = resolveEnding(run, '袭击');
+        const ending = resolveEnding(run, t('ledger.cause.raid'));
         run.endingId = ending.id;
         run.phase = 'ended';
         run.stats_meta.daysSurvived = run.day;

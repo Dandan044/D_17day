@@ -1,20 +1,13 @@
 import { FAMILY_BY_ID } from '../game/content/events';
-import { RES_NAME } from '../game/content/locations';
+import { RES_NAME, SKILL_NAME } from '../game/copy/names';
+import { t } from '../game/copy/t';
 import { SITE_BY_ID } from '../game/content/sites';
 import { kindName } from '../game/engine/director';
 import { checkRequirement, deriveFacts } from '../game/engine/tags';
 import { useGame } from '../game/store';
-import type { Choice, RunState, SkillId } from '../game/types';
+import type { Choice, RunState } from '../game/types';
 import { Chip } from './kit';
 import { scrambleText } from './scramble';
-
-const SKILL_NAME: Record<SkillId, string> = {
-  medicine: '医疗',
-  mechanics: '机械',
-  negotiation: '谈判',
-  fitness: '体能',
-  stealth: '隐蔽',
-};
 
 const KIND_TONE: Record<string, 'bad' | 'good' | 'info' | 'warn' | 'psyche' | 'default'> = {
   threat: 'bad',
@@ -66,17 +59,17 @@ export default function EventCard({ run }: { run: RunState }) {
       <div className="panel-head">
         <div className="flex items-center gap-2">
           <Chip tone={KIND_TONE[family.kind] ?? 'default'}>{kindName(family.kind)}</Chip>
-          <span className="text-faint">强度 {'▍'.repeat(family.intensity)}</span>
+          <span className="text-faint">{t('ui.event.intensity', { bars: '▍'.repeat(family.intensity) })}</span>
         </div>
-        {run.queue.length > 1 && <span className="text-faint">还有 {run.queue.length - 1} 件事</span>}
+        {run.queue.length > 1 && <span className="text-faint">{t('ui.event.more', { n: run.queue.length - 1 })}</span>}
       </div>
 
       <div className="p-4 sm:p-5">
         <h3 className="mb-3 text-[17px] font-medium leading-snug text-paper">
-          {scrambleText(variant.title, run, `${item.familyId}-t`)}
+          {scrambleText(variant.title ?? '', run, `${item.familyId}-t`)}
         </h3>
         <div className={`mb-5 space-y-2.5 ${unreliable ? 'text-psyche/85' : 'text-dim'}`}>
-          {variant.body.split('\n').map((p, i) => (
+          {(variant.body ?? '').split('\n').map((p, i) => (
             <p key={i} className="text-[13.5px] leading-relaxed">
               {scrambleText(p, run, `${item.familyId}-b${i}`)}
             </p>
@@ -85,7 +78,7 @@ export default function EventCard({ run }: { run: RunState }) {
 
         {unreliable && (
           <div className="mb-4 border-l-2 border-psyche/60 bg-psyche/5 px-3 py-2 text-[12px] leading-snug text-psyche">
-            你已经很久没睡好了。你不完全确定刚才读到的每一个细节都真的发生过。
+            {t('ui.event.scramble')}
           </div>
         )}
 
@@ -102,7 +95,7 @@ export default function EventCard({ run }: { run: RunState }) {
                 onClick={() => resolveChoice(item.familyId, item.variantId, c.id)}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <span className="flex-1">{scrambleText(c.label, run, `${item.familyId}-${c.id}`)}</span>
+                  <span className="flex-1">{scrambleText(c.label ?? '', run, `${item.familyId}-${c.id}`)}</span>
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     {!req.ok && <Chip tone="bad">{req.reason}</Chip>}
                     {req.ok && chance !== null && c.check && (
