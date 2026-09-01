@@ -12,8 +12,11 @@ export interface ConditionDef {
   medsCure?: number;
   /** 用药治疗额外需要的医疗站等级 */
   needsMedbay?: number;
-  /** 会恶化成什么 */
-  worsen?: { into: ConditionId; chance: number };
+  /**
+   * 会恶化成什么。
+   * afterDays：未满天数不掷；满了再按 chance 恶化。
+   */
+  worsen?: { into: ConditionId; chance: number; afterDays?: number };
   /** 由充足的食水自动解除 */
   autoCure?: 'water' | 'food';
 }
@@ -25,6 +28,7 @@ export const CONDITIONS: ConditionDef[] = [
     desc: '嘴唇裂了，尿液是深黄色的。思考变得像隔着一层棉花。',
     daily: { hp: -6, stamina: -14, sanity: -2 },
     autoCure: 'water',
+    worsen: { into: 'kidneyStrain', chance: 0.1, afterDays: 6 },
   },
   {
     id: 'starving',
@@ -53,12 +57,41 @@ export const CONDITIONS: ConditionDef[] = [
     worsen: { into: 'dehydrated', chance: 0.35 },
   },
   {
+    id: 'giardia',
+    name: '肠寄生虫',
+    desc: '肚子一阵一阵地绞。滤过的水也不保险，卵已经在里面了。',
+    daily: { hp: -4, stamina: -10 },
+    medsCure: 3,
+    needsMedbay: 1,
+    selfHeal: 0.04,
+    worsen: { into: 'jaundice', chance: 0.12, afterDays: 5 },
+  },
+  {
+    id: 'jaundice',
+    name: '黄疸',
+    desc: '眼白发黄，皮肤也跟着黄。镜子里的自己像换了一层纸。',
+    daily: { hp: -3, stamina: -12, sanity: -2 },
+    medsCure: 4,
+    needsMedbay: 2,
+    selfHeal: 0.03,
+  },
+  {
     id: 'flu',
     name: '流感',
     desc: '发烧，骨头缝里疼。在有暖气和医院的时代这只是一周的假。',
     daily: { hp: -3, stamina: -13, sanity: -2 },
     medsCure: 2,
     selfHeal: 0.16,
+    worsen: { into: 'pneumonia', chance: 0.18, afterDays: 4 },
+  },
+  {
+    id: 'pneumonia',
+    name: '肺炎',
+    desc: '呼吸浅，咳出来的东西带着颜色。躺着也喘。',
+    daily: { hp: -6, stamina: -16 },
+    medsCure: 4,
+    needsMedbay: 2,
+    selfHeal: 0.03,
   },
   {
     id: 'woundInfection',
@@ -68,6 +101,16 @@ export const CONDITIONS: ConditionDef[] = [
     medsCure: 3,
     needsMedbay: 1,
     selfHeal: 0.04,
+    worsen: { into: 'sepsis', chance: 0.15, afterDays: 3 },
+  },
+  {
+    id: 'sepsis',
+    name: '败血症',
+    desc: '全身发冷又发热。伤口本身已经不重要了——感染进了血。',
+    daily: { hp: -9, stamina: -14, sanity: -3 },
+    medsCure: 5,
+    needsMedbay: 3,
+    selfHeal: 0.01,
   },
   {
     id: 'fracture',
@@ -106,6 +149,15 @@ export const CONDITIONS: ConditionDef[] = [
     daily: { hp: -3, stamina: -9, sanity: -1 },
     medsCure: 3,
     selfHeal: 0.06,
+  },
+  {
+    id: 'kidneyStrain',
+    name: '肾伤',
+    desc: '腰眼两侧隐隐作痛，尿色深得像茶。回用喝了太久。',
+    daily: { hp: -2, stamina: -10 },
+    medsCure: 3,
+    needsMedbay: 2,
+    selfHeal: 0.04,
   },
   {
     id: 'despair',

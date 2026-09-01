@@ -118,6 +118,55 @@ export const HEALTH = {
   RAW_WATER_SICK: 0.42,
   /** 卫生不足（无净水且无医疗站）的额外患病概率 */
   POOR_HYGIENE_SICK: 0.12,
+  /** 医疗站过夜体力加成（1/2/3 级） */
+  MEDBAY_SLEEP_STAMINA: [0, 2, 4, 6],
+  /** 医疗站过夜理智加成 */
+  MEDBAY_SLEEP_SANITY: [0, 0, 1, 2],
+  /** 医疗站主动休息额外体力 */
+  MEDBAY_REST_STAMINA: [0, 2, 4, 6],
+  /** 医疗站主动休息额外理智 */
+  MEDBAY_REST_SANITY: [0, 0, 1, 2],
+  /** 仅 3 级医疗站：主动休息回血 */
+  MEDBAY_REST_HP: [0, 0, 0, 1],
+} as const;
+
+/** 净水：雨雪才进桶、旱天回用、滤芯跟污染走 */
+export const FILTER = {
+  /** 雨日基础产量 (L)，按净水等级 0..3 */
+  RAIN_OUTPUT: [0, 8, 16, 26],
+  /** 天气对雨日产量的倍率 */
+  WEATHER_YIELD: {
+    rain: 1,
+    storm: 1,
+    flooding: 1.1,
+    snow: 1,
+    blizzard: 0.8,
+    blackRain: 0.7,
+  } as Record<string, number>,
+  /** 有井站点：旱天仍可滤井水，产量 = 雨日产量 × 此系数 */
+  WELL_DRY_MULT: 0.35,
+  /** 旱天回用：耗水倍率（有在线净水才生效） */
+  RECYCLE_NEED: [1, 0.82, 0.72, 0.6],
+  /** 滤芯：雨日基础损耗；净水侧再乘等级倍率 */
+  WEAR_RAIN: 0.8,
+  WEAR_STORM: 1.1,
+  WEAR_FLOODING: 1.3,
+  WEAR_BLACK_RAIN: 1.6,
+  WEAR_RECYCLE: 0.5,
+  WEAR_AIR: 1,
+  WEAR_ASH: 1.0,
+  WEAR_POLLUTION_PER_40: 0.3,
+  WEAR_RAD_PER_40: 0.2,
+  /** 净水等级对滤芯损耗倍率 */
+  WEAR_LEVEL_MULT: [1, 1, 0.7, 0.45],
+  /** 喝了今天滤出的雨水：致病概率 */
+  SICK_RAIN: [0, 0.16, 0.07, 0.02],
+  /** 旱天回用：致病概率 */
+  SICK_RECYCLE: [0, 0.22, 0.1, 0.04],
+  /** 黑雨或污染水源的致病倍率 */
+  SICK_DIRTY_MULT: 1.5,
+  /** 净水 ≥2 时，致病命中直接给肠寄生虫的概率 */
+  GIARDIA_SHARE: 0.35,
 } as const;
 
 /** 失温判定：体感温度低于阈值且保温不足 */
@@ -311,15 +360,18 @@ export const WEAR = {
 // ============================================================
 
 export const CAPS = {
-  /** 各储水等级的容量 (L)，会乘以站点的 waterCapMult。0 级是浴缸 + 手边的瓶子 */
-  WATER: [90, 240, 470, 820],
+  /**
+   * 各储水等级的容量 (L)，再乘站点 waterCapMult。
+   * 按单人正常日耗 3 L 锚定：约 5 / 9 / 14 / 21 天。
+   */
+  WATER: [20, 36, 56, 84],
   /** 农圃各等级日产生鲜食物 */
   GARDEN_YIELD: [0, 0.9, 2.4, 4.5],
-  /** 净水各等级日处理量 (L) */
-  FILTER_OUTPUT: [0, 9, 18, 32],
-  /** 没有雨雪也没有井时，可处理的原水只有这个比例（消防水箱、景观水、积水） */
+  /** @deprecated 雨日产量改走 FILTER.RAIN_OUTPUT；保留以免旧引用崩 */
+  FILTER_OUTPUT: [0, 8, 16, 26],
+  /** @deprecated 旱天不再靠「找脏水」产水，改走回用降耗 */
   RAW_WATER_DRY_MULT: 0.45,
-  /** 医疗站各等级的治疗效率倍率 */
+  /** 医疗站各等级的治疗效率倍率（目前未接线，休息加成另走 HEALTH.MEDBAY_*） */
   MEDBAY_MULT: [0.5, 1.0, 1.5, 2.2],
 } as const;
 

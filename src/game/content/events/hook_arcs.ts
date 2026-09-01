@@ -181,7 +181,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     title: '柜子里能看见底板了',
-    body: '柜子里的罐子挪到两边，中间露出底板。花纹你以前没注意过。\n还没空，但已经能看见空会是什么样子。',
+    body: '柜子里的罐子挪到两边，中间露出底板。花纹你以前没注意过。\n还没空，但已经能看见底板了——再少几罐就会见底。',
     choices: [
       ch('rehearse', '在本子上写下粮尽之后怎么办', { setFlags: ['flag:rehearsedEmpty'], schedule: [{ familyId: 'hook_follow_low', waitFor: ['foodLow', 'waterLow'] }], log: '你写了：水尽、粮尽、然后怎样。怎样那一行空着。', tone: 'neutral' }),
       skip('你把前排的罐子往中间挪，挡住底板。', { schedule: [{ familyId: 'hook_follow_low', waitFor: ['foodLow', 'hpLow'] }] }),
@@ -311,7 +311,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         body: '划痕还在。没有新的。你还是把椅子顶上。',
         choices: [
           { id: 'trust', label: '继续听它的', effect: { world: { exposure: -3 }, stats: { sanity: 2 }, log: '椅子顶上了。狗看了你一眼，躺下。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你摸了摸它的头。门还是门。', tone: 'neutral' } },
+          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你摸了摸它的头。椅子还顶在门上。', tone: 'neutral' } },
         ],
       },
       {
@@ -438,17 +438,17 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         id: 'militia',
         require: { all: ['flag:militiaFavor'] },
         title: '自治队的人在楼下喊过你的外号',
-        body: '外号不是你起的。被他们叫出来，像被量过身高和门牌。',
+        body: '外号不是你起的。他们在楼下喊出来，整栋楼都能听见。',
         choices: [
           { id: 'hide', label: '这几天少出门', effect: { world: { exposure: -4 }, stats: { sanity: -2 }, log: '你少出门。楼下还有人在用那个外号。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你假装那不是在叫你。', tone: 'neutral' } },
+          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你假装没听见，继续上楼。', tone: 'neutral' } },
         ],
       },
       {
         id: 'refused_t',
         require: { all: ['flag:refusedTribute'] },
         title: '拒绝交保护费之后，楼道里看你的眼光多停了一下',
-        body: '没有人明说。多停那一下就够了。',
+        body: '没有人明说。只是路过时多盯你一眼，然后才挪开。',
         choices: [
           { id: 'prepare', label: '把堵门再加固', effect: { res: { materials: -1 }, world: { exposure: -2 }, log: '你加固了。人进不来，说话声还是能从门缝进来。', tone: 'good' }, requires: { res: { materials: 1 } } },
           { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你低着头快步走过。', tone: 'neutral' } },
@@ -518,10 +518,10 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         id: 'officer',
         require: { all: ['flag:officerFavor'] },
         title: '那个官员说可以帮你，你还没有去兑现',
-        body: '人情会过期。过期的人情比没有更烫手。',
+        body: '名片还在抽屉里。他说可以帮你，你一直没去找。再拖下去，人家可能不认了。',
         choices: [
-          { id: 'hold', label: '继续留着不用', effect: { stats: { sanity: -2 }, log: '你留着。名片在抽屉里发软。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '人情还在名单上。人在屋里。', tone: 'neutral' } },
+          { id: 'hold', label: '继续留着不用', effect: { stats: { sanity: -2 }, log: '你留着。名片边角已经软了。', tone: 'neutral' } },
+          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '名片还在抽屉里。你没有出门。', tone: 'neutral' } },
         ],
       },
       {
@@ -620,7 +620,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         title: '从死者那里拿来的东西，你单独放',
         body: '你把这些东西单独放。怕跟日常用品混在一起之后，每次伸手都会想起来是从哪拿的。',
         choices: [
-          { id: 'use', label: '还是用，因为需要', effect: { stats: { humanity: -2, sanity: -2 }, log: '你用了。需要的那一头先赢了。', tone: 'grim' } },
+          { id: 'use', label: '还是用，因为需要', effect: { stats: { humanity: -2, sanity: -2 }, log: '你用了。先顾眼前缺的那样。', tone: 'grim' } },
           { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '东西还单独放着。你没有去拿。', tone: 'neutral' } },
         ],
       },
@@ -637,11 +637,11 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
       {
         id: 'fam_unk',
         require: { all: ['flag:familyUnknown'] },
-        title: '不知道他们在哪，比知道一个坏消息更占地方',
-        body: '这件事占着胸口。箱子让不开，你也没法把它从身上卸下来。',
+        title: '你还不知道他们在哪',
+        body: '没有地址，也没有新消息。你想写信，又不知道往哪寄。这件事整天压在胸口，干活时也会冒出来。',
         choices: [
           { id: 'write', label: '写信，即使没有地址', effect: { stats: { sanity: 3, humanity: 2 }, log: '你写了。信放进抽屉。现在没有邮局可去。', tone: 'good' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你没有写。胸口那一块还空着。', tone: 'neutral' } },
+          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你没有写。胸口还是闷。', tone: 'neutral' } },
         ],
       },
       {
@@ -658,9 +658,9 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         id: 'property',
         require: { all: ['flag:propertyDeal'] },
         title: '你跟物业做过的那个交易，收据已经皱了',
-        body: '皱收据你还留着，好像能当护身符。门会不会开，它管不了。',
+        body: '皱收据你还留着，好像留着就能管用。门会不会开，它管不了。',
         choices: [
-          { id: 'keep', label: '夹进贴身口袋', effect: { stats: { sanity: 2 }, log: '纸贴着胸口。心跳不看收据。', tone: 'neutral' } },
+          { id: 'keep', label: '夹进贴身口袋', effect: { stats: { sanity: 2 }, log: '纸贴着胸口。你数了两下心跳，收据还在。', tone: 'neutral' } },
           { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '收据还在原处，更皱了一点。', tone: 'neutral' } },
         ],
       },
@@ -668,27 +668,27 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         id: 'robbed',
         require: { all: ['flag:robbedOnce'] },
         title: '你被抢过一次，现在开门的动作会先停顿',
-        body: '那一顿是交过的学费。门链还没装，手已经会先停一下。',
+        body: '被抢过那次之后，你开门会先停一下。门链还没装上。',
         choices: [
-          { id: 'chain', label: '加装门链', effect: { res: { materials: -1 }, world: { exposure: -2 }, log: '链子很短。短有时候够用。', tone: 'good' }, requires: { res: { materials: 1 } } },
+          { id: 'chain', label: '加装门链', effect: { res: { materials: -1 }, world: { exposure: -2 }, log: '门链装上了。开门时先只能开一条缝。', tone: 'good' }, requires: { res: { materials: 1 } } },
           { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '开门时你还是会先停一下。', tone: 'neutral' } },
         ],
       },
       {
         id: 'took_fam',
         require: { all: ['flag:tookInFamily'] },
-        title: '你收过人对，屋子的回声就不一样了',
-        body: '即使他们已经不在，墙里好像还留着多出来的那一层声音。',
+        title: '你收过人对，屋里说话的回声都不一样了',
+        body: '即使他们已经不在，你有时还会下意识留一双筷子，或者听墙上有没有第二个人的动静。',
         choices: [
           { id: 'listen', label: '在墙边站一会儿', effect: { stats: { sanity: 2, humanity: 1 }, log: '墙没有出声。你还是站完了。', tone: 'neutral' } },
-          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '回声会自己淡下去。你去干活了。', tone: 'neutral' } },
+          { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '你去干活了。屋里只有你的脚步。', tone: 'neutral' } },
         ],
       },
       {
         id: 'fake_script',
         require: { all: ['flag:fakeScript'] },
-        title: '那张旧处方还在钱包里，像一张罪证',
-        body: '药店可能已经不在。处方还在。',
+        title: '那张旧处方还在钱包里',
+        body: '药店可能已经不在了。处方还夹在钱包夹层，边角磨毛了。',
         choices: [
           { id: 'burn', label: '烧掉', effect: { stats: { sanity: 3, humanity: 1 }, log: '灰很小。钱包轻了一点。', tone: 'good' } },
           { id: 'skip', label: '什么都不做', effect: { stats: { stamina: 4, sanity: -2 }, log: '钱包还是那个厚度。', tone: 'neutral' } },

@@ -1,5 +1,6 @@
 import type { EventFamily } from '../../types';
 import { beat, ch, skip } from './factory';
+import { HIGHFLOOR, URBAN, URBAN_OR_HIGH } from './queries';
 
 /** 备灾通用 + 公寓：囤货、房东、碘片、封窗、对门、物业、两份通报 */
 export const PREP_SLICE_EVENTS: EventFamily[] = [
@@ -8,7 +9,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-    require: { any: ['site:urban', 'site:highFloor'] },
+    require: URBAN_OR_HIGH,
     title: '五金店把封窗胶带摆到了最前面',
     body: '一卷蓝色的，一卷透明的。老板说透明的抗紫外线，蓝色的抗风。你问差别在哪，他耸肩："广告词不一样。"\n你住六楼。玻璃比门多。',
     choices: [
@@ -22,12 +23,12 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'social',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:highFloor'] },
+    require: HIGHFLOOR,
     title: '电梯里贴了一张手写通知',
     body: '纸是从练习本上撕的，胶带粘了四个角。"物业停电检修，电梯或将停运，请预留步行时间。"没有日期，没有章。\n六楼。你已经在心里数台阶了。',
     choices: [
       ch('ask', '去物业问清楚', { stats: { stamina: -8, reputation: 2 }, setFlags: ['flag:elevatorWarned'], log: '值班的人说"上面让贴的"。你没得到日期。', tone: 'neutral' }),
-      ch('water', '先把水往楼上搬', { res: { water: 8, cash: -40 }, stats: { stamina: -16 }, setFlags: ['flag:elevatorWarned'], log: '你爬了四趟。膝盖开始提意见。', tone: 'good' }, { requires: { res: { cash: 40 } } }),
+      ch('water', '先把水往楼上搬', { res: { water: 8, cash: -40 }, stats: { stamina: -16 }, setFlags: ['flag:elevatorWarned'], log: '你爬了四趟。膝盖开始发酸。', tone: 'good' }, { requires: { res: { cash: 40 } } }),
       skip('你拍了张照片。通知还在，日期还是没有。'),
     ],
   }),
@@ -36,7 +37,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'social',
     phase: ['prep'],
     cooldown: 14,
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '对门在走廊里堆纸箱',
     body: '男的搬，女的数。小孩坐在门槛上抱着一只缺耳的兔子。他们看见你，点了下头，又继续搬。\n纸箱上写着"厨房"、"药品"、"不要压"。',
     choices: [
@@ -50,11 +51,11 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'social',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '房东把催租发到了置顶',
     body: '就一行字："这个月别拖。现在这种时候，合同还是合同。"\n下面已经有人在骂。也有人在转账截图。',
     choices: [
-      ch('pay', '先把房租打过去', { res: { cash: -2800 }, stats: { sanity: 4 }, setFlags: ['flag:rentPaid'], log: '你转了账。房东回了一个"收到"。世界暂时还按旧规矩转。', tone: 'neutral' }, { requires: { res: { cash: 2800 } } }),
+      ch('pay', '先把房租打过去', { res: { cash: -2800 }, stats: { sanity: 4 }, setFlags: ['flag:rentPaid'], log: '你转了账。房东回了一个"收到"。这个月的合同暂时还算数。', tone: 'neutral' }, { requires: { res: { cash: 2800 } } }),
       ch('delay', '回消息说缓几天', { stats: { reputation: -4, sanity: -3 }, setFlags: ['flag:rentDelayed'], log: '他已读不回。你把对话往上滑，看见上个月的"谢谢"。', tone: 'bad' }),
       skip('你把聊天窗口划掉了。房租还在原处。', { stats: { sanity: -4 } }),
     ],
@@ -90,7 +91,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-    require: { any: ['site:urban', 'site:highFloor'] },
+    require: URBAN_OR_HIGH,
     title: '木材市场把最后几张多层板立在路边',
     body: '老板说按张卖，不议价，现金。板子边角已经有人用笔画了尺寸。\n你量过窗户。差不多。你量过门。也差不多。',
     choices: [
@@ -131,12 +132,12 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:highFloor'] },
+    require: HIGHFLOOR,
     title: '顶楼水箱间的钥匙在门卫室挂着',
     body: '门卫老周抽烟，说"上面不让借"。烟灰掉在登记本上。钥匙就在他脑后的钉子上，标签写着"6F 水箱，勿外借"。',
     choices: [
       ch('bribe', '塞一包烟把钥匙"借"一晚', { res: { cash: -60, water: 8 }, stats: { reputation: -2 }, setFlags: ['flag:tankKey'], log: '老周没点头，也没拦。钥匙在你掌心是温的。你连夜灌了两桶。', tone: 'good' }, { requires: { res: { cash: 60 } } }),
-      ch('talk', '跟他讲你只想提前灌桶', { stats: { reputation: 2 }, setFlags: ['flag:tankAsked'], log: '他说"等通知"。通知从来都比水先停。', tone: 'neutral' }, { requires: { skills: { negotiation: 2 }, reason: '需要谈判 2 级' } }),
+      ch('talk', '跟他讲你只想提前灌桶', { stats: { reputation: 2 }, setFlags: ['flag:tankAsked'], log: '他说"等通知"。你这周听这句话听了太多次。', tone: 'neutral' }, { requires: { skills: { negotiation: 2 }, reason: '需要谈判 2 级' } }),
       skip('你没开口。钉子上的钥匙轻轻转了一下。'),
     ],
   }),
@@ -145,7 +146,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:highFloor'] },
+    require: HIGHFLOOR,
     title: '楼道感应灯坏了两层',
     body: '四楼到六楼是黑的。你用手电照台阶，看见有人用粉笔写了"慢走"。\n物业说配件在采购。采购这两个字你这周听了太多次。',
     choices: [
@@ -159,7 +160,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'social',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '五楼有人把收音机开得很大',
     body: '短波里的杂音，和一句断断续续的"……不要出门……碘……"。\n你隔着楼板听见有人把音量又拧大了一档。',
     choices: [
@@ -176,7 +177,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     title: '小学门口提早放学，家长堵在路上',
     body: '老师说接到"天气原因"。天空是普通的阴。有个孩子问能不能明天再来，没人回答。\n你路过，不是来接谁的。',
     choices: [
-      ch('help_kid', '把走散的小孩送到老师那里', { stats: { humanity: 4, stamina: -6 }, world: { neighborhood: 3 }, setFlags: ['flag:helpedSchoolKid'], log: '老师说谢谢。孩子的手是热的。你自己的手不是。', tone: 'good' }),
+      ch('help_kid', '把走散的小孩送到老师那里', { stats: { humanity: 4, stamina: -6 }, world: { neighborhood: 3 }, setFlags: ['flag:helpedSchoolKid'], log: '老师说谢谢。孩子的手是热的。你把手揣回口袋。', tone: 'good' }),
       ch('ask_teacher', '问老师接到的是谁的通知', { stats: { sanity: -3 }, setFlags: ['flag:schoolRumor'], log: '她摇头。她的工牌还别着笑脸。', tone: 'neutral' }),
       skip('你绕开人群。车喇叭一声接一声。'),
     ],
@@ -205,7 +206,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     choices: [
       ch('buy_kids', '把儿童款都买走', { res: { cash: -80 }, setFlags: ['flag:mask', 'flag:kidMask'], log: '你买了。粉色勒着耳朵。门口那个人看了你的袋子一眼。', tone: 'good' }, { requires: { res: { cash: 80 } } }),
       ch('share', '留给问你的人一盒', { res: { cash: -40 }, stats: { humanity: 3, reputation: 2 }, setFlags: ['flag:mask'], log: '你自己留一盒，给她一盒。她说她有孩子。你没有问。', tone: 'good' }, { requires: { res: { cash: 40 } } }),
-      skip('你没买。卡通眼睛还在货架上瞪着。'),
+      skip('你没买。粉色卡通口罩还躺在货架上。'),
     ],
   }),
   beat({
@@ -213,7 +214,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '快递员说这是他这片最后一趟',
     body: '他靠在电动车上抽烟，车斗里只剩两件。一件是你三天前下的米，一件写着别人的名字。\n他说站点明天停。',
     choices: [
@@ -240,7 +241,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-    require: { all: ['site:highFloor'] },
+    require: HIGHFLOOR,
     title: '你开始给每扇窗编号',
     body: '客厅两扇，卧室一扇，厨房那扇打不开。你用纸条贴在框上：A、B、C、D。\nD 对着对面楼。对面有人站在窗前，也在量什么。',
     choices: [
@@ -268,11 +269,11 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     intensity: 3,
     phase: ['prep'],
     once: true,
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '一楼大堂有人在召集"楼栋互助"',
     body: '发起人是 3 楼的，拿着本子记名字。有人问谁来分配物资，当场吵起来。\n本子已经有十几个名字。没有你的。',
     choices: [
-      ch('join', '写上名字', { stats: { reputation: 4, humanity: 2 }, world: { neighborhood: 8, exposure: 6 }, setFlags: ['flag:buildingList'], log: '你写了。名字在纸上看起来比你本人更镇定。', tone: 'good' }),
+      ch('join', '写上名字', { stats: { reputation: 4, humanity: 2 }, world: { neighborhood: 8, exposure: 6 }, setFlags: ['flag:buildingList'], log: '你写了。笔迹有点抖，名字还是写上去了。', tone: 'good' }),
       ch('watch', '听完不签字', { stats: { sanity: -2 }, setFlags: ['flag:heardBuildingMeet'], log: '你听完了。分配的事没有结论。本子被合上。', tone: 'neutral' }),
       skip('你从边门上楼。吵闹声跟着楼梯转了一圈。'),
     ],

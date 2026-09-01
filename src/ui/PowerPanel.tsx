@@ -1,4 +1,5 @@
 import { COLD, POWER, TIME } from '../game/balance';
+import { MODULE_IDS } from '../game/content/modules';
 import { WEATHER_NAME } from '../game/engine/world';
 import { canElectricHeat, canFuelHeat, heatGap } from '../game/engine/climate';
 import {
@@ -6,9 +7,10 @@ import {
   computePower,
   loadWanted,
   mergedPriority,
+  potentialDrawKwh,
 } from '../game/engine/power';
 import { useGame } from '../game/store';
-import type { PowerLoadId, RunState } from '../game/types';
+import type { ModuleId, PowerLoadId, RunState } from '../game/types';
 import { Chip, Modal, SectionLabel } from './kit';
 
 export function PowerPanel({ run }: { run: RunState }) {
@@ -17,8 +19,12 @@ export function PowerPanel({ run }: { run: RunState }) {
   const order = mergedPriority(run).filter((id) => {
     if (id === 'lights' || id === 'fridge') return true;
     if (id === 'heater') return (run.heatMode ?? 'off') === 'electric' && canElectricHeat(run);
-    const d = power.draws.find((x) => x.id === id);
-    return !!d && d.kwh > 0;
+    if ((MODULE_IDS as readonly string[]).includes(id)) {
+      const level = run.modules[id as ModuleId] ?? 0;
+      if (level <= 0) return false;
+      return potentialDrawKwh(run, id) > 0;
+    }
+    return false;
   });
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const disasterName = run.world.disaster === 'nuclear' ? '核沉降' : '灾难';
@@ -43,6 +49,9 @@ export function PowerPanel({ run }: { run: RunState }) {
       width="max-w-2xl"
     >
       <div className="mb-3 border-l-2 border-line2 bg-ink px-3 py-2 text-[12px] leading-relaxed text-dim">
+        {isPrep && (
+          <div className="mb-1 text-safehi">市电充足：今晚不会因缺电停摆（自己拆线路除外）。</div>
+        )}
         <div>
           光伏 {power.solarBase.toFixed(1)} × {WEATHER_NAME[run.world.weather]} {power.weatherMult.toFixed(2)}
           {!isPrep && power.disasterMult !== 1 ? ` × ${disasterName} ${power.disasterMult.toFixed(2)}` : ''}
@@ -69,10 +78,14 @@ export function PowerPanel({ run }: { run: RunState }) {
       <div className="space-y-1.5">
         {order.map((id, idx) => {
           const draw = power.draws.find((d) => d.id === id);
-          const kwh =
-            id === 'heater' && !draw
-              ? heatGap(run) * (COLD.ELECTRIC_PER_DEGREE[run.modules.insulate] ?? 0)
-              : (draw?.kwh ?? (id === 'lights' ? POWER.LIGHTS_KWH : id === 'fridge' ? POWER.FRIDGE_KWH : 0));
+          let kwh = draw?.kwh ?? potentialDrawKwh(run, id);
+          if (id === 'heater' && !draw) {
+            kwh = heatGap(run) * (COLD.ELECTRIC_PER_DEGREE[run.modules.insulate] ?? 0);
+          }
+          if (kwh <= 0) {
+            if (id === 'lights') kwh = POWER.LIGHTS_KWH;
+            else if (id === 'fridge') kwh = POWER.FRIDGE_KWH;
+          }
           const wanted = loadWanted(run, id);
           const online = wanted && !power.offline.includes(id);
           return (

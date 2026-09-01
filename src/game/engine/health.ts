@@ -5,7 +5,7 @@
  * 这样"因为饿所以扛不住冷"这种因果链在数值上是成立的。
  */
 
-import { AIR, COLD, HEALTH, RAD, RATION_EFFECT, WATER_EFFECT } from '../balance';
+import { AIR, COLD, FILTER, HEALTH, RAD, RATION_EFFECT, WATER_EFFECT } from '../balance';
 import { CONDITION_BY_ID } from '../content/conditions';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
@@ -13,6 +13,7 @@ import type { ConditionId, RunState } from '../types';
 import { canElectricHeat, canFuelHeat, electricHeatKwh, fuelHeatCost, unheatedFelt } from './climate';
 import type { ConsumeResult } from './economy';
 import { addCondition, addLog, removeCondition } from './effects';
+import { ledger, type LedgerNote } from './ledger';
 import { loadOnline } from './power';
 import { effectiveModule, iodineActive, radiationShield } from './tags';
 
@@ -24,7 +25,7 @@ export interface HpPart {
 }
 
 export interface HealthReport {
-  notes: string[];
+  notes: LedgerNote[];
   hpDelta: number;
   hpParts: HpPart[];
   dead: boolean;
@@ -64,7 +65,7 @@ export function feltTemperature(run: RunState, heated?: boolean): number {
 }
 
 export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): HealthReport {
-  const notes: string[] = [];
+  const notes: LedgerNote[] = [];
   const hpParts: HpPart[] = [];
   const hpBefore = run.stats.hp;
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
@@ -81,7 +82,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   const gainCond = (id: ConditionId, note: string) => {
     if (addCondition(run, id)) {
       addedTonight.add(id);
-      notes.push(note);
+      notes.push(ledger(note, 'bad'));
       return true;
     }
     return false;
@@ -120,8 +121,10 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   }
 
   // ---------- 2. 既有病情 ----------
+  if (!run.conditionAge) run.conditionAge = {};
   for (const id of [...run.conditions]) {
     const def = CONDITION_BY_ID[id];
+    if (!def) continue;
     let mult = 1;
     if (has(run, 'nurse_care')) mult *= 0.75;
     mult *= 1 / (1 + effectiveModule(run, 'medbay') * 0.2);
@@ -132,25 +135,44 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
 
     if (def.autoCure === 'food' && run.streaks.goodRation >= HEALTH.MALN_CURE_DAYS) {
       removeCondition(run, id);
-      notes.push(`${def.name}因口粮恢复而好转了`);
+      notes.push(ledger(`${def.name}：因口粮恢复而好转`, 'good'));
       continue;
     }
     if (def.autoCure === 'water' && consume.waterRatio > 0.85) {
       removeCondition(run, id);
-      notes.push(`${def.name}因饮水恢复而好转了`);
+      notes.push(ledger(`${def.name}：因饮水恢复而好转`, 'good'));
       continue;
     }
 
     if (addedTonight.has(id)) continue;
+
+    // 病程天数：今晚结算时 +1（今日新得的不加）
+    run.conditionAge[id] = (run.conditionAge[id] ?? 0) + 1;
+    const age = run.conditionAge[id] ?? 0;
+
     if (def.selfHeal && rng.chance(def.selfHeal * (1 + effectiveModule(run, 'medbay') * 0.3))) {
       removeCondition(run, id);
-      notes.push(`${def.name}好转了`);
+      notes.push(ledger(`${def.name}：好转了`, 'good'));
       continue;
     }
-    if (def.worsen && rng.chance(def.worsen.chance * 0.5)) {
-      if (gainCond(def.worsen.into, `${def.name}恶化为${CONDITION_BY_ID[def.worsen.into].name}`)) {
-        // noted
+    if (def.worsen) {
+      const needDays = def.worsen.afterDays ?? 0;
+      if (age >= needDays) {
+        let chance = def.worsen.chance;
+        // 无 afterDays 的旧恶化保留半速；有门槛的用全概率
+        if (!def.worsen.afterDays) chance *= 0.5;
+        // 肾伤：脱水拖坏且当天走了回用
+        if (def.worsen.into === 'kidneyStrain' && !consume.recycling) chance = 0;
+        if (chance > 0 && rng.chance(chance)) {
+          if (gainCond(def.worsen.into, `${def.name}恶化为${CONDITION_BY_ID[def.worsen.into].name}`)) {
+            // noted
+          }
+        }
       }
+    }
+    // 痢疾拖久了也会黄疸（与脱水恶化并存）
+    if (id === 'dysentery' && age >= 5 && rng.chance(0.12)) {
+      gainCond('jaundice', '痢疾拖了太久，眼白开始发黄');
     }
   }
 
@@ -161,7 +183,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   if (felt < floor) {
     const gap = floor - felt;
     hit(-gap * COLD.HP_PER_DEGREE, '失温');
-    notes.push(`保温不足：室内 ${felt}°C，当前配置只能扛到 ${floor}°C`);
+    notes.push(ledger(`保温不足：室内 ${felt}°C，当前配置只能扛到 ${floor}°C`, 'bad'));
     if (gap >= COLD.HYPOTHERMIA_GAP) gainCond('hypothermia', '你出现了失温症状');
   } else if (felt > floor + 4) {
     removeCondition(run, 'hypothermia');
@@ -175,7 +197,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   if (run.world.airPollution > airTol) {
     const over = run.world.airPollution - airTol;
     hit(-over * AIR.HP_PER_POINT, '吸入污染物');
-    notes.push(`空气污染 ${Math.round(run.world.airPollution)}，超出防护能力 ${Math.round(over)}`);
+    notes.push(ledger(`空气污染 ${Math.round(run.world.airPollution)}：超出防护 ${Math.round(over)}`, 'bad'));
   }
 
   const sealed = insulate >= 2;
@@ -193,7 +215,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
     const iodine = iodineActive(run);
     if (airFilter > 0 && !loadOnline(run, 'airFilter')) {
-      notes.push('空气过滤因缺电停摆，辐射屏蔽按未开机计算');
+      notes.push(ledger('空气过滤缺电停摆：辐射屏蔽按未开机计算', 'bad'));
     }
     if (run.world.radiation > tol) {
       const over = (run.world.radiation - tol) * (iodine ? 0.45 : 1);
@@ -202,21 +224,27 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
       if (over > 12 && gainCond('radiationSickness', '你开始呕吐，牙龈在渗血')) {
         // noted
       } else if (over > 0) {
-        notes.push(`屏蔽不足：辐射 ${Math.round(run.world.radiation)}，当前只能挡到 ${tol}（正在掉血 ${dmg.toFixed(1)}）`);
+        notes.push(
+          ledger(
+            `辐射屏蔽不足：辐射 ${Math.round(run.world.radiation)}，只能挡到 ${tol}（生命 ${dmg.toFixed(1)}）`,
+            'bad',
+          ),
+        );
       }
     }
   }
 
   if (run.flags.includes('flag:iodine') && run.iodineUntil !== undefined && run.day + 1 >= run.iodineUntil) {
-    notes.push('碘片的保护今晚到期。明天甲状腺又要自己扛。');
+    notes.push(ledger('碘片保护今晚到期：明天甲状腺要自己扛', 'bad'));
   }
 
   // ---------- 6. 灯光 ----------
   if (loadOnline(run, 'lights')) {
     run.stats.sanity = clamp(run.stats.sanity + HEALTH.LIGHTS_SANITY_ON, 0, 100);
+    notes.push(ledger(`灯开着：理智 +${HEALTH.LIGHTS_SANITY_ON}`, 'good'));
   } else {
     run.stats.sanity = clamp(run.stats.sanity + HEALTH.LIGHTS_SANITY_OFF, 0, 100);
-    notes.push(`屋里黑着，理智 ${HEALTH.LIGHTS_SANITY_OFF}，窗户也不再漏光`);
+    notes.push(ledger(`灯关着：理智 ${HEALTH.LIGHTS_SANITY_OFF}`, 'bad'));
   }
 
   // ---------- 7. 水源与疾病 ----------
@@ -226,6 +254,23 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     if (run.world.waterTable !== 'normal') p *= 1.35;
     if (rng.chance(p) && gainCond('dysentery', '那口水的代价来得很快')) {
       // noted
+    }
+  } else if (consume.drankFiltered) {
+    const filterLv = effectiveModule(run, 'filter');
+    let p = consume.recycling
+      ? (FILTER.SICK_RECYCLE[filterLv] ?? 0)
+      : (FILTER.SICK_RAIN[filterLv] ?? 0);
+    if (run.world.weather === 'blackRain' || run.world.waterTable === 'polluted') {
+      p *= FILTER.SICK_DIRTY_MULT;
+    }
+    if (has(run, 'chemist_consumables')) p *= 0.5;
+    if (p > 0 && rng.chance(p)) {
+      const useGiardia = filterLv >= 2 && rng.chance(FILTER.GIARDIA_SHARE);
+      if (useGiardia) {
+        gainCond('giardia', '肚子开始绞痛，滤过的水也不干净');
+      } else {
+        gainCond('dysentery', '滤过的水仍让你跑了两趟卫生间');
+      }
     }
   }
 
@@ -261,7 +306,23 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   if (run.conditions.length > 0) recover -= run.conditions.length * 5;
   if (felt < floor) recover -= 8;
   if (run.stats.sanity < 30) recover -= 6;
+  const medbay = effectiveModule(run, 'medbay');
+  recover += HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0;
   run.stats.stamina = clamp(run.stats.stamina + Math.max(6, recover), 0, 100);
+  const sleepSan = HEALTH.MEDBAY_SLEEP_SANITY[medbay] ?? 0;
+  if (sleepSan > 0) {
+    run.stats.sanity = clamp(run.stats.sanity + sleepSan, 0, 100);
+    notes.push(
+      ledger(
+        `医疗站过夜：体力 +${HEALTH.MEDBAY_SLEEP_STAMINA[medbay]}，理智 +${sleepSan}`,
+        'good',
+      ),
+    );
+  } else if ((HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0) > 0) {
+    notes.push(
+      ledger(`医疗站过夜：体力 +${HEALTH.MEDBAY_SLEEP_STAMINA[medbay]}`, 'good'),
+    );
+  }
 
   // ---------- 10. 同伴 ----------
   for (const s of run.survivors) {

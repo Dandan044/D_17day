@@ -31,8 +31,12 @@ import { resolveEnding } from './endings';
 import { emitHook, emitThresholdHooks, collectThresholdForced } from './hooks';
 import { applyDailyExposure, pickPressureFamily, resolveRaid, type RaidResult } from './exposure';
 import { resolveHealth } from './health';
+import { ledger, type LedgerNote } from './ledger';
 import { checkRequirement, deriveFacts, effectiveModule } from './tags';
 import { advanceWorldPrep, advanceWorldSurvival, applyOnset, createWorld } from './world';
+
+export type { LedgerNote, LedgerTone } from './ledger';
+export { ledger } from './ledger';
 
 export interface CreateRunOptions {
   seed: number;
@@ -96,6 +100,7 @@ export function createRun(opts: CreateRunOptions): RunState {
     stats,
     skills,
     conditions: [],
+    conditionAge: {},
     modules,
     projects: [],
     wear: { filterLife: 20, generatorOil: 24, batteryCharge: 0 },
@@ -222,8 +227,8 @@ export function verifyIntel(run: RunState, intelId: string): { ok: boolean; reas
 
 export interface NightReport {
   day: number;
-  notes: string[];
-  healthNotes: string[];
+  notes: LedgerNote[];
+  healthNotes: LedgerNote[];
   hpDelta?: number;
   hpParts?: Array<{ label: string; value: number }>;
   hpAfter?: number;
@@ -267,15 +272,15 @@ export function endDay(run: RunState): NightReport {
   if (isPrep) {
     // 准备期自来水和超市还在，不做配给结算
     report.notes.push(...spoilFood(run));
-    report.notes.push(...advanceProjects(run, rng));
+    report.notes.push(...advanceProjects(run, rng).map((t) => ledger(t)));
     advanceWorldPrep(run, rng);
-    report.notes.push(`物价指数升到 ${run.world.priceIndex.toFixed(2)}`);
+    report.notes.push(ledger(`物价指数：升到 ${run.world.priceIndex.toFixed(2)}`));
   } else {
     report.notes.push(...applyProduction(run));
     report.notes.push(...spoilFood(run));
     for (const secret of revealSecrets(run)) {
       addLog(run, secret, 'grim');
-      report.notes.push('有人终于说了实话（见日记）');
+      report.notes.push(ledger('有人终于说了实话（见日记）'));
     }
     const consume = consumeDaily(run, rng, run.difficulty);
     report.notes.push(...consume.notes);
@@ -286,7 +291,7 @@ export function endDay(run: RunState): NightReport {
     report.hpDelta = health.hpDelta;
     report.hpParts = health.hpParts.filter((p) => p.value !== 0);
     report.hpAfter = Math.round(run.stats.hp);
-    report.notes.push(...advanceProjects(run, rng));
+    report.notes.push(...advanceProjects(run, rng).map((t) => ledger(t)));
 
     const exposure = applyDailyExposure(run);
     report.exposureAdded = exposure.total;
@@ -312,7 +317,7 @@ export function endDay(run: RunState): NightReport {
   }
   if (report.died) {
     run.stats.hp = 20;
-    report.notes.push('（叙事模式）你本该死在这一天。');
+    report.notes.push(ledger('（叙事模式）你本该死在这一天。'));
   }
 
   // ---------- 进入下一天 ----------

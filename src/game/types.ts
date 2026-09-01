@@ -37,13 +37,18 @@ export type ConditionId =
   | 'starving' // 饥饿
   | 'malnourished' // 营养不良
   | 'dysentery' // 痢疾
+  | 'giardia' // 肠寄生虫
+  | 'jaundice' // 黄疸
   | 'flu' // 流感
+  | 'pneumonia' // 肺炎
   | 'woundInfection' // 伤口感染
+  | 'sepsis' // 败血症
   | 'fracture' // 骨折
   | 'hypothermia' // 失温
   | 'radiationSickness' // 辐射病
   | 'coPoisoning' // 一氧化碳中毒
   | 'moldLung' // 霉菌性肺病
+  | 'kidneyStrain' // 肾伤
   | 'despair'; // 绝望
 
 export type ModuleId =
@@ -580,6 +585,8 @@ export interface RunState {
   stats: Record<StatId, number>;
   skills: Record<SkillId, number>;
   conditions: ConditionId[];
+  /** 各状态已持续天数，用于 afterDays 恶化 */
+  conditionAge: Partial<Record<ConditionId, number>>;
 
   modules: Record<ModuleId, number>;
   projects: Project[];

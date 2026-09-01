@@ -1,5 +1,5 @@
 import type { ModuleDef, ModuleId } from '../types';
-import { AIR, CAPS, COLD, POWER } from '../balance';
+import { AIR, CAPS, COLD, FILTER, POWER } from '../balance';
 
 /**
  * 避难所模块。
@@ -45,31 +45,31 @@ export const MODULES: ModuleDef[] = [
     id: 'cistern',
     name: '储水',
     short: '储',
-    desc: '决定你能存多少水。水比食物先要命。',
-    zero: '几个空矿泉水瓶和浴缸。',
+    desc: '决定你能囤几天的水。容量按日耗算，不是无限水箱。',
+    zero: '几个空矿泉水瓶和浴缸。大概能撑四五天。',
     buildPenaltyTags: ['building:cistern'],
     // 曾经写的是「储水容量暂时归零」。真那么做的话，施工会让容量掉到 0 级，
     // clampResources 会把已经存下的水悄悄倒掉——玩家升级储水反而丢水，且没有提示。
     // 改用「净水暂停」：水箱在清洗，净化出来的水没处存。存量不受影响。
     buildPenaltyDesc: '水箱正在排空清洗，这段时间净化出来的水没处存。',
     levels: [
-      { materials: 8, parts: 3, labor: 7, hireCash: 2200, buyCash: 2900, buyDays: 1, desc: '食品级储桶加浴缸内衬。' },
-      { materials: 16, parts: 8, labor: 15, hireCash: 5800, buyCash: 7200, buyDays: 2, desc: '不锈钢水塔加浮球阀，接了雨水导流。' },
-      { materials: 28, parts: 16, labor: 26, hireCash: 13000, buyCash: 16000, buyDays: 3, skill: { id: 'mechanics', level: 3 }, desc: '大容量储罐 + 循环泵 + 沉淀分层。半个月不下雨也不慌。' },
+      { materials: 8, parts: 3, labor: 7, hireCash: 2200, buyCash: 2900, buyDays: 1, desc: '食品级储桶加浴缸内衬。大约九天。' },
+      { materials: 16, parts: 8, labor: 15, hireCash: 5800, buyCash: 7200, buyDays: 2, desc: '不锈钢水塔加浮球阀，接了雨水导流。大约两周。' },
+      { materials: 28, parts: 16, labor: 26, hireCash: 13000, buyCash: 16000, buyDays: 3, skill: { id: 'mechanics', level: 3 }, desc: '大容量储罐 + 循环泵 + 沉淀分层。大约三周。' },
     ],
   },
   {
     id: 'filter',
     name: '净水',
     short: '净',
-    desc: '把脏水变成能喝的水。没有它，喝下去的每一口都是赌博。',
+    desc: '雨雪天把水接进桶；旱天靠回用少喝一点。升级提高雨日产量、减缓滤芯损耗。',
     zero: '烧开而已。对付得了细菌，对付不了重金属和落灰。',
     buildPenaltyTags: ['building:filter'],
     buildPenaltyDesc: '管路断开，施工期间完全无法净水。',
     levels: [
-      { materials: 5, parts: 5, labor: 6, hireCash: 2400, buyCash: 3100, buyDays: 1, power: 0, desc: '重力式陶瓷滤芯 + 活性炭。慢，但不用电。' },
-      { materials: 10, parts: 12, labor: 14, hireCash: 6600, buyCash: 8200, buyDays: 2, power: 0.8, requiresModules: { power: 1 }, skill: { id: 'mechanics', level: 2 }, desc: '增压泵 + 三级滤芯 + 紫外灯。需要电。' },
-      { materials: 18, parts: 22, labor: 25, hireCash: 15000, buyCash: 18500, buyDays: 3, power: 1.6, requiresModules: { power: 2 }, skill: { id: 'mechanics', level: 4 }, desc: '反渗透机组。连黑雨都能处理，代价是耗电和滤芯。' },
+      { materials: 5, parts: 5, labor: 6, hireCash: 2400, buyCash: 3100, buyDays: 1, power: 0, desc: '重力式陶瓷滤芯 + 活性炭。慢，但不用电。雨天能接，旱天能回用。' },
+      { materials: 10, parts: 12, labor: 14, hireCash: 6600, buyCash: 8200, buyDays: 2, power: 0.8, requiresModules: { power: 1 }, skill: { id: 'mechanics', level: 2 }, desc: '增压泵 + 三级滤芯 + 紫外灯。雨日产量翻倍，滤芯更耐用。' },
+      { materials: 18, parts: 22, labor: 25, hireCash: 15000, buyCash: 18500, buyDays: 3, power: 1.6, requiresModules: { power: 2 }, skill: { id: 'mechanics', level: 4 }, desc: '反渗透机组。黑雨也能处理一大部分，滤芯损耗最低。' },
     ],
   },
   {
@@ -118,14 +118,14 @@ export const MODULES: ModuleDef[] = [
     id: 'medbay',
     name: '医疗站',
     short: '医',
-    desc: '决定同一份药能救回多少命。',
+    desc: '减轻病情日损，提高自愈；重病需要更高等级才能用药。三级时主动休息能回一点生命。',
     zero: '一个家用医药箱，里面有过期的感冒药。',
     buildPenaltyTags: ['building:medbay'],
     buildPenaltyDesc: '医疗物资全部打包着，急救效率大幅下降。',
     levels: [
-      { materials: 5, parts: 3, labor: 6, hireCash: 2000, buyCash: 2600, buyDays: 1, power: 0.2, desc: '固定的处置台、消毒区、分类药柜。' },
-      { materials: 10, parts: 8, labor: 14, hireCash: 5400, buyCash: 6800, buyDays: 2, power: 0.5, skill: { id: 'medicine', level: 2 }, desc: '缝合与固定器械齐备，输液架，冷藏药品。' },
-      { materials: 16, parts: 16, labor: 24, hireCash: 12500, buyCash: 15500, buyDays: 3, power: 1.0, requiresModules: { power: 1 }, skill: { id: 'medicine', level: 4 }, desc: '可做小手术的隔离处置间。感染不再等于死刑。' },
+      { materials: 5, parts: 3, labor: 6, hireCash: 2000, buyCash: 2600, buyDays: 1, power: 0.2, desc: '固定的处置台、消毒区、分类药柜。过夜恢复略好一点。' },
+      { materials: 10, parts: 8, labor: 14, hireCash: 5400, buyCash: 6800, buyDays: 2, power: 0.5, skill: { id: 'medicine', level: 2 }, desc: '缝合与固定器械齐备，输液架，冷藏药品。能处理黄疸和肺炎。' },
+      { materials: 16, parts: 16, labor: 24, hireCash: 12500, buyCash: 15500, buyDays: 3, power: 1.0, requiresModules: { power: 1 }, skill: { id: 'medicine', level: 4 }, desc: '可做小手术的隔离处置间。主动休息能回 1 点生命。' },
     ],
   },
   {
@@ -175,10 +175,18 @@ export function moduleSpec(id: ModuleId, level: number) {
 export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1): string {
   const lv = Math.max(0, Math.min(3, level));
   switch (id) {
-    case 'cistern':
-      return `储水 ${Math.round((CAPS.WATER[lv] ?? 40) * waterCapMult)} L`;
-    case 'filter':
-      return `日产净水 ${CAPS.FILTER_OUTPUT[lv] ?? 0} L`;
+    case 'cistern': {
+      const cap = Math.round((CAPS.WATER[lv] ?? 20) * waterCapMult);
+      const days = Math.round((cap / 3) * 10) / 10;
+      return `储水 ${cap} L（约 ${days} 天）`;
+    }
+    case 'filter': {
+      if (lv <= 0) return '无';
+      const rain = FILTER.RAIN_OUTPUT[lv] ?? 0;
+      const save = Math.round((1 - (FILTER.RECYCLE_NEED[lv] ?? 1)) * 100);
+      const wear = FILTER.WEAR_LEVEL_MULT[lv] ?? 1;
+      return `雨日产 ${rain} L；旱天耗水 −${save}%；滤芯损耗 ×${wear}`;
+    }
     case 'power':
       return `光伏约 ${POWER.BASE_OUTPUT[lv] ?? 0} kWh/日${lv >= 3 ? '；可开柴油机补缺口' : ''}`;
     case 'insulate':
@@ -194,7 +202,11 @@ export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1):
     case 'garden':
       return `日产生鲜 ${CAPS.GARDEN_YIELD[lv] ?? 0} 份`;
     case 'medbay':
-      return '减轻状态每日损耗；提高自愈率';
+      return lv >= 3
+        ? '减轻病情日损；主动休息 +1 生命'
+        : lv > 0
+          ? '减轻病情日损；提高自愈；过夜恢复略好'
+          : '无';
     case 'fortify':
       return '降低袭击成功率';
     case 'conceal':

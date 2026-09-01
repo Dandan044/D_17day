@@ -1,4 +1,6 @@
 import type { EventFamily } from '../../types';
+import { beat } from './factory';
+import { URBAN } from './queries';
 
 /**
  * 生存期事件（崩溃日之后）。
@@ -10,15 +12,12 @@ import type { EventFamily } from '../../types';
  * 合理性由 require/forbid 标签保证，而不是靠作者记住所有组合。
  */
 export const SURVIVAL_EVENTS: EventFamily[] = [
-  // ============================================================
-  // 暴露度阶梯：路人 → 踩点 → 勒索 → 突袭
-  // ============================================================
-  {
+beat({
     id: 'pressure_passerby',
     kind: 'social',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         // 通用兜底变体：不带任何条件，保证这一档永远有内容
@@ -125,14 +124,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'pressure_scout',
     kind: 'threat',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         // 通用兜底变体：措辞不绑定任何站点类型
@@ -280,20 +278,20 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'pressure_tribute',
     kind: 'threat',
     intensity: 4,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         // 通用兜底变体：不带任何 require，保证任何灾难下这一档压力都不会静默消失
         id: 'street_toll',
         title: '街口新立了一道杆',
         body: '两个油桶架着一根钢管，旁边生着火。四五个人轮流守在那儿，谁都不穿制服。\n他们没来敲你的门，只是让你知道：从今天起，这条街进出要"打招呼"。\n傍晚有人来传话，说明天开始每户要交东西，不多，"够我们守夜就行"。',
+        require: URBAN,
         forbid: { any: ['site:isolated', 'site:elevated'] },
         choices: [
           {
@@ -484,17 +482,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  // 突袭：同一母题的多种合理外衣
-  // ============================================================
-  {
+  }),
+beat({
     id: 'raid_attempt',
     kind: 'threat',
     intensity: 5,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         // 通用兜底变体：只要不是地下、不是被水围住，就是最朴素的那种破门
@@ -563,7 +557,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
       {
         id: 'requisition_raid',
         title: '这次他们没带表格',
-        body: '还是那身制服，但少了两个人，也没有车。臂章还在，但已经缝得歪了。\n"最后一次登记。"领头的说。他的枪不再背在肩上。\n没有本子，没有白条。你意识到"政府军"这个词今天已经不成立了。',
+        body: '还是那身制服，但少了两个人，也没有车。臂章还在，但已经缝得歪了。\n"最后一次登记。"领头的说。他的枪不再背在肩上。\n没有本子，没有白条。今天这帮人已经不像上次来登记的政府军。',
         require: { all: ['disaster:nuclear'], any: ['faction:gov:active'] },
         choices: [
           {
@@ -584,7 +578,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             effect: {
               setFlags: ['flag:raidDefend', 'flag:foughtSoldiers'],
               stats: { humanity: -4 },
-              log: '你决定不给。门后的三十秒里你想了很多事，然后什么也没想。',
+              log: '你决定不给。门后站了大约三十秒，然后脚步声走远了。',
               tone: 'bad',
             },
           },
@@ -604,7 +598,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
               },
               bad: {
                 res: { foodStaple: -8, water: -16, meds: -3 },
-                log: '他没回头。可能不是同一个人，可能他不想是同一个人。',
+                log: '他没回头。拿走的东西一点没少。你不确定还是不是上次那个人。',
                 tone: 'bad',
               },
             },
@@ -754,17 +748,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  // 环境与天气
-  // ============================================================
-  {
+  }),
+beat({
     id: 'env_ash_roof',
     kind: 'weather',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     require: { all: ['weather:ashfall'] },
     variants: [
@@ -810,14 +800,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'env_flood_rise',
     kind: 'weather',
     intensity: 4,
     phase: ['survival'],
-    baseWeight: 9,
+    weight: 9,
     cooldown: 14,
     require: { any: ['weather:flooding', 'water:flooded'] },
     variants: [
@@ -916,14 +905,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'env_cold_snap',
     kind: 'weather',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     require: { any: ['temp:freezing', 'temp:extreme', 'weather:blizzard'] },
     variants: [
@@ -975,17 +963,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  // 医疗与人
-  // ============================================================
-  {
+  }),
+beat({
     id: 'med_neighbor_sick',
     kind: 'medical',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     require: { any: ['contagion:high', 'contagion:low'] },
     forbid: { all: ['site:isolated'] },
@@ -993,7 +977,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
       {
         id: 'fever_at_door',
         title: '门外的人在发烧',
-        body: '是李姐。她站得离门有两米远，戴着口罩，声音是哑的。\n"孩子烧到四十度了。我知道我不该来。"她说，"你有药的话，放在楼梯口就行，我等你上去了再拿。"\n她已经想好了怎么不让你为难。这让拒绝变得更难。',
+        body: '是李姐。她站得离门有两米远，戴着口罩，声音是哑的。\n"孩子烧到四十度了。我知道我不该来。"她说，"你有药的话，放在楼梯口就行，我等你上去了再拿。"\n她说完就往后退了两步，退到猫眼看不见她的位置。',
         require: { none: ['neighbors:hostile'] },
         choices: [
           {
@@ -1039,14 +1023,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'med_own_wound',
     kind: 'medical',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 7,
+    weight: 7,
     cooldown: 14,
     require: { any: ['cond:woundInfection', 'injured'] },
     variants: [
@@ -1100,17 +1083,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  // 机会
-  // ============================================================
-  {
+  }),
+beat({
     id: 'opp_trader',
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 9,
+    weight: 9,
     cooldown: 14,
     require: { any: ['faction:trader:active', 'faction:trader:dormant'] },
     variants: [
@@ -1189,14 +1168,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'opp_trader_warehouse',
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     once: true,
     variants: [
       {
@@ -1221,14 +1199,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'opp_supply_drop',
     kind: 'opportunity',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 6,
+    weight: 6,
     cooldown: 14,
     require: { any: ['faction:gov:active', 'faction:rescue:active'] },
     variants: [
@@ -1276,17 +1253,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  // 后果链
-  // ============================================================
-  {
+  }),
+beat({
     id: 'story_neighbor_outcome',
     kind: 'story',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'child_lived',
@@ -1337,14 +1310,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'story_frozen_morning',
     kind: 'story',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'morning_after',
@@ -1386,14 +1358,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'story_family_radio',
     kind: 'story',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'county_broadcast',
@@ -1463,14 +1434,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'story_convoy_news',
     kind: 'story',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'convoy_fate',
@@ -1484,21 +1454,20 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
             effect: {
               stats: { sanity: 6 },
               setFlags: ['flag:convoyFailed'],
-              log: '你想起自己交的那三千块，也想起自己没上那辆车。有些决定要很久以后才知道对不对。',
+              log: '你想起自己交的那三千块，也想起自己没上那辆车。报名那十一户，你现在能报出名字的不到五个。',
               tone: 'neutral',
             },
           },
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'story_gov_ration',
     kind: 'story',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'the_receipt',
@@ -1513,7 +1482,7 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
               res: { foodStaple: 8, water: 12, meds: 2 },
               stance: { gov: 10 },
               stats: { sanity: 6 },
-              log: '他们按条子上的数量给了你，还多给了两组药。有些制度在崩溃之后还残留着一点惯性。',
+              log: '他们按条子上的数量给了你，还多给了两组药。发药的人没看你，只低头对了条子上的号码。',
               tone: 'good',
             },
           },
@@ -1531,17 +1500,13 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  // 理智：低理智时的梦境
-  // ============================================================
-  {
+  }),
+beat({
     id: 'dream_sequence',
     kind: 'dream',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 7,
+    weight: 7,
     cooldown: 14,
     require: { all: ['sanity:low'] },
     variants: [
@@ -1571,5 +1536,5 @@ export const SURVIVAL_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
+  })
 ];

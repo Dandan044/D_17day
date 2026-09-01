@@ -1,9 +1,6 @@
-import type { EventFamily, TagQuery } from '../../types';
+import type { EventFamily } from '../../types';
 import { beat, ch, skip } from './factory';
-
-const NUC: TagQuery = { all: ['disaster:nuclear'] as string[] };
-const APT: TagQuery = { all: ['disaster:nuclear', 'site:urban'] as string[] };
-const HIGH: TagQuery = { all: ['disaster:nuclear', 'site:highFloor'] as string[] };
+import { APT, HIGH, NUC } from './queries';
 
 /** 核战 / 六楼专属链。后续拍 weight 0，由 schedule 或 waitFor 接入。 */
 export const NUKE_ARC_EVENTS: EventFamily[] = [
@@ -330,8 +327,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     title: '桶里的水隔夜变成浅黄',
     body: '盖子是盖的。你没有放东西进去。黄得均匀，像茶，没有茶的香。\n你还有别的桶，暂时还清。',
     choices: [
-      ch('isolate', '黄的那桶单放，不喝', { stats: { sanity: 2 }, setFlags: ['flag:isolatedWater'], log: '你贴了标签。标签让你觉得自己还在管理什么。', tone: 'good' }),
-      ch('filter', '再滤一遍', { wear: { filterLife: -2 }, res: { water: -1 }, log: '黄淡了。你尝了一口，没有味道，这并不令人安心。', tone: 'neutral' }),
+      ch('isolate', '黄的那桶单放，不喝', { stats: { sanity: 2 }, setFlags: ['flag:isolatedWater'], log: '你贴了标签：不喝。黄水桶挪到角落。', tone: 'good' }),
+      ch('filter', '再滤一遍', { wear: { filterLife: -2 }, res: { water: -1 }, log: '黄淡了。你尝了一口，没有味道。你拿它洗了手，没有喝第二口。', tone: 'neutral' }),
       skip('你搅了搅。黄还在。你盖上盖。', { stats: { sanity: -3 } }),
     ],
   }),

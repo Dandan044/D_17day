@@ -25,12 +25,23 @@ export function beat(opts: {
   forbid?: TagQuery;
   minThreat?: number;
   maxThreat?: number;
-  title: string;
-  body: string;
-  choices: Choice[];
+  /** 单变体时必填；传入 variants 时可省略 */
+  title?: string;
+  body?: string;
+  choices?: Choice[];
   variants?: EventVariant[];
 }): EventFamily {
   const weight = opts.weight ?? 8;
+  const variants =
+    opts.variants ??
+    [
+      {
+        id: 'main',
+        title: opts.title ?? opts.id,
+        body: opts.body ?? '',
+        choices: opts.choices ?? [],
+      },
+    ];
   return {
     id: opts.id,
     kind: opts.kind ?? 'social',
@@ -43,15 +54,6 @@ export function beat(opts: {
     forbid: opts.forbid,
     minThreat: opts.minThreat,
     maxThreat: opts.maxThreat,
-    variants:
-      opts.variants ??
-      [
-        {
-          id: 'main',
-          title: opts.title,
-          body: opts.body,
-          choices: opts.choices,
-        },
-      ],
+    variants,
   };
 }

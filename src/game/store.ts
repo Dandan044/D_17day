@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { STAMINA, TIME } from './balance';
+import { HEALTH, STAMINA, TIME } from './balance';
 import { CLASS_BY_ID } from './content/classes';
 import { ENDING_BY_ID } from './content/endings';
 import { FAMILY_BY_ID } from './content/events';
@@ -375,7 +375,7 @@ export const useGame = create<GameState>()(
           const haul = get().haul;
           if (!run || !haul) return;
           const next = structuredClone(run) as RunState;
-          commitHaul(next, picked);
+          const haulNotes = commitHaul(next, picked);
           clampResources(next);
           const rng = makeRng(next.seed, next.rngCursor);
           emitHook(next, 'takeHaul', rng);
@@ -389,6 +389,7 @@ export const useGame = create<GameState>()(
             );
           }
           set({ run: next, haul: null });
+          for (const n of haulNotes.notes) pushToast(n, 'bad');
         },
 
         discardHaul: () => set({ haul: null }),
@@ -439,7 +440,11 @@ export const useGame = create<GameState>()(
           emitHook(next, 'buy', rng);
           next.rngCursor = rng.cursor();
           set({ run: next });
-          pushToast(`买到 ${r.got}，花了 ${r.spent} 元`, 'good');
+          if (r.capped && res === 'water') {
+            pushToast(`只买了 ${r.got} L，桶满了（花了 ${r.spent} 元）`, 'neutral');
+          } else {
+            pushToast(`买到 ${r.got}，花了 ${r.spent} 元`, 'good');
+          }
         },
 
         buyIodine: (locationId) => {
@@ -467,13 +472,25 @@ export const useGame = create<GameState>()(
           }
           mutate((r) => {
             r.ap -= 1;
-            r.stats.stamina = Math.min(100, r.stats.stamina + STAMINA.REST_ACTION);
-            r.stats.sanity = Math.min(100, r.stats.sanity + 4);
+            const medbay = r.modules.medbay ?? 0;
+            const stamBonus = HEALTH.MEDBAY_REST_STAMINA[medbay] ?? 0;
+            const sanBonus = HEALTH.MEDBAY_REST_SANITY[medbay] ?? 0;
+            const hpBonus = HEALTH.MEDBAY_REST_HP[medbay] ?? 0;
+            r.stats.stamina = Math.min(100, r.stats.stamina + STAMINA.REST_ACTION + stamBonus);
+            r.stats.sanity = Math.min(100, r.stats.sanity + 4 + sanBonus);
+            if (hpBonus > 0) r.stats.hp = Math.min(100, r.stats.hp + hpBonus);
             const rng = makeRng(r.seed, r.rngCursor);
             emitHook(r, 'rest', rng);
             r.rngCursor = rng.cursor();
           });
-          pushToast('歇了一会儿。体力与理智回了一些，生命不会因为躺着涨回来', 'good');
+          const medbay = run.modules.medbay ?? 0;
+          const hpBonus = HEALTH.MEDBAY_REST_HP[medbay] ?? 0;
+          pushToast(
+            hpBonus > 0
+              ? '歇了一会儿。体力、理智回了一些，生命也回了 1 点'
+              : '歇了一会儿。体力与理智回了一些，生命不会因为躺着涨回来',
+            'good',
+          );
         },
 
         build: (moduleId, path) => {

@@ -2,7 +2,6 @@ import { FAMILY_BY_ID } from '../game/content/events';
 import { RES_NAME } from '../game/content/locations';
 import { SITE_BY_ID } from '../game/content/sites';
 import { kindName } from '../game/engine/director';
-import { summarizeEffect } from '../game/engine/effects';
 import { checkRequirement, deriveFacts } from '../game/engine/tags';
 import { useGame } from '../game/store';
 import type { Choice, RunState, SkillId } from '../game/types';
@@ -95,7 +94,6 @@ export default function EventCard({ run }: { run: RunState }) {
             const req = checkRequirement(c.requires, run, facts);
             const chance = c.check ? successChance(c.check.dc, run.skills[c.check.skill]) : null;
             const cost = requirementCost(c);
-            const preview = summarizeEffect(c.effect, RES_NAME);
             return (
               <button
                 key={c.id}
@@ -116,7 +114,6 @@ export default function EventCard({ run }: { run: RunState }) {
                   </div>
                 </div>
                 {c.note && <div className="mt-1 text-[11.5px] text-faint">{c.note}</div>}
-                {req.ok && preview && <div className="mt-1 text-[11px] text-amberdim">{preview}</div>}
               </button>
             );
           })}

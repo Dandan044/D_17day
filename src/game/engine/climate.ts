@@ -4,7 +4,14 @@
 
 import { COLD } from '../balance';
 import { SITE_BY_ID } from '../content/sites';
-import type { RunState } from '../types';
+import type { RunState, WeatherId } from '../types';
+
+/** 产水天气：雨雪与黑雨。落灰不算。 */
+export const PRECIP_WEATHER: WeatherId[] = ['rain', 'storm', 'flooding', 'snow', 'blizzard', 'blackRain'];
+
+export function isPrecipWeather(weather: WeatherId): boolean {
+  return PRECIP_WEATHER.includes(weather);
+}
 
 export function unheatedFelt(run: RunState): number {
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];

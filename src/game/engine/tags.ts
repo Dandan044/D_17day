@@ -10,6 +10,7 @@ import { MODULE_BY_ID, MODULE_IDS } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { parseTag } from '../tags';
 import type { Facts, ModuleId, Requirement, RunState, TagQuery, WeatherId } from '../types';
+import { isPrecipWeather } from './climate';
 import { computePower, loadOnline, type PowerReport } from './power';
 
 export { computePower, loadOnline, type PowerReport } from './power';
@@ -105,6 +106,7 @@ export function deriveFacts(run: RunState): Facts {
   add(`weather:${w.weather}`);
   if (COVER_WEATHER.includes(w.weather)) add('weather:cover');
   if (HOSTILE_WEATHER.includes(w.weather)) add('weather:hostile');
+  if (isPrecipWeather(w.weather)) add('weather:precip');
   add(`season:${w.season}`);
   add(band(w.temperature, [-15, -5, 5, 15], ['temp:extreme', 'temp:freezing', 'temp:cold', 'temp:cool', 'temp:mild']));
 
@@ -151,6 +153,13 @@ export function deriveFacts(run: RunState): Facts {
   const heads = headcount(run);
   if (run.res.water < heads * 3) add('water:stored:low');
   if (run.res.foodStaple + run.res.foodFresh < heads * 2) add('food:low');
+
+  // 旱天回用：净水在线、非降水、无井
+  {
+    const filterOn = effectiveModule(run, 'filter', power) > 0;
+    const hasWell = site.tags.includes('site:hasWell');
+    if (filterOn && !isPrecipWeather(w.weather) && !hasWell) add('water:recycling');
+  }
 
   // --- 玩家 ---
   add(run.res.ammo > 0 ? 'armed' : 'unarmed');

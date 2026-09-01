@@ -10,7 +10,7 @@
 import { FAMILY_BY_ID } from '../src/game/content/events';
 import { LOCATION_BY_ID } from '../src/game/content/locations';
 import { SITE_BY_ID } from '../src/game/content/sites';
-import { applyProduction, travelCost } from '../src/game/engine/economy';
+import { applyProduction, dailyNeeds, travelCost } from '../src/game/engine/economy';
 import { applyEffect } from '../src/game/engine/effects';
 import { startProject } from '../src/game/engine/construction';
 import { chooseSite, createRun, endDay, resolveChoice } from '../src/game/engine/run';
@@ -165,26 +165,61 @@ console.log('\n  P1-1  施工期劣化：buildPenaltyTags 真的被读取并生�
   check('filter 施工不会误伤电力', !deriveFacts(filterRun).flags.has('power:blackout'));
 
   // cistern：施工期间净水暂停（原本承诺的「容量归零」会让存量被悄悄倒掉，不采用）
-  // 要给 filter 一个等级，否则净水本来就不产出，测不出"暂停"
+  // 要给 filter 一个等级，且必须是雨天，否则净水本来就不产出
   const cisternRun = mk('cistern');
   cisternRun.modules.filter = 1;
   cisternRun.wear.filterLife = 30;
+  cisternRun.world.weather = 'rain';
   const before = cisternRun.res.water;
   const notes = applyProduction(cisternRun);
-  const paused = notes.some((n) => n.includes('净水停了一天'));
-  check('cistern 施工时净水暂停', paused, notes.filter((n) => n.includes('水')).join(' / ') || '无相关提示');
+  const paused = notes.some((n) => n.text.includes('没法入库') || n.text.includes('净水停'));
+  check('cistern 施工时净水暂停', paused, notes.filter((n) => n.text.includes('水') || n.text.includes('净')).map((n) => n.text).join(' / ') || '无相关提示');
   check('cistern 施工不会倒掉已有存水', cisternRun.res.water >= before - 0.01,
     `${before} -> ${cisternRun.res.water}`);
 
-  // 对照组：cistern 没在施工时，净水照常
+  // 对照组：雨天 + 未施工 → 产水
   const normalRun = mk('filter');
   normalRun.projects = [];
   normalRun.modules.filter = 1;
   normalRun.wear.filterLife = 30;
+  normalRun.world.weather = 'rain';
   const w0 = normalRun.res.water;
   const notes2 = applyProduction(normalRun);
-  check('cistern 未施工时净水正常产出', normalRun.res.water > w0 && !notes2.some((n) => n.includes('净水停了一天')),
+  check('雨天净水正常产出', normalRun.res.water > w0 && !notes2.some((n) => n.text.includes('没法入库')),
     `${w0} -> ${normalRun.res.water}`);
+
+  // 晴天不产水
+  const dryRun = mk('filter');
+  dryRun.projects = [];
+  dryRun.modules.filter = 1;
+  dryRun.wear.filterLife = 30;
+  dryRun.world.weather = 'clear';
+  const wDry = dryRun.res.water;
+  const notesDry = applyProduction(dryRun);
+  check('晴天净水不产水', dryRun.res.water === wDry, `${wDry} -> ${dryRun.res.water} / ${notesDry.map((n) => n.text).join(';')}`);
+
+  // 旱天回用：耗水降低
+  const recycleRun = mk('filter');
+  recycleRun.projects = [];
+  recycleRun.modules.filter = 1;
+  recycleRun.wear.filterLife = 30;
+  recycleRun.world.weather = 'clear';
+  const needRecycle = dailyNeeds(recycleRun, 'normal');
+  recycleRun.modules.filter = 0;
+  const needNoFilter = dailyNeeds(recycleRun, 'normal');
+  check('旱天有净水时回用降低耗水', needRecycle.recycling && needRecycle.water < needNoFilter.water,
+    `recycle=${needRecycle.water} noFilter=${needNoFilter.water}`);
+
+  const tagRun = mk('filter');
+  tagRun.projects = [];
+  tagRun.modules.filter = 1;
+  tagRun.world.weather = 'clear';
+  const tf = deriveFacts(tagRun);
+  check('晴天+净水打上 water:recycling', tf.flags.has('water:recycling'));
+  tagRun.world.weather = 'rain';
+  const tfRain = deriveFacts(tagRun);
+  check('雨天打上 weather:precip', tfRain.flags.has('weather:precip'));
+  check('雨天不打 water:recycling', !tfRain.flags.has('water:recycling'));
 }
 
 // ============================================================

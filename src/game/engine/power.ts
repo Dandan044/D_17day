@@ -5,7 +5,7 @@
 import { POWER, TIME } from '../balance';
 import { MODULE_BY_ID, MODULE_IDS, moduleSpec } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
-import type { ApplianceId, PowerLoadId, RunState } from '../types';
+import type { ApplianceId, ModuleId, PowerLoadId, RunState } from '../types';
 import { electricHeatKwh } from './climate';
 
 export const APPLIANCE_IDS: ApplianceId[] = ['lights', 'fridge', 'heater'];
@@ -109,6 +109,7 @@ export function ensureRunDefaults(run: RunState): void {
   if (run.flags.includes('flag:iodine') && run.iodineUntil === undefined) {
     run.iodineUntil = run.day + 3;
   }
+  if (!run.conditionAge) run.conditionAge = {};
 }
 
 export function computePower(run: RunState): PowerReport {
@@ -133,8 +134,10 @@ export function computePower(run: RunState): PowerReport {
 
   const draws = collectDraws(run);
   const demand = draws.reduce((s, d) => s + d.kwh, 0);
+  const prepGrid = run.day < TIME.COLLAPSE_DAY;
 
-  if (!rewiring && lvl >= 3 && run.res.fuel > 0 && demand > available) {
+  // 准备期市电充足：柴油机不必补缺口；灾难前也不因缺电裁负荷
+  if (!rewiring && !prepGrid && lvl >= 3 && run.res.fuel > 0 && demand > available) {
     const gap = demand - available;
     const kwhCap = Math.min(POWER.GENERATOR_MAX, gap);
     const fuelNeed = kwhCap * POWER.GENERATOR_L_PER_KWH;
@@ -144,7 +147,7 @@ export function computePower(run: RunState): PowerReport {
   }
 
   const offline: PowerLoadId[] = [];
-  if (demand > available) {
+  if (!prepGrid && !rewiring && demand > available) {
     const priority = mergedPriority(run);
     const ordered = draws.slice().sort((a, b) => priority.indexOf(a.id) - priority.indexOf(b.id));
     let budget = available;
@@ -175,4 +178,20 @@ export function loadOnline(run: RunState, id: PowerLoadId, power?: PowerReport):
   if (!loadWanted(run, id)) return false;
   const p = power ?? computePower(run);
   return !p.offline.includes(id);
+}
+
+/** 某负荷若打开时会拉多少电（关掉的模块也要能显示） */
+export function potentialDrawKwh(run: RunState, id: PowerLoadId): number {
+  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  if (id === 'lights') return POWER.LIGHTS_KWH;
+  if (id === 'fridge') return POWER.FRIDGE_KWH;
+  if (id === 'heater') return electricHeatKwh(run);
+  const mid = id as ModuleId;
+  const level = run.modules[mid] ?? 0;
+  if (level <= 0) return 0;
+  const spec = moduleSpec(mid, level);
+  let kwh = spec?.power ?? 0;
+  if (mid === 'garden' && level >= 2 && site.tags.includes('site:noSunlight')) kwh += 1.5;
+  if (mid === 'filter' && site.tags.includes('site:elevated')) kwh *= 0.3;
+  return kwh;
 }

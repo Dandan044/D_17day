@@ -1,4 +1,6 @@
 import type { EventFamily } from '../../types';
+import { beat } from './factory';
+import { NUC, URBAN } from './queries';
 
 /**
  * 准备期事件（Day 1-7）。
@@ -7,14 +9,14 @@ import type { EventFamily } from '../../types';
  * 而每一次采购、每一次拒绝邻居，都会在崩溃日之后变成账单或存款。
  */
 export const PREP_EVENTS: EventFamily[] = [
-  // ============================================================
-  {
+beat({
     id: 'prep_hoarding_rush',
     kind: 'opportunity',
     intensity: 2,
     phase: ['prep'],
-    baseWeight: 10,
+    weight: 10,
     cooldown: 14,
+    require: URBAN,
     variants: [
       {
         id: 'supermarket',
@@ -89,16 +91,15 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_neighbor_asks',
     kind: 'moral',
     intensity: 2,
     phase: ['prep'],
-    baseWeight: 9,
+    weight: 9,
     cooldown: 14,
+    require: URBAN,
     variants: [
       {
         id: 'lijie_water',
@@ -192,15 +193,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_neighbor_repay',
     kind: 'social',
     intensity: 1,
     phase: ['prep', 'survival'],
-    baseWeight: 0,
+    weight: 0,
     require: { any: ['flag:helpedLijie', 'flag:savedChild'] },
     variants: [
       {
@@ -215,22 +214,20 @@ export const PREP_EVENTS: EventFamily[] = [
               res: { foodStaple: 6, materials: 2 },
               stats: { humanity: 2, sanity: 4 },
               world: { neighborhood: 6 },
-              log: '你把箱子搬进屋。人和人之间还有一些东西没坏掉。',
+              log: '你把箱子搬进屋。那卷胶带当晚就用上了——厨房窗框还差最后一道。',
               tone: 'good',
             },
           },
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_coalarm',
     kind: 'opportunity',
     intensity: 1,
     phase: ['prep'],
-    baseWeight: 7,
+    weight: 7,
     once: true,
     variants: [
       {
@@ -270,21 +267,20 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_iodine',
     kind: 'opportunity',
     intensity: 1,
     phase: ['prep'],
-    baseWeight: 6,
+    weight: 6,
     once: true,
+    require: NUC,
     variants: [
       {
         id: 'pharmacy',
         title: '药店的碘片还剩两盒',
-        body: '柜台后的年轻店员指了指最上层："今天来问这个的第十一个人了。上午还有一整箱。"\n价格是平时的六倍。碘化钾片，一盒二十片，够一个人吃十天。\n它只在一种情况下有用。而你并不确定是不是那一种。',
+        body: '柜台后的年轻店员指了指最上层："今天来问这个的第十一个人了。上午还有一整箱。"\n价格是平时的六倍。碘化钾片，一盒二十片，够一个人吃十天。\n说明书上写着：核辐射暴露前或后二十四小时内服用。你不确定外面是不是已经到了那一步。',
         choices: [
           {
             id: 'buy_both',
@@ -313,22 +309,20 @@ export const PREP_EVENTS: EventFamily[] = [
             label: '把钱花在更可能用上的东西上',
             effect: {
               res: { meds: 2, cash: -180 },
-              log: '你没买碘片，买了常规药品。这是一个理性的决定，也可能是一个错误的决定。',
+              log: '你没买碘片，买了两盒退烧药和一卷绷带。出门前你回头看了一眼，货架上那两盒已经没了。',
               tone: 'neutral',
             },
           },
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_vehicle',
     kind: 'opportunity',
     intensity: 2,
     phase: ['prep'],
-    baseWeight: 7,
+    weight: 7,
     once: true,
     forbid: { all: ['hasVehicle'] },
     variants: [
@@ -384,15 +378,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_gun',
     kind: 'opportunity',
     intensity: 3,
     phase: ['prep'],
-    baseWeight: 5,
+    weight: 5,
     once: true,
     variants: [
       {
@@ -438,15 +430,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_family_call',
     kind: 'story',
     intensity: 3,
     phase: ['prep'],
-    baseWeight: 8,
+    weight: 8,
     once: true,
     variants: [
       {
@@ -492,15 +482,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_workplace',
     kind: 'social',
     intensity: 1,
     phase: ['prep'],
-    baseWeight: 7,
+    weight: 7,
     cooldown: 14,
     variants: [
       {
@@ -542,15 +530,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_scam',
     kind: 'social',
     intensity: 1,
     phase: ['prep'],
-    baseWeight: 6,
+    weight: 6,
     cooldown: 14,
     variants: [
       {
@@ -591,15 +577,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_pet',
     kind: 'moral',
     intensity: 1,
     phase: ['prep'],
-    baseWeight: 5,
+    weight: 5,
     once: true,
     forbid: { all: ['hasPet'] },
     variants: [
@@ -641,15 +625,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_evacuate',
     kind: 'moral',
     intensity: 4,
     phase: ['prep'],
-    baseWeight: 6,
+    weight: 6,
     once: true,
     minThreat: 0,
     variants: [
@@ -704,15 +686,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_stranger_generator',
     kind: 'opportunity',
     intensity: 2,
     phase: ['prep'],
-    baseWeight: 6,
+    weight: 6,
     cooldown: 14,
     variants: [
       {
@@ -765,15 +745,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_landlord',
     kind: 'social',
     intensity: 2,
     phase: ['prep'],
-    baseWeight: 5,
+    weight: 5,
     cooldown: 14,
     require: { any: ['site:urban', 'site:highFloor', 'site:underground'] },
     variants: [
@@ -828,15 +806,13 @@ export const PREP_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'prep_intel_conflict',
     kind: 'story',
     intensity: 1,
     phase: ['prep'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     variants: [
       {
@@ -872,7 +848,7 @@ export const PREP_EVENTS: EventFamily[] = [
             effect: {
               stats: { sanity: -2 },
               setFlags: ['flag:assumeWorst'],
-              log: '你决定信下面那一级。越靠近地面的通知越诚实，这是你的经验。',
+              log: '你决定信区级那份。按最坏情况开始备货。',
               tone: 'neutral',
             },
           },
@@ -881,12 +857,12 @@ export const PREP_EVENTS: EventFamily[] = [
             label: '不看了，去干活',
             effect: {
               stats: { stamina: 6 },
-              log: '你关掉手机去搬东西。有些时候，做比想有用。',
+              log: '你关掉手机去搬东西。先把能搬的搬完。',
               tone: 'neutral',
             },
           },
         ],
       },
     ],
-  },
+  })
 ];

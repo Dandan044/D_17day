@@ -211,6 +211,14 @@ function BodyPanel({ run }: { run: RunState }) {
             {run.conditions.map((c) => {
               const def = CONDITION_BY_ID[c];
               const canTreat = !!def.medsCure;
+              const age = run.conditionAge?.[c] ?? 0;
+              const worsenAt = def.worsen?.afterDays;
+              const worsenHint =
+                worsenAt !== undefined
+                  ? age >= worsenAt
+                    ? `已拖 ${age} 天，随时可能恶化为${CONDITION_BY_ID[def.worsen!.into]?.name ?? def.worsen!.into}。`
+                    : `已拖 ${age} 天，再拖约 ${worsenAt - age} 天可能恶化。`
+                  : '';
               return (
                 <div key={c} className="border-l-2 border-alarmdim bg-alarm/5 px-2 py-1.5">
                   <div className="flex items-baseline justify-between gap-2">
@@ -222,11 +230,13 @@ function BodyPanel({ run }: { run: RunState }) {
                         title={`消耗 ${def.medsCure} 组药品${def.needsMedbay ? ` + ${def.needsMedbay} 级医疗站` : ''}`}
                       >
                         用药 {def.medsCure}
+                        {def.needsMedbay ? ` · 医${def.needsMedbay}` : ''}
                       </button>
                     )}
                   </div>
                   <div className="mt-0.5 text-[11px] leading-snug text-faint">
                     {def.desc}
+                    {worsenHint ? ` ${worsenHint}` : ''}
                     {canTreat ? ' 用药只解除状态，不回生命。' : ''}
                   </div>
                 </div>
@@ -237,7 +247,9 @@ function BodyPanel({ run }: { run: RunState }) {
       )}
       {effectiveModule(run, 'medbay') > 0 && (
         <p className="mt-3 border-t border-line pt-2 text-[11.5px] leading-snug text-faint">
-          医疗站减轻病情损耗。治疗只解除状态，不额外回血。
+          医疗站减轻病情损耗
+          {run.modules.medbay >= 3 ? '；三级时主动休息能回 1 点生命' : '；过夜恢复略好'}
+          。治疗只解除状态，不额外回血。
         </p>
       )}
     </Panel>
@@ -415,7 +427,10 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
     {
       id: 'rest',
       title: '休息',
-      desc: '恢复体力和一点理智。不回生命。有时候什么都不做是正确的选择。',
+      desc:
+        run.modules.medbay >= 3
+          ? '恢复体力和一点理智，并回 1 点生命。'
+          : '恢复体力和一点理智。不回生命。有时候什么都不做是正确的选择。',
       ap: 1,
       onClick: rest,
     },

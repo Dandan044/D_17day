@@ -43,6 +43,8 @@ export const FLAG_TAGS = [
   'weather:cover',
   /** 任何让外出变危险的天气 */
   'weather:hostile',
+  /** 雨雪或黑雨：净水可接水 */
+  'weather:precip',
 
   // --- 季节与气温分档 ---
   'season:autumn',
@@ -113,6 +115,8 @@ export const FLAG_TAGS = [
   'power:generator',
   'water:stored:low',
   'food:low',
+  /** 旱天且净水在线：走回用降耗 */
+  'water:recycling',
 
   // --- 玩家 ---
   'armed',
@@ -203,13 +207,18 @@ const CONDITIONS: ConditionId[] = [
   'starving',
   'malnourished',
   'dysentery',
+  'giardia',
+  'jaundice',
   'flu',
+  'pneumonia',
   'woundInfection',
+  'sepsis',
   'fracture',
   'hypothermia',
   'radiationSickness',
   'coPoisoning',
   'moldLung',
+  'kidneyStrain',
   'despair',
 ];
 

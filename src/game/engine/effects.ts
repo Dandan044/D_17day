@@ -78,6 +78,8 @@ export function addLog(run: RunState, text: string, tone: 'good' | 'bad' | 'neut
 export function addCondition(run: RunState, id: ConditionId): boolean {
   if (run.conditions.includes(id)) return false;
   run.conditions.push(id);
+  if (!run.conditionAge) run.conditionAge = {};
+  run.conditionAge[id] = 0;
   return true;
 }
 
@@ -85,6 +87,7 @@ export function removeCondition(run: RunState, id: ConditionId): boolean {
   const i = run.conditions.indexOf(id);
   if (i < 0) return false;
   run.conditions.splice(i, 1);
+  if (run.conditionAge) delete run.conditionAge[id];
   return true;
 }
 
@@ -287,24 +290,4 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   if (eff.log) addLog(run, eff.log, eff.tone ?? 'neutral');
 
   return notes;
-}
-
-/** 效果的可读摘要，用于选项按钮下方的预览 */
-export function summarizeEffect(eff: Effect | undefined, names: Record<string, string>): string {
-  if (!eff) return '';
-  const parts: string[] = [];
-  if (eff.res) {
-    for (const [k, v] of Object.entries(eff.res)) {
-      if (!v) continue;
-      parts.push(`${names[k] ?? k} ${v > 0 ? '+' : ''}${Math.round(v * 10) / 10}`);
-    }
-  }
-  if (eff.stats) {
-    const statNames: Record<string, string> = { hp: '生命', stamina: '体力', sanity: '理智', humanity: '人性', reputation: '名声' };
-    for (const [k, v] of Object.entries(eff.stats)) {
-      if (!v) continue;
-      parts.push(`${statNames[k] ?? k} ${v > 0 ? '+' : ''}${v}`);
-    }
-  }
-  return parts.join('  ');
 }

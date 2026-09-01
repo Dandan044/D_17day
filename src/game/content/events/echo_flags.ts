@@ -114,18 +114,18 @@ function echoVariant(flag: string): EventVariant {
   return {
     id: flag.replace(/^flag:/, ''),
     require: { all: [flag] },
-    title: '白天干活的时候，有一件旧事又冒出来',
-    body: '洗手、数罐头的空当里，你做过的一个决定又冒出来。没有人逼你再选一次。\n你还记得自己当时选了哪边。',
+    title: '洗手的时候你想起来一件事',
+    body: '水流过指缝。你忽然想起自己做过的那个选择——哪一天想不起来了，只记得选完那天，你手上还沾着别的东西。\n没人跟你提过这件事。你关了水，手还是湿的。',
     choices: [
       {
         id: 'ack',
-        label: '停下来想清楚',
-        effect: { stats: { sanity: 2 }, log: '你把那件事在脑子里过了一遍。然后接着干活。', tone: 'good' },
+        label: '关水，把当时的选择再过一遍',
+        effect: { stats: { sanity: 2 }, log: '你关了水。把当时怎么选的又想了一遍，然后接着干活。', tone: 'good' },
       },
       {
         id: 'skip',
         label: '什么都不做',
-        effect: { stats: { stamina: 4, sanity: -2 }, log: '你没停。那件事过了一会儿自己退到后面去了。', tone: 'neutral' },
+        effect: { stats: { stamina: 4, sanity: -2 }, log: '你没停。搓完手就去数罐头，那件事暂时没再来。', tone: 'neutral' },
       },
     ],
   };

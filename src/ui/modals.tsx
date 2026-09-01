@@ -4,6 +4,8 @@ import { COLD, THREAT_DESC, TIME } from '../game/balance';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { LOCATION_BY_ID, RES_NAME, RES_UNIT } from '../game/content/locations';
 import type { HaulItem } from '../game/engine/economy';
+import { waterRoom } from '../game/engine/economy';
+import { waterCapacity } from '../game/engine/tags';
 import { carryCap, useGame } from '../game/store';
 import type { ResourceId, RunState } from '../game/types';
 import { Bar, Chip, Modal, Panel, SectionLabel } from './kit';
@@ -154,8 +156,13 @@ export function NightReportModal({ run }: { run: RunState }) {
           <SectionLabel>结算</SectionLabel>
           <div className="mb-3 space-y-1">
             {r.notes.map((n, i) => (
-              <div key={i} className="text-[12.5px] leading-snug text-dim">
-                · {n}
+              <div
+                key={i}
+                className={`text-[12.5px] leading-snug ${
+                  n.tone === 'good' ? 'text-safehi' : n.tone === 'bad' ? 'text-alarmhi' : 'text-dim'
+                }`}
+              >
+                · {n.text}
               </div>
             ))}
           </div>
@@ -167,8 +174,13 @@ export function NightReportModal({ run }: { run: RunState }) {
           <SectionLabel>身体</SectionLabel>
           <div className="mb-3 space-y-1">
             {r.healthNotes.map((n, i) => (
-              <div key={i} className="text-[12.5px] leading-snug text-alarmhi">
-                · {n}
+              <div
+                key={i}
+                className={`text-[12.5px] leading-snug ${
+                  n.tone === 'good' ? 'text-safehi' : n.tone === 'bad' ? 'text-alarmhi' : 'text-dim'
+                }`}
+              >
+                · {n.text}
               </div>
             ))}
           </div>
@@ -238,8 +250,9 @@ export function NightReportModal({ run }: { run: RunState }) {
 // ============================================================
 
 export function HaulModal({ run }: { run: RunState }) {
-  const { haul, takeHaul, discardHaul } = useGame();
+  const { haul, takeHaul, discardHaul, toast } = useGame();
   const cap = carryCap(run);
+  const room = waterRoom(run);
 
   const [picked, setPicked] = useState<Record<string, number>>(() => {
     if (!haul) return {};
@@ -247,10 +260,15 @@ export function HaulModal({ run }: { run: RunState }) {
     const sorted = [...haul.items].sort((a, b) => a.weight / a.amount - b.weight / b.amount);
     const out: Record<string, number> = {};
     let used = 0;
+    let waterLeft = Math.max(0, waterCapacity(run) - run.res.water);
     for (const it of sorted) {
       const unitW = it.weight / it.amount;
-      const room = Math.max(0, cap - used);
-      const canTake = unitW > 0 ? Math.min(it.amount, Math.floor((room / unitW) * 10) / 10) : it.amount;
+      const roomKg = Math.max(0, cap - used);
+      let canTake = unitW > 0 ? Math.min(it.amount, Math.floor((roomKg / unitW) * 10) / 10) : it.amount;
+      if (it.res === 'water') {
+        canTake = Math.min(canTake, waterLeft);
+        waterLeft = Math.max(0, waterLeft - canTake);
+      }
       out[it.res] = Math.max(0, canTake);
       used += canTake * unitW;
     }
@@ -266,7 +284,17 @@ export function HaulModal({ run }: { run: RunState }) {
   }, 0);
   const over = totalWeight > cap + 0.01;
 
-  const set = (res: string, amount: number) => setPicked((p) => ({ ...p, [res]: Math.max(0, amount) }));
+  const set = (res: string, amount: number) => {
+    if (res === 'water') {
+      const maxByRoom = room;
+      if (amount > maxByRoom + 0.01) {
+        toast(`储水还能装 ${maxByRoom.toFixed(1)} L（上限 ${waterCapacity(run)} L）`, 'bad');
+        setPicked((p) => ({ ...p, [res]: Math.max(0, maxByRoom) }));
+        return;
+      }
+    }
+    setPicked((p) => ({ ...p, [res]: Math.max(0, amount) }));
+  };
 
   const commit = () => {
     const out: HaulItem[] = haul.items
@@ -319,6 +347,7 @@ export function HaulModal({ run }: { run: RunState }) {
             {haul.items.map((it) => {
               const unitW = it.weight / it.amount;
               const cur = picked[it.res] ?? 0;
+              const waterMax = it.res === 'water' ? Math.min(it.amount, room) : it.amount;
               return (
                 <div key={it.res} className="panel p-2.5">
                   <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
@@ -326,6 +355,7 @@ export function HaulModal({ run }: { run: RunState }) {
                       <span className="text-[13px] text-paper">{RES_NAME[it.res as ResourceId]}</span>
                       <span className="num ml-2 text-[11.5px] text-faint">
                         找到 {it.amount} {RES_UNIT[it.res as ResourceId]} · {unitW.toFixed(2)} kg/单位
+                        {it.res === 'water' ? ` · 还能装 ${room.toFixed(1)} L` : ''}
                       </span>
                     </div>
                     <span className="num text-[13px] text-amberhi">
@@ -336,9 +366,9 @@ export function HaulModal({ run }: { run: RunState }) {
                     <input
                       type="range"
                       min={0}
-                      max={it.amount}
+                      max={waterMax}
                       step={it.amount > 20 ? 1 : 0.5}
-                      value={cur}
+                      value={Math.min(cur, waterMax)}
                       onChange={(e) => set(it.res, Number(e.target.value))}
                       className="flex-1 accent-amber"
                     />
@@ -347,7 +377,7 @@ export function HaulModal({ run }: { run: RunState }) {
                     </button>
                     <button
                       className="btn btn-ghost px-2 py-0.5 text-[10.5px]"
-                      onClick={() => set(it.res, it.amount)}
+                      onClick={() => set(it.res, waterMax)}
                     >
                       全
                     </button>

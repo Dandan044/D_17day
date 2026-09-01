@@ -1,5 +1,6 @@
 import type { EventFamily } from '../../types';
 import { beat, ch, skip } from './factory';
+import { HIGHFLOOR, URBAN } from './queries';
 
 /** 生存期通用即时事件：维护、卫生、滤芯、配给、敲门、安静日 */
 export const SURV_BEAT_EVENTS: EventFamily[] = [
@@ -20,11 +21,11 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'moral',
     phase: ['survival'],
     title: '你对着两份口粮坐了很久',
-    body: '一份是今天的。一份是你想留给"更糟的时候"。更糟的时候已经来过两次了。\n胃在叫。你还是一个人。',
+    body: '一份是今天的。另一份你想留给更糟的时候——更糟的时候已经来过两次了。\n胃在叫。屋里就你一个人。',
     choices: [
-      ch('eat', '今天吃够', { res: { foodStaple: -2 }, stats: { sanity: 6, stamina: 8, humanity: 1 }, setFlags: ['flag:ateEnough'], log: '你吃完了。盘子空着，比胃更诚实。', tone: 'good' }, { requires: { res: { foodStaple: 2 } } }),
-      ch('half', '减半，把差额藏起来', { res: { foodStaple: -1 }, stats: { sanity: -4, stamina: -6 }, setFlags: ['flag:hidRation'], log: '你把另一半放回柜子。锁上。钥匙在你口袋里发烫。', tone: 'neutral' }, { requires: { res: { foodStaple: 1 } } }),
-      skip('你只喝了水。晚上你数米粒。', { stats: { stamina: -8, sanity: -5 } }),
+      ch('eat', '今天吃够', { res: { foodStaple: -2 }, stats: { sanity: 6, stamina: 8, humanity: 1 }, setFlags: ['flag:ateEnough'], log: '你吃完了。盘子空着，肚子也暂时不叫了。', tone: 'good' }, { requires: { res: { foodStaple: 2 } } }),
+      ch('half', '减半，把差额藏起来', { res: { foodStaple: -1 }, stats: { sanity: -4, stamina: -6 }, setFlags: ['flag:hidRation'], log: '你把另一半放回柜子，锁上。钥匙还在口袋里。', tone: 'neutral' }, { requires: { res: { foodStaple: 1 } } }),
+      skip('你只喝了水。晚上你又去数了一遍米。', { stats: { stamina: -8, sanity: -5 } }),
     ],
   }),
   beat({
@@ -33,11 +34,11 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '这一整天，楼里没有声音',
-    body: '没有脚步，没有咳嗽，没有谁家电视。连管子都不响。\n安静本来该是好事。你坐在门槛上，把耳朵凑向楼梯。',
+    body: '没有脚步，没有咳嗽，没有谁家电视。连水管都不响。\n你坐在门槛上，把耳朵凑向楼梯，听有没有动静。',
     choices: [
-      ch('rest', '趁机睡觉', { stats: { stamina: 18, sanity: 8 }, setFlags: ['flag:quietSlept'], log: '你睡了。醒来时安静还在，像没人把世界打开。', tone: 'good' }),
+      ch('rest', '趁机睡觉', { stats: { stamina: 18, sanity: 8 }, setFlags: ['flag:quietSlept'], log: '你睡了。醒来时楼里还是静的，大堂那边也没有人声。', tone: 'good' }),
       ch('check', '下楼看一眼', { stats: { stamina: -10, sanity: -3 }, world: { exposure: 3 }, log: '大堂空着。宣传栏的塑料膜在动。没有人。', tone: 'neutral' }),
-      skip('你把窗关上。安静变得更厚。', { stats: { sanity: -2 } }),
+      skip('你把窗关上。屋里只剩自己的呼吸。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -48,8 +49,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     title: '敲门的是个嗓子哑了的女人',
     body: '她站得离门很远，只说要一杯水，给孩子。你从猫眼看见她手里空着。\n楼道里没有第二个人。',
     choices: [
-      ch('give', '从门缝递出一瓶', { res: { water: -3 }, stats: { humanity: 4, sanity: 2 }, world: { exposure: 4, neighborhood: 3 }, setFlags: ['flag:gaveWaterOnce'], log: '瓶子被接走。她说谢谢，声音轻得像怕惊动整栋楼。', tone: 'good' }, { requires: { res: { water: 3 } } }),
-      ch('lie', '说自己也没了', { stats: { humanity: -3, sanity: -2 }, setFlags: ['flag:liedNoWater'], log: '她站了几秒，下楼了。你听见自己冰箱里的水桶轻轻响。', tone: 'grim' }),
+      ch('give', '从门缝递出一瓶', { res: { water: -3 }, stats: { humanity: 4, sanity: 2 }, world: { exposure: 4, neighborhood: 3 }, setFlags: ['flag:gaveWaterOnce'], log: '瓶子被接走。她说谢谢，声音很轻，很快下楼了。', tone: 'good' }, { requires: { res: { water: 3 } } }),
+      ch('lie', '说自己也没了', { stats: { humanity: -3, sanity: -2 }, setFlags: ['flag:liedNoWater'], log: '她站了几秒，下楼了。你屋里的水桶还在冰箱旁。', tone: 'grim' }),
       skip('你没出声。敲门停了。', { stats: { sanity: -3, humanity: -1 } }),
     ],
   }),
@@ -86,7 +87,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     title: '你已经一周没换衣服',
     body: '领口发硬。你把衣服浸在盆里，水立刻变成灰色。外面还在下雨，晾不到阳台——阳台你封了。',
     choices: [
-      ch('wash', '洗，挂在屋里', { res: { water: -4 }, stats: { sanity: 5, stamina: -8 }, addCond: [], log: '湿衣服像一排没有人的身体。味道淡了。', tone: 'good' }, { requires: { res: { water: 4 } } }),
+      ch('wash', '洗，挂在屋里', { res: { water: -4 }, stats: { sanity: 5, stamina: -8 }, addCond: [], log: '衣服湿漉漉挂了一排。屋里潮，但领口不硬了。', tone: 'good' }, { requires: { res: { water: 4 } } }),
       ch('spare', '换最后一套干净的', { stats: { sanity: 3 }, setFlags: ['flag:lastCleanShirt'], log: '干净的那件有衣柜的气味。你把脏的卷起来塞进角落。', tone: 'good' }),
       skip('你把领口翻下去。没有人会看见。', { stats: { sanity: -3 } }),
     ],
@@ -99,7 +100,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     body: '你熟悉的那个频率空了。左右拧，偶尔蹦出半个字，像有人把话含在嘴里。\n电池还够用一阵。',
     choices: [
       ch('scan', '慢慢搜台', { stats: { stamina: -4, sanity: -2 }, setFlags: ['flag:scannedBands'], log: '你搜到一段音乐，很旧，然后又是沙沙。你把它记下了。', tone: 'neutral' }),
-      ch('off', '关掉，省电', { wear: { batteryCharge: 2 }, stats: { sanity: -4 }, log: '安静回来了。你有点想念杂音。', tone: 'neutral' }),
+      ch('off', '关掉，省电', { wear: { batteryCharge: 2 }, stats: { sanity: -4 }, log: '你关掉了。屋里一下子静下来，只剩自己的呼吸。', tone: 'neutral' }),
       skip('你把音量拧到最小，让它陪着。', { stats: { sanity: 2 } }),
     ],
   }),
@@ -121,7 +122,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'threat',
     intensity: 2,
     phase: ['survival'],
-    require: { all: ['site:highFloor'] },
+    require: HIGHFLOOR,
     title: '下楼时你在拐角踩到了什么',
     body: '软的。手电照过去，是一件外套，里面没有人。口袋翻出来，有一张公交卡和半截饼干。\n上面三层没有灯。',
     choices: [
@@ -134,8 +135,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_pipe_drip',
     kind: 'opportunity',
     phase: ['survival'],
-    title: '厨房水管开始有节奏地滴',
-    body: '滴在盆沿上，像在数数。你用杯子接，一小时不到半杯。水是黄的，但你闻过，没有那种甜腥。',
+    title: '厨房水管一下一下地在滴',
+    body: '水滴打在盆沿上，一下一下。你用杯子接，一小时不到半杯。水是黄的，你闻过，没有甜腥味。',
     choices: [
       ch('catch', '接着，煮开', { res: { water: 3, fuel: -0.5 }, stats: { stamina: -6 }, setFlags: ['flag:caughtDrip'], log: '你接了一下午。锅开了，黄还在，味淡了。', tone: 'good' }),
       ch('wrench', '试着拧紧接头', { res: { parts: -1 }, skills: { mechanics: 1 }, log: '滴得慢了。没有停。你把盆留在原处。', tone: 'neutral' }, { requires: { res: { parts: 1 } } }),
@@ -147,11 +148,11 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'medical',
     phase: ['survival'],
     title: '一罐豆子的盖子鼓起来了',
-    body: '你记得买的时候是平的。现在它像一只眼睛。旁边还有三罐看起来正常。\n扔掉是浪费。打开是赌博。',
+    body: '你记得买的时候盖子是平的。现在鼓了一块。旁边还有三罐看起来正常。\n扔掉可惜。打开又怕吃坏。',
     choices: [
-      ch('toss', '扔掉，连同旁边那罐一起', { res: { foodStaple: -2 }, stats: { sanity: 2 }, setFlags: ['flag:tossedBulge'], log: '你扔进楼道尽头的黑暗。没有听见落地，只听见滚。', tone: 'neutral' }, { requires: { res: { foodStaple: 2 } } }),
+      ch('toss', '扔掉，连同旁边那罐一起', { res: { foodStaple: -2 }, stats: { sanity: 2 }, setFlags: ['flag:tossedBulge'], log: '你扔进楼道尽头。听见罐子滚远了，没有落地声。', tone: 'neutral' }, { requires: { res: { foodStaple: 2 } } }),
       ch('open', '打开闻一下', { stats: { sanity: -4 }, addCond: ['dysentery'], log: '气味顶上来。你把罐子扔了，但手已经碰过汤。晚上你开始跑厕所。', tone: 'bad' }),
-      skip('你把鼓的那罐转过去，当它不存在。', { stats: { sanity: -3 } }),
+      skip('你把鼓的那罐转到柜子最里面，先不去碰。', { stats: { sanity: -3 } }),
     ],
   }),
   beat({
@@ -160,11 +161,11 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '你分不清现在是几点',
-    body: '表还在走。窗帘是封死的。你睡过一觉，醒来以为是早晨，窗缝却是黑的。\n胃按自己的班上班。',
+    body: '表还在走。窗帘封死了。你睡过一觉，醒来以为是早晨，窗缝外面却是黑的。\n肚子倒是准：饿了就叫。',
     choices: [
-      ch('schedule', '强制给自己排三顿和两次巡视', { stats: { sanity: 6, stamina: -4 }, setFlags: ['flag:setSchedule'], log: '你把时间写在墙上。执行的第一天，你看了二十次。', tone: 'good' }),
-      ch('nap', '再睡一次', { stats: { stamina: 12, sanity: -4 }, log: '你又睡了。醒来更不知道自己在哪一天。', tone: 'neutral' }),
-      skip('你坐着等到肚子叫。这就是钟。', { stats: { sanity: -2 } }),
+      ch('schedule', '强制给自己排三顿和两次巡视', { stats: { sanity: 6, stamina: -4 }, setFlags: ['flag:setSchedule'], log: '你把时间写在墙上。第一天你看了二十次表。', tone: 'good' }),
+      ch('nap', '再睡一次', { stats: { stamina: 12, sanity: -4 }, log: '你又睡了。醒来更搞不清过了多久。', tone: 'neutral' }),
+      skip('你坐着等到肚子叫，再决定下一顿。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -184,7 +185,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_neighbor_silence',
     kind: 'social',
     phase: ['survival'],
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '隔壁已经三天没有动静',
     body: '以前每天七点有人咳嗽。现在连水管都像停了。你把杯子贴在墙上，听见自己的脉搏。',
     choices: [
@@ -198,13 +199,13 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'medical',
     intensity: 3,
     phase: ['survival'],
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '楼道里有一股甜味',
-    body: '不是食物。你在第三天认出它。门缝下方用毛巾堵住之后，味道淡了，没有消失。\n没有人开窗。窗本来也封着。',
+    body: '不像饭菜味。第三天你认出来了：是腐味。门缝下方用毛巾堵住之后，味道淡了，没有消失。\n楼道的窗本来就封着，没人开。',
     choices: [
       ch('mask', '戴上罩子去看一眼', { stats: { stamina: -8, sanity: -6 }, world: { exposure: 4 }, setFlags: ['flag:sawHallSource'], log: '你看到了，又退回来。回来之后你洗了手，洗到皮肤发红。', tone: 'grim' }),
-      ch('seal', '再封一层门缝', { res: { materials: -1 }, world: { exposure: -2 }, log: '你封了。味道还在脑子里。', tone: 'neutral' }, { requires: { res: { materials: 1 } } }),
-      skip('你用香肥皂擦鼻子。肥皂很快没了味道。', { stats: { sanity: -5 } }),
+      ch('seal', '再封一层门缝', { res: { materials: -1 }, world: { exposure: -2 }, log: '你又封了一层。屋里淡了，那股味还在鼻子里。', tone: 'neutral' }, { requires: { res: { materials: 1 } } }),
+      skip('你用香肥皂擦鼻子。肥皂很快也闻不出味了。', { stats: { sanity: -5 } }),
     ],
   }),
   beat({
@@ -241,7 +242,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     body: '颧骨出来了。你用手指按下去，皮肤回弹很慢。牙刷还剩最后三分之一。\n你不太想看牙齿。',
     choices: [
       ch('eat', '强迫自己多吃一顿', { res: { foodStaple: -2 }, stats: { hp: 4, sanity: 4 }, log: '你吃得很慢。镜子你用衣服盖上了。', tone: 'good' }, { requires: { res: { foodStaple: 2 } } }),
-      ch('cover', '把镜子转过去', { stats: { sanity: 2 }, setFlags: ['flag:coveredMirror'], log: '镜子对着墙。墙上没有人。', tone: 'neutral' }),
+      ch('cover', '把镜子转过去', { stats: { sanity: 2 }, setFlags: ['flag:coveredMirror'], log: '镜子对着墙。你看不见自己了。', tone: 'neutral' }),
       skip('你看完了。水龙头开了一下，又关上。', { stats: { sanity: -4 } }),
     ],
   }),
@@ -250,7 +251,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'threat',
     intensity: 2,
     phase: ['survival'],
-    require: { all: ['site:urban'] },
+    require: URBAN,
     title: '有人从门缝塞进来一张纸条',
     body: '"还活着的敲三下。需要水的写数量。"字很端正，像通知。\n纸条是从练习簿上撕的。',
     choices: [
@@ -276,9 +277,9 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['survival'],
     title: '应急灯闪了三下，又亮了',
-    body: '电池在抗议。你还有一根蜡烛，和半瓶油。蜡烛是生日剩的，上面有融化的糖。',
+    body: '电池快没电了。你还有一根蜡烛，和半瓶油。蜡烛是生日剩的，上面有融化的糖。',
     choices: [
-      ch('candle', '改用蜡烛，省电池', { wear: { batteryCharge: 1 }, stats: { sanity: 2 }, setFlags: ['flag:usedBirthdayCandle'], log: '火很小。糖的味道让你想起某个你没过完的晚上。', tone: 'neutral' }),
+      ch('candle', '改用蜡烛，省电池', { wear: { batteryCharge: 1 }, stats: { sanity: 2 }, setFlags: ['flag:usedBirthdayCandle'], log: '火很小。蜡烛上的糖化开，屋里有一点甜味。', tone: 'neutral' }),
       ch('dark', '关灯，摸黑', { stats: { sanity: -4, stamina: 2 }, world: { exposure: -3 }, log: '灯关了。你把常用的东西排在桌沿，摸得到。', tone: 'neutral' }),
       skip('你让它闪。灯还在，只是不稳。', { stats: { sanity: 1 } }),
     ],
@@ -289,7 +290,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '厨房的蟑螂不再怕你',
-    body: '它们白天也出来。你拍死两只，第三只从你的鞋边走过，像在检查。\n食物必须离地。你已经离地了，它们会飞。',
+    body: '它们白天也出来。你拍死两只，第三只从你的鞋边走过，不躲。\n食物必须离地。你已经把箱子抬高了，它们还会飞。',
     choices: [
       ch('seal_food', '把食物全部封进箱子', { stats: { stamina: -8, sanity: 3 }, setFlags: ['flag:sealedFood'], log: '你封了。箱子晚上仍有细小的脚步声，在外面。', tone: 'good' }),
       ch('bait', '用一点食物引到远处', { res: { foodStaple: -0.5 }, stats: { humanity: -1 }, log: '它们去了。你会在夜里想起那点食物。', tone: 'neutral' }, { requires: { res: { foodStaple: 1 } } }),
@@ -303,7 +304,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     title: '米开始有潮味',
     body: '你把盐撒进去，像家里老人教过的那样。盐够不够，你不知道。米还够吃几天。\n窗不能开。潮气只能留在屋里。',
     choices: [
-      ch('salt', '加盐，摊开阴干', { stats: { stamina: -8 }, setFlags: ['flag:saltedRice'], log: '米在盆里像一片浅滩。你守着它，直到表面不粘。', tone: 'good' }),
+      ch('salt', '加盐，摊开阴干', { stats: { stamina: -8 }, setFlags: ['flag:saltedRice'], log: '米摊在盆里。你守着它，直到表面不粘手。', tone: 'good' }),
       ch('cook', '提前煮成干饭存着', { res: { fuel: -1, water: -3 }, stats: { stamina: -6 }, log: '你煮了一大锅。吃不完的会坏得更快，你还是煮了。', tone: 'neutral' }, { requires: { res: { fuel: 1, water: 3 } } }),
       skip('你把米袋扎得更紧。潮味还在。', { stats: { sanity: -2 } }),
     ],
@@ -316,7 +317,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     body: '还是冷。呼出的气在被窝沿上变成白。你知道该烧油，也知道油烧完之后更冷。\n墙是薄的。隔壁如果还有人，他们也冷。',
     choices: [
       ch('heat', '今晚烧一点', { res: { fuel: -1.2 }, stats: { hp: 4, sanity: 3 }, log: '炉子响了一夜。你睡着了，中间醒过来一次，确认它还在烧。', tone: 'good' }, { requires: { res: { fuel: 2 } } }),
-      ch('layers', '再穿一层，不烧', { stats: { stamina: -6, sanity: -2 }, log: '你像一卷行李。牙齿还是打颤，但油还在。', tone: 'neutral' }),
+      ch('layers', '再穿一层，不烧', { stats: { stamina: -6, sanity: -2 }, log: '你多套了一件，把自己裹紧。牙齿还是打颤，但油没动。', tone: 'neutral' }),
       skip('你把膝盖缩到胸口。还是冷。', { stats: { hp: -3, sanity: -3 } }),
     ],
   }),
@@ -326,7 +327,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '柜子里有东西滚了一下',
-    body: '没有地震。也许是你自己靠上去了。你打开，把会滚的瓶子都躺平。',
+    body: '没有地震。可能是你自己靠上去撞到的。你打开，把会滚的瓶子都躺平。',
     choices: [
       ch('pad', '用布把缝填上', { res: { materials: -1 }, stats: { stamina: -4, sanity: 2 }, log: '瓶子不再滚了。夜里柜子是安静的。', tone: 'good' }, { requires: { res: { materials: 1 } } }),
       skip('你关上柜门。过了一会儿又滚了一下。', { stats: { sanity: -2 } }),
@@ -338,10 +339,10 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '玻璃内侧起了一层雾',
-    body: '你用袖子擦开一块。外面还是黄的。雾很快又回来。',
+    body: '你用袖子擦开一块。外面还是黄的。雾很快又糊回来。',
     choices: [
-      ch('wipe', '每天擦一次当仪式', { stats: { stamina: -4, sanity: 3 }, log: '仪式很短。短有时比长有用。', tone: 'good' }),
-      skip('你不擦了。雾替你遮住外面。', { stats: { sanity: -2 } }),
+      ch('wipe', '每天擦一次，好看见外面', { stats: { stamina: -4, sanity: 3 }, log: '你擦开一块。看得见对面楼，几分钟后又糊上了。', tone: 'good' }),
+      skip('你不擦了。雾挡住外面，屋里暗一点。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -350,10 +351,10 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '你发现自己只剩一把勺子',
-    body: '叉子不知去哪了。你用勺子吃饭、搅拌、偶尔撬罐子。它被你用得像工具。',
+    body: '叉子不知去哪了。你用勺子吃饭、搅拌，偶尔撬罐子。它被你用得像工具。',
     choices: [
-      ch('care', '洗干净，单独放', { res: { water: -0.5 }, stats: { sanity: 2 }, log: '勺子有了固定位置。小东西也需要编制。', tone: 'good' }),
-      skip('你继续混用。勺子没有意见。', { stats: { sanity: -1 } }),
+      ch('care', '洗干净，单独放', { res: { water: -0.5 }, stats: { sanity: 2 }, log: '勺子放回固定位置。下次不用满屋找。', tone: 'good' }),
+      skip('你继续混着用。勺子还在，就行。', { stats: { sanity: -1 } }),
     ],
   }),
   beat({
@@ -361,11 +362,11 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    title: '墙上的钟停在一个没有意义的时间',
-    body: '你记得它曾经准过。现在一根指针卡住，另一根还在慢慢走。',
+    title: '墙上的钟停了，指针卡在半路',
+    body: '你记得它以前是准的。现在一根指针卡住，另一根还在慢慢走。',
     choices: [
       ch('battery', '换电池', { res: { parts: -1 }, stats: { sanity: 3 }, log: '钟又走了。墙上重新有滴答声。', tone: 'good' }, { requires: { res: { parts: 1 } } }),
-      skip('你把它取下来扣在桌上。墙空了一块。', { stats: { sanity: -2 } }),
+      skip('你把它取下来扣在桌上。墙上空了一块。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -374,10 +375,10 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '肥皂只剩薄薄一片',
-    body: '洗手时那薄片会从手指间滑掉。干净的日子快见底了。',
+    body: '洗手时那薄片会从手指间滑掉。再洗几次就没了。',
     choices: [
-      ch('save', '改成湿布擦', { stats: { stamina: -2, sanity: 1 }, log: '布也能干净一点。一点就算数。', tone: 'neutral' }),
-      skip('你继续追那片肥皂。有一天它会彻底不见。', { stats: { sanity: -2 } }),
+      ch('save', '改成湿布擦', { stats: { stamina: -2, sanity: 1 }, log: '湿布也能擦干净一点。肥皂片先留着。', tone: 'neutral' }),
+      skip('你继续追那片肥皂。有一天它会彻底从手里滑掉。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -388,7 +389,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     title: '椅子每次坐下都响',
     body: '响在夜里特别大。你把一块布垫在接头上，试了试，还是响，只是闷了。',
     choices: [
-      ch('fix', '拧紧螺丝', { res: { parts: -1 }, stats: { stamina: -6, sanity: 2 }, log: '不响了。安静有时比舒服更急需。', tone: 'good' }, { requires: { res: { parts: 1 } } }),
+      ch('fix', '拧紧螺丝', { res: { parts: -1 }, stats: { stamina: -6, sanity: 2 }, log: '不响了。夜里坐下不会再惊一下。', tone: 'good' }, { requires: { res: { parts: 1 } } }),
       skip('你换一边坐。另一边也开始响。', { stats: { sanity: -1 } }),
     ],
   }),
@@ -398,10 +399,10 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     intensity: 1,
     phase: ['survival'],
     title: '有一束光从封窗的缝里进来',
-    body: '光柱里全是灰。你看了很久，像在看一场很小的雪。',
+    body: '光柱里全是灰。你看了很久，灰在光里慢慢飘。',
     choices: [
-      ch('watch', '坐着看完这束光', { stats: { sanity: 4, stamina: 2 }, log: '光移走了。你的下午有了一件完成的事。', tone: 'good' }),
-      skip('你把缝再堵一点。光没了，灰还在。', { stats: { sanity: -2 } }),
+      ch('watch', '坐着看完这束光', { stats: { sanity: 4, stamina: 2 }, log: '光移走了。你在窗边坐了半个下午。', tone: 'good' }),
+      skip('你把缝再堵一点。光没了，灰还落在地上。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -433,12 +434,12 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'social',
     intensity: 1,
     phase: ['survival'],
-    require: { all: ['site:urban'] },
-    title: '水管里传来敲击，像有人在对暗号',
-    body: '两短一长。你不知道该不该回。回了就承认你还在听。',
+    require: URBAN,
+    title: '水管里有人在敲，两短一长',
+    body: '敲击顺着管子过来。你不知道该不该回。回了，对面就知道你还在听。',
     choices: [
-      ch('reply', '用同样的节奏回', { stats: { sanity: 3, humanity: 1 }, world: { neighborhood: 2, exposure: 2 }, log: '对面又敲了两下。然后停了。像打过一次招呼。', tone: 'good' }),
-      skip('你把耳朵离开管子。敲击过了一会儿停了。', { stats: { sanity: -2 } }),
+      ch('reply', '按两短一长回敲', { stats: { sanity: 3, humanity: 1 }, world: { neighborhood: 2, exposure: 2 }, log: '对面又敲了两下，然后停了。像打过一次招呼。', tone: 'good' }),
+      skip('你把耳朵离开管子。敲了一会儿，停了。', { stats: { sanity: -2 } }),
     ],
   }),
   beat({
@@ -446,11 +447,11 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    title: '你开始为了听声音而烧水',
-    body: '你不渴。你是想听锅响，好让这间屋子听起来还有人在用。水开了你又倒回去冷却，舍不得喝掉。',
+    title: '你不渴，却还是去烧了一壶水',
+    body: '你想听锅响，好让这间屋子听起来还有人在用。水开了你又倒回去冷却，舍不得喝掉。',
     choices: [
       ch('drink', '既然开了就喝', { res: { fuel: -0.4 }, stats: { sanity: 3 }, log: '你喝了。嗓子热了，锅也安静了。', tone: 'good' }),
-      skip('你让它响完，再倒回桶里。烧的是燃料，留下的是那几分钟响声。', { res: { fuel: -0.4 }, stats: { sanity: 1 } }),
+      skip('你让它响完，再倒回桶里。烧的是燃料，换来那几分钟响声。', { res: { fuel: -0.4 }, stats: { sanity: 1 } }),
     ],
   }),
   beat({
@@ -458,10 +459,10 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'dream',
     intensity: 1,
     phase: ['survival'],
-    title: '照片里的人看起来比你记得的更远',
-    body: '照片没变。是你看久了，脸上的人显得不像还住在附近。',
+    title: '你把旧照片翻出来看了很久',
+    body: '照片没变。看久了，相纸上的人脸显得不像还住在附近。你把照片放回抽屉。',
     choices: [
-      ch('turn', '把照片扣过去', { stats: { sanity: 2 }, log: '背面是白的。白比脸好对付。', tone: 'neutral' }),
+      ch('turn', '把照片扣过去', { stats: { sanity: 2 }, log: '你把照片扣过去。看见白纸背面，比盯着脸好受一点。', tone: 'neutral' }),
       skip('你继续看。人还在相纸上，只是显得远了。', { stats: { sanity: -2, humanity: 1 } }),
     ],
   }),

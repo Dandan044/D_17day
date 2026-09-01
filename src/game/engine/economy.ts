@@ -2,14 +2,15 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { CAPS, COLD, DIFFICULTY, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
+import { CAPS, COLD, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED } from '../balance';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
-import type { Difficulty, Location, ResourceId, RunState, WeatherId } from '../types';
-import { canElectricHeat, canFuelHeat, fuelHeatCost, unheatedFelt } from './climate';
+import type { Difficulty, Location, ResourceId, RunState } from '../types';
+import { canElectricHeat, canFuelHeat, fuelHeatCost, isPrecipWeather, unheatedFelt } from './climate';
 import { computePower, LOAD_NAME, loadOnline } from './power';
-import { effectiveModule, grantIodine, headcount } from './tags';
+import { ledger, type LedgerNote } from './ledger';
+import { effectiveModule, grantIodine, headcount, waterCapacity } from './tags';
 
 /** 每日采购上限，防止第一天把全城搬空 */
 const DAILY_BUY_CAP: Record<ResourceId, number> = {
@@ -24,7 +25,7 @@ const DAILY_BUY_CAP: Record<ResourceId, number> = {
   cash: 3000,
 };
 
-const RAIN_WEATHER: WeatherId[] = ['rain', 'storm', 'flooding', 'snow', 'blizzard', 'blackRain'];
+export { isPrecipWeather, PRECIP_WEATHER } from './climate';
 
 // ============================================================
 // 需求与消耗
@@ -34,6 +35,8 @@ export interface DailyNeeds {
   water: number;
   food: number;
   heads: number;
+  /** 今日是否走了旱天回用 */
+  recycling: boolean;
 }
 
 export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal'): DailyNeeds {
@@ -48,30 +51,50 @@ export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal'): Da
   // 高温天多喝水
   if (run.world.weather === 'heatwave') water *= 1.3;
 
-  return { water: Math.round(water * 10) / 10, food: Math.round(food * 10) / 10, heads };
+  // 旱天回用：有在线净水时降低耗水（不是往桶里加水）
+  let recycling = false;
+  const filter = effectiveModule(run, 'filter');
+  const precip = isPrecipWeather(run.world.weather);
+  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const hasWell = site.tags.includes('site:hasWell');
+  if (filter > 0 && !precip && !hasWell) {
+    water *= FILTER.RECYCLE_NEED[filter] ?? 1;
+    recycling = true;
+  } else if (filter > 0 && !precip && hasWell) {
+    // 有井：旱天滤井水，不走回用降耗
+    recycling = false;
+  }
+
+  return {
+    water: Math.round(water * 10) / 10,
+    food: Math.round(food * 10) / 10,
+    heads,
+    recycling,
+  };
 }
 
 export interface ConsumeResult {
   waterRatio: number;
   foodRatio: number;
   drankRaw: boolean;
+  /** 今天喝了新滤的雨水或回用水 */
+  drankFiltered: boolean;
+  recycling: boolean;
   heated: boolean;
   heatKind?: 'fuel' | 'electric';
   indoor: number;
-  notes: string[];
+  notes: LedgerNote[];
 }
 
 /**
- * 原水供应系数。
- *
- * 城市里从来不是"没有水"，而是"没有能喝的水"——消防水箱、景观水池、
- * 楼顶储罐里都有，只是脏。所以净水器永远有活干，只是干得多还是干得少。
+ * 原水供应：现在主要用于井水与「有没有可喝的脏水」判定。
+ * 雨日产水不再乘这个系数。
  */
 export function rawWaterFactor(run: RunState): number {
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   if (site.tags.includes('site:hasWell')) return 1.2;
   if (run.world.waterTable === 'flooded') return 1.1;
-  if (RAIN_WEATHER.includes(run.world.weather)) return 1;
+  if (isPrecipWeather(run.world.weather)) return 1;
   if (run.flags.includes('flag:rainCatcher')) return 0.8;
   if (site.tags.includes('site:isolated')) return CAPS.RAW_WATER_DRY_MULT * 0.7;
   return CAPS.RAW_WATER_DRY_MULT;
@@ -81,54 +104,100 @@ export function hasRawWater(run: RunState): boolean {
   return rawWaterFactor(run) > 0;
 }
 
-/** 每日产出：农圃产生鲜、净水产饮用水 */
-export function applyProduction(run: RunState): string[] {
-  const notes: string[] = [];
+/** 今日净水是否产了水（雨日或井水） */
+export function didFilterHarvest(run: RunState): boolean {
+  return (run as RunState & { _filterHarvested?: boolean })._filterHarvested === true;
+}
+
+/** 储水桶还能装多少升 */
+export function waterRoom(run: RunState): number {
+  return Math.max(0, Math.round((waterCapacity(run) - run.res.water) * 10) / 10);
+}
+
+/** 每日产出：农圃产生鲜、净水（仅雨雪/井）产饮用水 */
+export function applyProduction(run: RunState): LedgerNote[] {
+  const notes: LedgerNote[] = [];
+  (run as RunState & { _filterHarvested?: boolean })._filterHarvested = false;
+  // 清掉「当天回用」标记，由 consumeDaily / deriveFacts 再设
+  run.flags = run.flags.filter((f) => f !== 'flag:waterRecyclingToday');
 
   const garden = effectiveModule(run, 'garden');
   if (garden > 0) {
     let yieldAmt = CAPS.GARDEN_YIELD[garden] ?? 0;
-    // 落灰与严寒会压产量
     if (run.world.airPollution > 60) yieldAmt *= 0.5;
     if (run.world.temperature < 0) yieldAmt *= 0.6;
     if (yieldAmt > 0) {
       run.res.foodFresh += yieldAmt;
-      notes.push(`农圃收获 ${yieldAmt.toFixed(1)} 份生鲜`);
+      notes.push(ledger(`农圃：生鲜 +${yieldAmt.toFixed(1)} 份`));
     }
   }
 
   const filter = effectiveModule(run, 'filter');
-  // 水箱在清洗时，净化出来的水没处存——净水只能停掉。
-  // 这是 cistern 施工的惩罚。原本按 buildPenaltyDesc 的承诺是「储水容量暂时归零」，
-  // 但那样会让 clampResources 把已经存下的水悄悄倒掉，是对玩家的暗中惩罚，不采用。
   const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
+  const precip = isPrecipWeather(run.world.weather);
+  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const hasWell = site.tags.includes('site:hasWell');
+
   if (filter > 0 && cisternBusy) {
-    notes.push('水箱还在清洗，净化出来的水没处存，净水停了一天');
-  } else if (filter > 0) {
-    const factor = rawWaterFactor(run);
-    const amt = Math.round((CAPS.FILTER_OUTPUT[filter] ?? 0) * factor * 10) / 10;
+    notes.push(ledger('净水：水箱在清洗，产出没法入库', 'bad'));
+  } else if (filter > 0 && (precip || hasWell)) {
+    let amt = FILTER.RAIN_OUTPUT[filter] ?? 0;
+    if (precip) {
+      amt *= FILTER.WEATHER_YIELD[run.world.weather] ?? 1;
+    } else {
+      // 旱天井水
+      amt *= FILTER.WELL_DRY_MULT;
+    }
+    amt = Math.round(amt * 10) / 10;
     if (amt > 0) {
       run.res.water += amt;
+      (run as RunState & { _filterHarvested?: boolean })._filterHarvested = true;
       notes.push(
-        factor >= 1
-          ? `净水系统产出 ${amt} L`
-          : `净水系统产出 ${amt} L（今天只能找到有限的原水）`,
+        ledger(
+          precip
+            ? `净水：接雨雪 +${amt} L`
+            : `净水：井水过滤 +${amt} L`,
+          'good',
+        ),
       );
     }
+  } else if (filter > 0 && !precip) {
+    const mult = FILTER.RECYCLE_NEED[filter] ?? 1;
+    notes.push(
+      ledger(`没下雨，净水没接雨水：今日改走回用（耗水 ×${mult.toFixed(2)}）`),
+    );
+  } else if (filter <= 0 && precip) {
+    notes.push(ledger('外面在下雨，但没有净水设备，接不住'));
   }
 
-  // 滤芯寿命：净水与空气过滤共用同一套耗材
+  // 滤芯寿命：净水侧按天气/污染；空气过滤另计
   const airFilter = effectiveModule(run, 'airFilter');
   if (filter > 0 || airFilter > 0) {
-    let drain = (filter > 0 ? 1 : 0) + (airFilter > 0 ? 1 : 0);
-    if (run.world.weather === 'ashfall' || run.world.airPollution > 65) drain += WEAR.FILTER_EXTRA_DUST;
+    let drain = 0;
+    if (filter > 0) {
+      if (precip) {
+        if (run.world.weather === 'blackRain') drain += FILTER.WEAR_BLACK_RAIN;
+        else if (run.world.weather === 'flooding') drain += FILTER.WEAR_FLOODING;
+        else if (run.world.weather === 'storm' || run.world.weather === 'blizzard') drain += FILTER.WEAR_STORM;
+        else drain += FILTER.WEAR_RAIN;
+      } else if (!hasWell) {
+        drain += FILTER.WEAR_RECYCLE;
+      } else {
+        drain += FILTER.WEAR_RAIN * FILTER.WELL_DRY_MULT;
+      }
+      drain *= FILTER.WEAR_LEVEL_MULT[filter] ?? 1;
+    }
+    if (airFilter > 0) drain += FILTER.WEAR_AIR;
+    if (run.world.weather === 'ashfall') drain += FILTER.WEAR_ASH;
+    drain += (run.world.airPollution / 40) * FILTER.WEAR_POLLUTION_PER_40;
+    drain += (run.world.radiation / 40) * FILTER.WEAR_RAD_PER_40;
     if (run.abilities.includes('chemist_consumables')) drain *= 0.6;
     if (run.abilities.includes('perk_maintainer')) drain *= 0.65;
     run.wear.filterLife -= drain;
     if (run.wear.filterLife <= 0) {
-      notes.push('滤芯已经彻底堵死，净水与空气过滤全部失效');
+      notes.push(ledger('滤芯：已堵死，净水与空气过滤失效', 'bad'));
     } else if (run.wear.filterLife <= 4) {
-      notes.push(`滤芯只剩 ${Math.ceil(run.wear.filterLife)} 天`);
+      notes.push(ledger(`滤芯：还剩约 ${Math.ceil(run.wear.filterLife)} 天`, 'bad'));
     }
   }
 
@@ -159,35 +228,65 @@ export function revealSecrets(run: RunState): string[] {
 }
 
 /** 生鲜腐败：冰箱有电则慢，没电则快 */
-export function spoilFood(run: RunState): string[] {
+export function spoilFood(run: RunState): LedgerNote[] {
   if (run.res.foodFresh <= 0) return [];
   const cold = run.world.temperature < 4;
   let rate = cold ? 0.15 : 0.34;
-  if (loadOnline(run, 'fridge')) rate *= 0.4;
+  const fridgeOn = loadOnline(run, 'fridge');
+  if (fridgeOn) rate *= 0.4;
   else rate *= 1.45;
   const lost = run.res.foodFresh * rate;
   if (lost < 0.1) return [];
   run.res.foodFresh = Math.max(0, run.res.foodFresh - lost);
-  const fridge = loadOnline(run, 'fridge') ? '（冰箱还在转）' : '（冰箱没电）';
-  return [`${lost.toFixed(1)} 份生鲜食物变质${fridge}`];
+  return [
+    ledger(
+      fridgeOn
+        ? `冰箱还在转：生鲜 −${lost.toFixed(1)} 份`
+        : `冰箱没电：生鲜 −${lost.toFixed(1)} 份`,
+      fridgeOn ? 'neutral' : 'bad',
+    ),
+  ];
 }
 
 export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = 'normal'): ConsumeResult {
   const need = dailyNeeds(run, difficulty);
-  const notes: string[] = [];
+  const notes: LedgerNote[] = [];
+  const filterLv = effectiveModule(run, 'filter');
 
   // --- 水 ---
   const waterAvail = run.res.water;
   const waterUsed = Math.min(need.water, waterAvail);
   run.res.water = Math.max(0, waterAvail - waterUsed);
   const waterRatio = need.water > 0 ? waterUsed / need.water : 1;
+  const waterLeft = Math.round(run.res.water * 10) / 10;
+
+  if (need.recycling) {
+    if (!run.flags.includes('flag:waterRecyclingToday')) run.flags.push('flag:waterRecyclingToday');
+    const mult = FILTER.RECYCLE_NEED[filterLv] ?? 1;
+    notes.push(
+      ledger(
+        `没下雨，净水走回用（过滤尿液/废水，今日耗水 ×${mult.toFixed(2)}）：饮水 −${waterUsed.toFixed(1)} L（需求 ${need.water.toFixed(1)} / 库存还剩 ${waterLeft}）`,
+      ),
+    );
+  } else {
+    notes.push(
+      ledger(
+        `配给：饮水 −${waterUsed.toFixed(1)} L（需求 ${need.water.toFixed(1)} / 库存还剩 ${waterLeft}）`,
+      ),
+    );
+  }
 
   // 存水不够时，会不会去喝没处理过的水
   let drankRaw = false;
-  if (waterRatio < 0.6 && hasRawWater(run) && effectiveModule(run, 'filter') === 0) {
+  if (waterRatio < 0.6 && hasRawWater(run) && filterLv === 0) {
     drankRaw = true;
-    notes.push('饮水不足，只能喝没有处理过的水');
+    notes.push(ledger('饮水不足：只能喝没处理过的水', 'bad'));
   }
+
+  // 今天喝了新滤的水或回用水（用于致病掷骰）
+  const harvested = !!(run as RunState & { _filterHarvested?: boolean })._filterHarvested;
+  const drankFiltered =
+    filterLv > 0 && waterUsed > 0 && (harvested || need.recycling) && !drankRaw;
 
   // --- 食物：先吃会坏的 ---
   let foodNeed = need.food;
@@ -198,26 +297,51 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
   run.res.foodStaple -= stapleUsed;
   foodNeed -= stapleUsed;
   const foodRatio = need.food > 0 ? (need.food - foodNeed) / need.food : 1;
+  const foodTotal = Math.round((freshUsed + stapleUsed) * 10) / 10;
+  const foodBits: string[] = [];
+  if (freshUsed > 0.01) foodBits.push(`生鲜 ${freshUsed.toFixed(1)}`);
+  if (stapleUsed > 0.01) foodBits.push(`罐头 ${stapleUsed.toFixed(1)}`);
+  notes.push(
+    ledger(
+      foodBits.length > 0
+        ? `配给：食物 −${foodTotal.toFixed(1)} 份（${foodBits.join(' + ')}）`
+        : `配给：食物 −0 份（需求 ${need.food.toFixed(1)}）`,
+      foodRatio < 0.99 ? 'bad' : 'neutral',
+    ),
+  );
 
-  if (waterRatio < 0.99) notes.push(`饮水缺口 ${((1 - waterRatio) * 100).toFixed(0)}%`);
-  if (foodRatio < 0.99) notes.push(`食物缺口 ${((1 - foodRatio) * 100).toFixed(0)}%`);
+  if (waterRatio < 0.99) {
+    notes.push(ledger(`饮水缺口：${((1 - waterRatio) * 100).toFixed(0)}%`, 'bad'));
+  }
+  if (foodRatio < 0.99) {
+    notes.push(ledger(`食物缺口：${((1 - foodRatio) * 100).toFixed(0)}%`, 'bad'));
+  }
 
   const power = computePower(run);
+  const weatherBit =
+    power.weatherMult !== 1 ? `（天气 ×${power.weatherMult.toFixed(2)}）` : '';
   notes.push(
-    `光伏 ${power.solar.toFixed(1)} kWh（天气 ×${power.weatherMult.toFixed(2)}）` +
-      (power.grid > 0 ? ` · 市电 ${power.grid.toFixed(1)}` : '') +
-      (power.generator > 0 ? ` · 柴油机补 ${power.generator.toFixed(1)}` : ''),
+    ledger(
+      `天气光伏：+${power.solar.toFixed(1)} kWh${weatherBit}` +
+        (power.grid > 0 ? ` · 市电 +${power.grid.toFixed(1)}` : '') +
+        (power.generator > 0 ? ` · 柴油机补 +${power.generator.toFixed(1)}` : ''),
+    ),
   );
   if (power.offline.length > 0) {
-    notes.push(`缺电停摆：${power.offline.map((id) => LOAD_NAME[id] ?? id).join('、')}`);
+    notes.push(
+      ledger(
+        `缺电停摆：${power.offline.map((id) => LOAD_NAME[id] ?? id).join('、')}`,
+        'bad',
+      ),
+    );
   }
 
   if (power.fuelBurn > 0) {
     run.res.fuel = Math.max(0, run.res.fuel - power.fuelBurn);
     run.wear.generatorOil -= 1;
-    notes.push(`柴油机烧了 ${power.fuelBurn.toFixed(1)} L 补电`);
+    notes.push(ledger(`柴油机：燃料 −${power.fuelBurn.toFixed(1)} L`));
     if (run.wear.generatorOil <= 0 && rng.chance(0.3)) {
-      notes.push('发电机开始异响：需要保养');
+      notes.push(ledger('发电机开始异响：需要保养', 'bad'));
     }
   }
 
@@ -236,24 +360,39 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
       indoor = Math.round(Math.min(COLD.TARGET, unheated + rise) * 10) / 10;
       heated = spent > 0;
       heatKind = 'fuel';
-      notes.push(`烧了 ${spent.toFixed(1)} L 燃料取暖（目标 ${COLD.TARGET}°C，室内 ${indoor}°C）`);
+      notes.push(ledger(`烧燃料取暖：燃料 −${spent.toFixed(1)} L，室内 ${indoor}°C`));
     } else {
-      notes.push(`想烧燃料取暖，但${needFuel <= 0 ? '保温还不够装炉子' : '没有油了'}。室内 ${indoor}°C`);
+      notes.push(
+        ledger(
+          `想烧燃料取暖，但${needFuel <= 0 ? '保温还不够装炉子' : '没有油了'}：室内 ${indoor}°C`,
+          'bad',
+        ),
+      );
     }
   } else if (mode === 'electric' && canElectricHeat(run)) {
     if (loadOnline(run, 'heater', power)) {
       indoor = COLD.TARGET;
       heated = true;
       heatKind = 'electric';
-      notes.push(`电热开了一夜。室内 ${indoor}°C`);
+      notes.push(ledger(`电热开了一夜：室内 ${indoor}°C`));
     } else {
-      notes.push(`电热排在供电表后面或没电，室内仍是 ${indoor}°C`);
+      notes.push(ledger(`电热没排上或没电：室内 ${indoor}°C`, 'bad'));
     }
   } else if (mode === 'off') {
-    notes.push(`不取暖。室外体感 ${unheated}°C，室内相同`);
+    notes.push(ledger(`不取暖：室内 ${indoor}°C`));
   }
 
-  return { waterRatio, foodRatio, drankRaw, heated, heatKind, indoor, notes };
+  return {
+    waterRatio,
+    foodRatio,
+    drankRaw,
+    drankFiltered,
+    recycling: need.recycling,
+    heated,
+    heatKind,
+    indoor,
+    notes,
+  };
 }
 
 // ============================================================
@@ -283,6 +422,8 @@ export interface PurchaseResult {
   reason?: string;
   spent: number;
   got: number;
+  /** 因储水满而少买了一部分 */
+  capped?: boolean;
 }
 
 function recordPurchase(run: RunState, res: ResourceId, got: number, locationId: string): void {
@@ -303,8 +444,21 @@ export function purchase(
   if (!loc || !loc.prepShop) return { ok: false, reason: '这里不能采购', spent: 0, got: 0 };
 
   const remaining = remainingBuyLimit(run, res, hasClerkPerk);
-  const want = Math.min(qty, remaining);
+  let want = Math.min(qty, remaining);
   if (want <= 0) return { ok: false, reason: '已达今日限购', spent: 0, got: 0 };
+
+  let capped = false;
+  if (res === 'water') {
+    const room = waterRoom(run);
+    const cap = waterCapacity(run);
+    if (room <= 0) {
+      return { ok: false, reason: `储水已满（上限 ${cap} L）`, spent: 0, got: 0 };
+    }
+    if (want > room) {
+      want = room;
+      capped = true;
+    }
+  }
 
   const st = run.locations.find((l) => l.id === locationId);
   const shelf = st?.stock ?? loc.stock;
@@ -316,18 +470,27 @@ export function purchase(
   if (hasClerkPerk) price = Math.round(price * 0.9);
   const cost = price * available;
   if (run.res.cash < cost) {
-    const afford = Math.floor(run.res.cash / price);
+    let afford = Math.floor(run.res.cash / price);
     if (afford <= 0) return { ok: false, reason: '现金不够', spent: 0, got: 0 };
+    if (res === 'water') {
+      const room = waterRoom(run);
+      if (room <= 0) return { ok: false, reason: `储水已满（上限 ${waterCapacity(run)} L）`, spent: 0, got: 0 };
+      if (afford > room) {
+        afford = Math.floor(room);
+        capped = true;
+      }
+      if (afford <= 0) return { ok: false, reason: `储水已满（上限 ${waterCapacity(run)} L）`, spent: 0, got: 0 };
+    }
     run.res.cash -= price * afford;
     run.res[res] += afford;
     recordPurchase(run, res, afford, locationId);
-    return { ok: true, spent: price * afford, got: afford };
+    return { ok: true, spent: price * afford, got: afford, capped };
   }
 
   run.res.cash -= cost;
   run.res[res] += available;
   recordPurchase(run, res, available, locationId);
-  return { ok: true, spent: cost, got: available };
+  return { ok: true, spent: cost, got: available, capped: capped || (res === 'water' && available < qty) };
 }
 
 export const IODINE_BOX_PRICE = 220;
@@ -442,11 +605,27 @@ export function rollHaul(run: RunState, locationId: string, night: boolean, rng:
   return { locationId, night, items, danger: Math.max(0, Math.min(100, Math.round(danger))) };
 }
 
-/** 玩家在负重上限内挑选后提交 */
-export function commitHaul(run: RunState, picked: HaulItem[]): void {
+/** 玩家在负重上限内挑选后提交。水按剩余容量截断。 */
+export function commitHaul(run: RunState, picked: HaulItem[]): { notes: string[] } {
+  const notes: string[] = [];
+  let room = waterRoom(run);
   for (const it of picked) {
-    run.res[it.res] += it.amount;
+    if (it.res === 'water') {
+      if (room <= 0) {
+        notes.push(`储水已满（上限 ${waterCapacity(run)} L），水没装下`);
+        continue;
+      }
+      const take = Math.min(it.amount, room);
+      if (take < it.amount - 0.01) {
+        notes.push(`只装了 ${take.toFixed(1)} L 水，桶满了`);
+      }
+      run.res.water += take;
+      room = Math.max(0, room - take);
+    } else {
+      run.res[it.res] += it.amount;
+    }
   }
+  return { notes };
 }
 
 export function drainLocation(run: RunState, locationId: string): void {

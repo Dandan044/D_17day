@@ -1,4 +1,6 @@
 import type { EventFamily } from '../../types';
+import { beat } from './factory';
+import { HIGHFLOOR } from './queries';
 
 /**
  * 日常生存事件：门槛低、可用面广，负责填满每一天。
@@ -7,13 +9,12 @@ import type { EventFamily } from '../../types';
  * 这个文件里的是"任何一天都可能发生"的事件——两者一起才构成一个不会枯竭的池子。
  */
 export const DAILY_EVENTS: EventFamily[] = [
-  // ============================================================
-  {
+beat({
     id: 'daily_stranger_at_door',
     kind: 'moral',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 10,
+    weight: 10,
     cooldown: 14,
     forbid: { all: ['site:isolated'] },
     variants: [
@@ -145,15 +146,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_debt_repaid',
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'returns',
@@ -174,15 +173,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_maintenance',
     kind: 'medical',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 9,
+    weight: 9,
     cooldown: 14,
     require: { any: ['mod:power>=1', 'mod:filter>=1', 'mod:airFilter>=1'] },
     variants: [
@@ -272,14 +269,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'daily_breakdown_hard',
     kind: 'threat',
     intensity: 3,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'it_broke',
@@ -314,15 +310,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_hygiene',
     kind: 'medical',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     variants: [
       {
@@ -404,22 +398,20 @@ export const DAILY_EVENTS: EventFamily[] = [
             label: '不管',
             effect: {
               addCond: ['moldLung'],
-              log: '你没管它。晚上睡觉时你开始觉得吸气有点费劲。',
+              log: '你没管它。晚上睡觉时吸气有点费劲，胸口发闷。',
               tone: 'bad',
             },
           },
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_water_find',
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 9,
+    weight: 9,
     cooldown: 14,
     variants: [
       {
@@ -427,6 +419,7 @@ export const DAILY_EVENTS: EventFamily[] = [
         title: '楼顶的水箱',
         body: '你以前从没上过楼顶。那里有一个不锈钢水箱，是给顶层加压用的，停水那天它应该还是满的。\n盖子是锁着的，锁很旧。里面可能有一吨水，也可能早就被人抽干了。',
         forbid: { any: ['site:underground', 'site:isolated'] },
+        require: HIGHFLOOR,
         choices: [
           {
             id: 'open',
@@ -502,15 +495,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_crew_friction',
     kind: 'social',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     cooldown: 14,
     require: { any: ['crew:some', 'crew:full'] },
     variants: [
@@ -609,15 +600,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_recruit',
     kind: 'social',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     once: true,
     forbid: { all: ['crew:full'] },
     variants: [
@@ -701,15 +690,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_found_document',
     kind: 'story',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     variants: [
       {
@@ -723,7 +710,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             effect: {
               stats: { sanity: 6, humanity: 3 },
               setFlags: ['flag:hasNotebook'],
-              log: '你把笔记本放进了自己的抽屉。有时候知道别人也在数日子，会好受一点。',
+              log: '你把笔记本放进抽屉，压在自己的记录上面。两本上的日期能对上四天。',
               tone: 'neutral',
             },
           },
@@ -811,15 +798,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_radio_voice',
     kind: 'story',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     require: { all: ['mod:radio>=1'] },
     variants: [
@@ -892,14 +877,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  {
+  }),
+beat({
     id: 'daily_dj_mentions',
     kind: 'story',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 0,
+    weight: 0,
     variants: [
       {
         id: 'on_air',
@@ -931,15 +915,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_fuel_choice',
     kind: 'moral',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     require: { any: ['temp:cold', 'temp:freezing', 'temp:extreme'] },
     variants: [
@@ -982,15 +964,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_order_decay',
     kind: 'threat',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 8,
+    weight: 8,
     cooldown: 14,
     require: { any: ['order:failing', 'order:collapsed', 'order:strained'] },
     variants: [
@@ -1090,15 +1070,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_quiet_day',
     kind: 'opportunity',
     intensity: 1,
     phase: ['survival'],
-    baseWeight: 7,
+    weight: 7,
     cooldown: 14,
     forbid: { any: ['exposure:marked', 'exposure:hunted'] },
     variants: [
@@ -1113,7 +1091,7 @@ export const DAILY_EVENTS: EventFamily[] = [
             effect: {
               res: { foodStaple: 2, parts: 1 },
               stats: { sanity: 7 },
-              log: '你清点出了两份被压在最底下的罐头和一小袋螺丝。整理本身也让人安定。',
+              log: '你清点出了两份被压在最底下的罐头和一小袋螺丝。柜子又整齐了一点。',
               tone: 'good',
             },
           },
@@ -1139,15 +1117,13 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
-
-  // ============================================================
-  {
+  }),
+beat({
     id: 'daily_pet_moment',
     kind: 'moral',
     intensity: 2,
     phase: ['survival'],
-    baseWeight: 7,
+    weight: 7,
     cooldown: 14,
     require: { all: ['hasPet'] },
     variants: [
@@ -1221,5 +1197,5 @@ export const DAILY_EVENTS: EventFamily[] = [
         ],
       },
     ],
-  },
+  })
 ];

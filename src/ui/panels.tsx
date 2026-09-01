@@ -13,8 +13,8 @@ import {
   maintenanceOptions,
   nextLevel,
 } from '../game/engine/construction';
-import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, iodineBoughtCount, remainingBuyLimit } from '../game/engine/economy';
-import { effectiveModule } from '../game/engine/tags';
+import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, iodineBoughtCount, remainingBuyLimit, waterRoom } from '../game/engine/economy';
+import { effectiveModule, waterCapacity } from '../game/engine/tags';
 import { forecastAccuracy, WEATHER_NAME } from '../game/engine/world';
 import { useGame } from '../game/store';
 import type { BuildPath, DisasterId, ModuleId, ResourceId, RunState } from '../game/types';
@@ -729,8 +729,12 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
             Math.round(BASE_PRICE[res] * run.world.priceIndex * (loc.prices?.[res] ?? 1) * (hasClerk ? 0.9 : 1)),
           );
           const limit = remainingBuyLimit(run, res, hasClerk);
-          const amounts = [1, 5, 10, limit].filter((n, i, a) => n <= limit && a.indexOf(n) === i && n > 0);
-          const empty = (st?.stock ?? 100) <= 0 || limit <= 0;
+          const room = res === 'water' ? waterRoom(run) : Infinity;
+          const amounts = [1, 5, 10, limit]
+            .filter((n, i, a) => n <= limit && a.indexOf(n) === i && n > 0)
+            .map((n) => (res === 'water' ? Math.min(n, Math.max(0, Math.floor(room))) : n))
+            .filter((n, i, a) => n > 0 && a.indexOf(n) === i);
+          const empty = (st?.stock ?? 100) <= 0 || limit <= 0 || (res === 'water' && room <= 0);
           return (
             <div key={res} className="panel flex flex-wrap items-center gap-3 p-3">
               <div className="min-w-0 flex-1">
@@ -742,11 +746,18 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
                 </div>
                 <div className="text-[11px] text-faint">
                   今日剩余 {limit} {RES_UNIT[res]} · 现有 {Math.round(run.res[res] * 10) / 10}
+                  {res === 'water' ? ` · 还能装 ${room.toFixed(1)} L（上限 ${waterCapacity(run)} L）` : ''}
                 </div>
               </div>
               <div className="flex gap-1">
                 {empty ? (
-                  <span className="text-[11px] text-faint">{limit <= 0 ? '今日已买满' : '货架空了'}</span>
+                  <span className="text-[11px] text-faint">
+                    {res === 'water' && room <= 0
+                      ? '储水已满'
+                      : limit <= 0
+                        ? '今日已买满'
+                        : '货架空了'}
+                  </span>
                 ) : (
                   amounts.map((n) => (
                     <button
