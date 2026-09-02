@@ -172,6 +172,8 @@ export const COLD = {
   /** 人体阈值（抗寒体质再降 PERK_SHIFT） */
   COMFORT: 16,
   SURVIVAL: 4,
+  /** 室内与滑块升温上限，对上温度计刻度 */
+  MAX_INDOOR: 25,
   BUFFER: 4,
   PERK_SHIFT: 4,
   /** 准备期市政供暖把室内锁在此值 */

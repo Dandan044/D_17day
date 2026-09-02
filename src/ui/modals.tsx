@@ -171,38 +171,42 @@ export function NightReportModal({ run }: { run: RunState }) {
         </>
       )}
 
-      {r.healthNotes.length > 0 && (
-        <>
-          <SectionLabel>{t('ui.night.body')}</SectionLabel>
-          <div className="mb-3 space-y-1">
-            {r.healthNotes.map((n, i) => (
-              <div
-                key={i}
-                className={`text-[12.5px] leading-snug ${
-                  n.tone === 'good' ? 'text-safehi' : n.tone === 'bad' ? 'text-alarmhi' : 'text-dim'
-                }`}
-              >
-                · {n.text}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      {(() => {
+        const hpRows = (r.hpParts ?? []).filter((p) => p.value !== 0);
+        if (hpRows.length === 0 && r.healthNotes.length === 0) return null;
+        return (
+          <>
+            <SectionLabel>{t('ui.night.body')}</SectionLabel>
+            <div className="mb-3 space-y-1">
+              {hpRows.map((p, i) => (
+                <div
+                  key={`hp-${i}`}
+                  className={`text-[12.5px] leading-snug ${p.value > 0 ? 'text-safehi' : 'text-alarmhi'}`}
+                >
+                  · {p.value > 0 ? '+' : ''}
+                  {p.value} {p.label}
+                </div>
+              ))}
+              {r.healthNotes.map((n, i) => (
+                <div
+                  key={i}
+                  className={`text-[12.5px] leading-snug ${
+                    n.tone === 'good' ? 'text-safehi' : n.tone === 'bad' ? 'text-alarmhi' : 'text-dim'
+                  }`}
+                >
+                  · {n.text}
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       {!isPrepNight && (
         <div className="mb-3 space-y-1 border-t border-line pt-3 text-[12.5px] leading-snug text-dim">
           {r.hpAfter !== undefined && (
             <div>
               {t('ui.night.hp')} {r.hpAfter}
-              {r.hpParts && r.hpParts.length > 0 && (
-                <span>
-                  （
-                  {r.hpParts
-                    .map((p) => `${p.value > 0 ? '+' : ''}${p.value} ${p.label}`)
-                    .join('，')}
-                  ）
-                </span>
-              )}
             </div>
           )}
           {r.indoor !== undefined && r.outdoor !== undefined && (

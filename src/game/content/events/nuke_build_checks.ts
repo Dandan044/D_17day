@@ -118,7 +118,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ),
       skip({
         res: { foodStaple: -2, meds: -1 },
-        stats: { hp: -8, stamina: -12, sanity: -8 },
+        stats: { stamina: -12, sanity: -8 },
         shelter: { fortify: -1 },
         world: { exposure: 10 },
         setFlags: ['flag:pryBreached'],
@@ -272,7 +272,6 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ),
       skip({
         stats: { sanity: -4, hp: -3 },
-        addCond: ['coPoisoning'],
       }),
     ],
   }),
@@ -473,7 +472,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ),
       skip({
         wear: { filterLife: -3 },
-        stats: { sanity: -2, hp: -2 },
+        stats: { sanity: -2 },
       }),
     ],
   }),

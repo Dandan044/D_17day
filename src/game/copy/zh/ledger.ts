@@ -16,6 +16,7 @@ export const data = {
     sanity: '精神崩溃',
     raid: '袭击',
     abandon: '放弃',
+    co: '一氧化碳中毒',
   },
   garden: { yield: '农圃：生鲜 +{amt} 份' },
   filter: {

@@ -112,8 +112,13 @@ export function Chip({
     default: '',
   };
   return (
-    <span className={`chip ${style[tone]}`} title={title}>
+    <span className={`chip relative ${title ? 'group/chip' : ''} ${style[tone]}`} title={title}>
       {children}
+      {title && (
+        <span className="pointer-events-none absolute bottom-[calc(100%+4px)] left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-1.5 py-0.5 text-[10px] tracking-normal text-paper ring-1 ring-line2 group-hover/chip:block">
+          {title}
+        </span>
+      )}
     </span>
   );
 }

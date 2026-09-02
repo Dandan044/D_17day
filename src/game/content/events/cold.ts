@@ -1,5 +1,13 @@
-import type { EventFamily } from '../../types';
+import type { Effect, EventFamily } from '../../types';
 import { beat, ch, skip } from './factory';
+
+/** 开窗通风：此后不再掷 CO，清掉中毒，会被看见 */
+const VENT_OPEN: Effect = {
+  setFlags: ['flag:coVenting'],
+  removeCond: ['coPoisoning'],
+  world: { exposure: 10 },
+  tone: 'good',
+};
 
 /** 室内温度伴生：寒潮、低温症、估错了的一夜 */
 export const COLD_EVENTS: EventFamily[] = [
@@ -47,7 +55,7 @@ export const COLD_EVENTS: EventFamily[] = [
         'can',
         { res: { fuel: 2.5 }, stats: { stamina: -12 }, tone: 'good' },
       ),
-      skip({ stats: { stamina: -4, sanity: -2 } }),
+      skip({ stats: { hp: -3, stamina: -4, sanity: -3 } }),
     ],
   }),
   beat({
@@ -80,7 +88,7 @@ export const COLD_EVENTS: EventFamily[] = [
         },
         { requires: { res: { materials: 3 } } },
       ),
-      ch('huddle', { stats: { stamina: -6, sanity: 2 }, indoor: 1, tone: 'neutral' }),
+      ch('huddle', { stats: { hp: -10, stamina: -8, sanity: -4 }, indoor: 1, tone: 'neutral' }),
     ],
   }),
   beat({
@@ -96,11 +104,13 @@ export const COLD_EVENTS: EventFamily[] = [
       ch(
         'share',
         {
+          res: { water: -2 },
           stats: { humanity: 4, sanity: 3 },
           world: { neighborhood: 6, exposure: 4 },
           clearFlags: ['flag:wasCold'],
           tone: 'good',
         },
+        { requires: { res: { water: 2 } } },
       ),
       ch('keep', { stats: { sanity: 2 }, clearFlags: ['flag:wasCold'], tone: 'neutral' }),
     ],
@@ -227,6 +237,44 @@ export const COLD_EVENTS: EventFamily[] = [
       ch('lie', { stats: { stamina: 12, sanity: 2 }, tone: 'good' }),
       ch('go_out', { stats: { stamina: -10 }, res: { fuel: 1.5 }, world: { exposure: 3 }, tone: 'neutral' }),
       ch('tea', { res: { water: -2 }, stats: { sanity: 4, stamina: 2 }, tone: 'good' }, { requires: { res: { water: 2 } } }),
+    ],
+  }),
+  beat({
+    id: 'env_co_alarm',
+    kind: 'medical',
+    intensity: 2,
+    phase: ['survival'],
+    weight: 0,
+    once: true,
+    require: { all: ['flag:coAlarm'] },
+    choices: [
+      ch('ok', { setFlags: ['flag:coVenting'], removeCond: ['coPoisoning'], tone: 'good' }),
+    ],
+  }),
+  beat({
+    id: 'env_co_vent',
+    kind: 'medical',
+    intensity: 3,
+    phase: ['survival'],
+    weight: 0,
+    once: true,
+    require: { none: ['flag:coAlarm'] },
+    choices: [
+      ch('open', { ...VENT_OPEN }),
+      ch('keep', { setFlags: ['flag:coWarned'], tone: 'grim' }),
+    ],
+  }),
+  beat({
+    id: 'env_co_drowning',
+    kind: 'medical',
+    intensity: 4,
+    phase: ['survival'],
+    weight: 0,
+    once: true,
+    require: { all: ['flag:coWarned'] },
+    choices: [
+      ch('open', { ...VENT_OPEN }),
+      ch('sleep', { stats: { hp: -999 }, tone: 'grim' }),
     ],
   }),
 ];

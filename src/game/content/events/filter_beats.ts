@@ -300,13 +300,13 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
       ch(
         'give',
         {
-          res: { water: -6 },
+          res: { water: -4 },
           stats: { humanity: 5, reputation: 3, sanity: 3 },
           world: { neighborhood: 6, exposure: 4 },
 
           tone: 'good',
         },
-        { requires: { res: { water: 6 } } },
+        { requires: { res: { water: 4 } } },
       ),
       skip({ wear: { filterLife: -1 }, stats: { sanity: -1 } }),
     ],

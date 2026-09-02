@@ -179,7 +179,7 @@ export function deriveFacts(run: RunState): Facts {
     if (p.path === 'buy' && !p.laborDone) add(`delivery:${p.moduleId}`);
   }
   if (effectiveModule(run, 'insulate', power) >= 2) add('sealed');
-  if (flags.has('sealed') && w.temperature < 5 && !run.flags.includes('flag:coAlarm')) {
+  if (flags.has('sealed') && w.temperature < 5 && !run.flags.includes('flag:coAlarm') && !run.flags.includes('flag:coVenting')) {
     if (AIR.CO_RISK > 0) add('co:risk');
   }
   if (run.flags.includes('flag:coAlarm')) add('co:alarm');

@@ -13,7 +13,8 @@ import { SITE_BY_ID } from '../src/game/content/sites';
 import { COLD, POWER, TIME } from '../src/game/balance';
 import { applyProduction, buyIodine, consumeDaily, dailyNeeds, travelCost, type ConsumeResult } from '../src/game/engine/economy';
 import { applyEffect } from '../src/game/engine/effects';
-import { capHeat, heatPlan, leakRate, thermalSink } from '../src/game/engine/climate';
+import { applyHeatWants, capHeat, heatPlan, leakRate, thermalSink } from '../src/game/engine/climate';
+import { resolveRaid } from '../src/game/engine/exposure';
 import { startProject, grantCompanionLabor, completeReadyProjects } from '../src/game/engine/construction';
 import { chooseSite, createRun, endDay, resolveChoice } from '../src/game/engine/run';
 import { computePower, deriveFacts } from '../src/game/engine/tags';
@@ -23,8 +24,13 @@ import { assessCollapse } from '../src/game/engine/collapse';
 import { isEligible, pickVariant, selectEvents } from '../src/game/engine/director';
 import { applyOnset } from '../src/game/engine/world';
 import { pruneOrphanQueue, rebuildSettlement } from '../src/game/store';
-import { makeRng } from '../src/game/rng';
+import { makeRng, type Rng } from '../src/game/rng';
 import type { MetaState, ModuleId, RunState, SiteId } from '../src/game/types';
+
+const yesRng = (): Rng => {
+  const r = makeRng(1, 0);
+  return { ...r, chance: () => true };
+};
 
 let pass = 0;
 let fail = 0;
@@ -735,6 +741,14 @@ console.log('\n  惯性温度：漏热、估错、回暖少耗、低温症阶段
   );
   check('今夜计划先用电热', live.plan.kwh > 0, `kwh=${live.plan.kwh} fuel=${live.plan.fuelCost}`);
 
+  mix.heatElecWant = 0.5;
+  mix.heatFuelWant = 0.24;
+  const split = heatPlan(mix, -10, 0.5);
+  check('独立油电：电按申请走', Math.abs(split.kwh - 0.5) < 0.05, `kwh=${split.kwh}`);
+  check('独立油电：油不顶替电的缺口', Math.abs(split.fuelCost - 0.24) < 0.05, `fuel=${split.fuelCost}`);
+  mix.heatElecWant = undefined;
+  mix.heatFuelWant = undefined;
+
   mix.powerEnabled.lights = true;
   mix.powerPriority = ['heater', ...POWER.DEFAULT_PRIORITY.filter((id) => id !== 'heater')];
   mix.heatTarget = 25;
@@ -773,6 +787,165 @@ console.log('\n  惯性温度：漏热、估错、回暖少耗、低温症阶段
     onlyHeat.generator === 0,
     `gen=${onlyHeat.generator} demand=${onlyHeat.demand} heater=${onlyHeat.heaterGranted}`,
   );
+}
+
+// ============================================================
+console.log('\n  结算撒谎 / 温控 / 一氧化碳');
+// ============================================================
+{
+  const prep = createRun({ seed: 9101, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(prep, 'apartment');
+  prep.res.foodFresh = 8;
+  prep.powerEnabled = { ...prep.powerEnabled, fridge: false };
+  prep.queue = [];
+  const prepNight = endDay(prep);
+  const prepText = prepNight.notes.map((n) => n.text).join('\n');
+  check('准备期夜间没有冰箱没电', !prepText.includes('冰箱没电'), prepText.slice(0, 80));
+
+  const rain = createRun({ seed: 9102, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(rain, 'apartment');
+  rain.day = 12;
+  rain.phase = 'survival';
+  rain.modules.filter = 2;
+  rain.modules.power = 2;
+  rain.wear.filterLife = 40;
+  rain.world.weather = 'rain';
+  rain.world.powerGrid = 'on';
+  rain.res.water = 8;
+  rain.res.foodStaple = 40;
+  rain.res.foodFresh = 0;
+  rain.queue = [];
+  const prodNotes = applyProduction(rain);
+  const prodText = prodNotes.map((n) => n.text).join('\n');
+  check('雨夜能接雨', prodText.includes('接雨雪'), prodText);
+  rain.world.weather = 'clear';
+  const afterRain = consumeDaily(rain, makeRng(2, 0), 'story', undefined, 'rain');
+  const afterText = afterRain.notes.map((n) => n.text).join('\n');
+  check('接雨之夜不写没下雨回用', !afterText.includes('没下雨'), afterText);
+  check('接雨笔记是好消息', prodNotes.some((n) => n.text.includes('接雨雪') && n.tone === 'good'));
+
+  const cap = createRun({ seed: 9103, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(cap, 'apartment');
+  cap.modules.insulate = 2;
+  cap.modules.power = 2;
+  cap.res.fuel = 80;
+  cap.indoorTemp = 10;
+  cap.world.temperature = -8;
+  applyHeatWants(cap, 40, 40);
+  check('申请再大，目标室内也不过 25', cap.heatTarget <= COLD.MAX_INDOOR, `target=${cap.heatTarget}`);
+  const cappedPlan = heatPlan(cap, -8, 40);
+  check('heatPlan 室内 ≤ 25', cappedPlan.indoor <= COLD.MAX_INDOOR, `indoor=${cappedPlan.indoor}`);
+
+  const raidRun = createRun({ seed: 9104, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(raidRun, 'apartment');
+  raidRun.res.ammo = 10;
+  const held = resolveRaid(raidRun, makeRng(4, 0), 1, false);
+  check('没开枪不扣弹药', held.usedAmmo === 0 && raidRun.res.ammo === 10, `used=${held.usedAmmo} ammo=${raidRun.res.ammo}`);
+
+  const fakeConsume = (indoor: number, extra: Partial<ConsumeResult> = {}): ConsumeResult => ({
+    waterRatio: 1,
+    foodRatio: 1,
+    drankRaw: false,
+    drankFiltered: false,
+    recycling: false,
+    heated: false,
+    indoor,
+    previewIndoor: indoor,
+    fuelBudget: 0,
+    fuelSpent: 0,
+    kwhBudget: 0,
+    kwhSpent: 0,
+    notes: [],
+    ...extra,
+  });
+
+  const heal = createRun({ seed: 9105, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(heal, 'apartment');
+  heal.day = 20;
+  heal.phase = 'survival';
+  heal.world.airPollution = 0;
+  heal.world.radiation = 0;
+  heal.world.contagion = 0;
+  heal.res.foodStaple = 40;
+  heal.res.water = 40;
+  heal.modules.filter = 1;
+  heal.ration = 'normal';
+  heal.waterUse = 'normal';
+  heal.conditions = ['coPoisoning'];
+  heal.conditionAge = { coPoisoning: 1 };
+  const healed = resolveHealth(heal, fakeConsume(18), yesRng());
+  check(
+    'CO 自愈当晚不扣该病生命',
+    !healed.hpParts.some((p) => p.label.includes('一氧化碳')) && heal.conditions.includes('coPoisoning') === false,
+    healed.hpParts.map((p) => `${p.value} ${p.label}`).join(','),
+  );
+  check('CO 自愈有好转笔记', healed.notes.some((n) => n.text.includes('好转') || n.text.includes('好了')), healed.notes.map((n) => n.text).join(' | '));
+
+  const alarm = createRun({ seed: 9106, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(alarm, 'apartment');
+  alarm.day = 20;
+  alarm.phase = 'survival';
+  alarm.world.airPollution = 0;
+  alarm.world.radiation = 0;
+  alarm.world.contagion = 0;
+  alarm.res.foodStaple = 40;
+  alarm.res.water = 40;
+  alarm.modules.insulate = 2;
+  alarm.modules.filter = 1;
+  alarm.ration = 'normal';
+  alarm.waterUse = 'normal';
+  alarm.flags.push('flag:coAlarm');
+  resolveHealth(alarm, fakeConsume(18, { heated: true, heatKind: 'fuel' }), yesRng());
+  check('有报警器当晚不中毒', !alarm.conditions.includes('coPoisoning'), alarm.conditions.join(','));
+  check(
+    '有报警器次日预约吵醒',
+    alarm.pending.some((p) => p.familyId === 'env_co_alarm'),
+    alarm.pending.map((p) => p.familyId).join(','),
+  );
+
+  const vent = createRun({ seed: 9107, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(vent, 'apartment');
+  vent.day = 20;
+  vent.phase = 'survival';
+  vent.world.airPollution = 0;
+  vent.world.radiation = 0;
+  vent.world.contagion = 0;
+  vent.res.foodStaple = 40;
+  vent.res.water = 40;
+  vent.modules.insulate = 2;
+  vent.modules.filter = 1;
+  vent.ration = 'normal';
+  vent.waterUse = 'normal';
+  resolveHealth(vent, fakeConsume(18, { heated: true, heatKind: 'fuel' }), yesRng());
+  check('没买当晚中毒', vent.conditions.includes('coPoisoning'));
+  check(
+    '没买次日预约通风',
+    vent.pending.some((p) => p.familyId === 'env_co_vent'),
+    vent.pending.map((p) => p.familyId).join(','),
+  );
+
+  const drown = createRun({ seed: 9108, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(drown, 'apartment');
+  drown.day = 20;
+  drown.phase = 'survival';
+  drown.world.airPollution = 0;
+  drown.world.radiation = 0;
+  drown.world.contagion = 0;
+  drown.res.foodStaple = 40;
+  drown.res.water = 40;
+  drown.modules.insulate = 2;
+  drown.modules.filter = 1;
+  drown.ration = 'normal';
+  drown.waterUse = 'normal';
+  drown.flags.push('flag:coWarned');
+  resolveHealth(drown, fakeConsume(18, { heated: true, heatKind: 'fuel' }), yesRng());
+  check(
+    '拒绝通风后再掷中预约溺死',
+    drown.pending.some((p) => p.familyId === 'env_co_drowning'),
+    drown.pending.map((p) => p.familyId).join(','),
+  );
+  const died = resolveChoice(drown, 'env_co_drowning', 'main', 'sleep');
+  check('沉浸选项打出六十八块', died.died === true && drown.endingId === 'death_co', `died=${died.died} ending=${drown.endingId}`);
 }
 
 console.log(`\n  结果：${pass} 通过 · ${fail} 失败\n`);

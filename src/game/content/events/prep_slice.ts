@@ -28,7 +28,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
 
     choices: [
       ch('ask', { stats: { stamina: -8, reputation: 2 }, setFlags: ['flag:elevatorWarned'],  tone: 'neutral' }),
-      ch('water', { res: { water: 8, cash: -40 }, stats: { stamina: -16 }, setFlags: ['flag:elevatorWarned'],  tone: 'good' }, { requires: { res: { cash: 40 } } }),
+      ch('water', { res: { water: 8, cash: -40 }, stats: { stamina: -12 }, setFlags: ['flag:elevatorWarned'],  tone: 'good' }, { requires: { res: { cash: 40 } } }),
       skip(),
     ],
   }),
@@ -95,7 +95,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
 
 
     choices: [
-      ch('buy', { res: { cash: -360, materials: 8 }, stats: { stamina: -18 }, setFlags: ['flag:hasPlywood'],  tone: 'good' }, { requires: { res: { cash: 360 } } }),
+      ch('buy', { res: { cash: -360, materials: 8 }, stats: { stamina: -12 }, setFlags: ['flag:hasPlywood'],  tone: 'good' }, { requires: { res: { cash: 360 } } }),
       ch('one', { res: { cash: -180, materials: 4 }, stats: { stamina: -10 }, setFlags: ['flag:hasPlywood'],  tone: 'good' }, { requires: { res: { cash: 180 } } }),
       skip(),
     ],
@@ -109,7 +109,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
 
 
     choices: [
-      ch('wait', { res: { cash: 2000 }, stats: { stamina: -12, sanity: -4 }, setFlags: ['flag:gotCashOut'],  tone: 'good' }),
+      ch('wait', { res: { cash: 2000 }, stats: { stamina: -4, sanity: -4 }, setFlags: ['flag:gotCashOut'],  tone: 'good' }),
       ch('leave_card', { stats: { humanity: 4, reputation: 3, sanity: 2 }, world: { neighborhood: 4 },  tone: 'good' }),
       skip({ world: { lawOrder: -2 }, stats: { sanity: -3 } }),
     ],
@@ -136,7 +136,7 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
 
 
     choices: [
-      ch('bribe', { res: { cash: -60, water: 8 }, stats: { reputation: -2 }, setFlags: ['flag:tankKey'],  tone: 'good' }, { requires: { res: { cash: 60 } } }),
+      ch('bribe', { res: { cash: -60, water: 8 }, stats: { stamina: -10, reputation: -2 }, setFlags: ['flag:tankKey'],  tone: 'good' }, { requires: { res: { cash: 60 } } }),
       ch('talk', { stats: { reputation: 2 }, setFlags: ['flag:tankAsked'],  tone: 'neutral' }, { requires: { skills: { negotiation: 2 }, reason: '需要谈判 2 级' } }),
       skip(),
     ],

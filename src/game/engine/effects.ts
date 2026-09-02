@@ -14,6 +14,7 @@ import { SURVIVORS, SURVIVOR_BY_ID } from '../content/survivors';
 import type { Rng } from '../rng';
 import type { ActionHook, ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor } from '../types';
 import { clampBattery, batteryCapacity } from './power';
+import { markGunshotRecent } from './exposure';
 import { grantIodine, waterCapacity } from './tags';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -219,6 +220,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   if (eff.setFlags) {
     for (const f of eff.setFlags) if (!run.flags.includes(f)) run.flags.push(f);
     if (eff.setFlags.includes('flag:iodine')) grantIodine(run);
+    if (eff.setFlags.includes('flag:gunshotRecent')) markGunshotRecent(run);
     if (eff.setFlags.includes('flag:knowsNorthRoute')) notes.push(t('ledger.effect.north'));
     else if (eff.setFlags.length) notes.push(t('ledger.effect.flagged'));
   }

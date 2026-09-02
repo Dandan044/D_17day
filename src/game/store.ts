@@ -35,7 +35,8 @@ import { settle, resolveEnding, type Settlement } from './engine/endings';
 import { applyScavengeDanger } from './engine/exposure';
 import { treatCondition } from './engine/health';
 import { emitHook } from './engine/hooks';
-import { ensureRunDefaults } from './engine/power';
+import { applyHeatWants } from './engine/climate';
+import { ensureRunDefaults, heaterHeadroomKwh } from './engine/power';
 import {
   acknowledgeCollapse as engineAckCollapse,
   chooseSite as engineChooseSite,
@@ -137,6 +138,7 @@ interface GameState {
   setWaterUse: (w: WaterLevel) => void;
   setHeatMode: (h: HeatMode) => void;
   setHeatTarget: (n: number) => void;
+  setHeatMix: (elecKwh: number, fuelL: number) => void;
   setPowerMode: (p: PowerMode) => void;
   setPowerPriority: (order: PowerLoadId[]) => void;
   togglePowerLoad: (id: PowerLoadId, on: boolean) => void;
@@ -648,6 +650,14 @@ export const useGame = create<GameState>()(
         setHeatTarget: (heatTarget) =>
           mutate((r) => {
             r.heatTarget = heatTarget;
+          }),
+        setHeatMix: (elecKwh, fuelL) =>
+          mutate((r) => {
+            applyHeatWants(r, elecKwh, fuelL, heaterHeadroomKwh(r));
+            if ((r.heatElecWant ?? 0) > 0) {
+              if (!r.powerEnabled) r.powerEnabled = {};
+              r.powerEnabled.heater = true;
+            }
           }),
         setPowerPriority: (order) =>
           mutate((r) => {

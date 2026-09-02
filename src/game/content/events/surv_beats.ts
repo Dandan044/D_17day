@@ -49,7 +49,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
 
 
     choices: [
-      ch('give', { res: { water: -3 }, stats: { humanity: 4, sanity: 2 }, world: { exposure: 4, neighborhood: 3 }, setFlags: ['flag:gaveWaterOnce'],  tone: 'good' }, { requires: { res: { water: 3 } } }),
+      ch('give', { res: { water: -2 }, stats: { humanity: 4, sanity: 2 }, world: { exposure: 4, neighborhood: 3 }, setFlags: ['flag:gaveWaterOnce'],  tone: 'good' }, { requires: { res: { water: 2 } } }),
       ch('lie', { stats: { humanity: -3, sanity: -2 }, setFlags: ['flag:liedNoWater'],  tone: 'grim' }),
       skip({ stats: { sanity: -3, humanity: -1 } }),
     ],
@@ -256,7 +256,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
 
     choices: [
       ch('knock', { world: { exposure: 5, neighborhood: 4 }, stats: { sanity: 2 }, setFlags: ['flag:answeredSlot'],  tone: 'neutral' }),
-      ch('write', { res: { water: 4 }, world: { exposure: 8 }, setFlags: ['flag:askedSlotWater'],  tone: 'good' }),
+      ch('write', { res: { water: 2 }, world: { exposure: 8 }, setFlags: ['flag:askedSlotWater'],  tone: 'good' }),
       skip({ stats: { sanity: -2 } }),
     ],
   }),

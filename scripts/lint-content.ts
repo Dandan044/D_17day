@@ -105,6 +105,43 @@ function checkEmptyPromise(
   }
 }
 
+/** 文本写明没受伤，就不该扣生命 */
+function checkLogVsHp(where: string, log: string, hp?: number): void {
+  if (!log || !hp || hp >= 0) return;
+  if (/没开枪|没有开枪|只是看着你|没有动手|没伤到|没碰到你/.test(log)) {
+    err(`${where}：log 写明没有受伤，effect 却扣了生命`);
+  }
+}
+
+/** 「开了一枪」必须恰好扣 1 发 */
+function checkLogVsAmmo(where: string, log: string, ammo?: number): void {
+  if (!log || !/一枪|开了一枪/.test(log)) return;
+  if (Math.abs(ammo ?? 0) !== 1) {
+    err(`${where}：log 写了开一枪，弹药变动必须是 1（当前 ${ammo ?? 0}）`);
+  }
+}
+
+/** 「一瓶」水必须是 2 L；「两瓶」是 4 L */
+function checkLogVsBottle(where: string, log: string, water?: number): void {
+  if (!log) return;
+  const amt = Math.abs(water ?? 0);
+  if (/两瓶/.test(log)) {
+    if (amt !== 4) err(`${where}：log 写了两瓶，水量变动必须是 4 L（当前 ${water ?? 0}）`);
+    return;
+  }
+  if (/一瓶/.test(log) && amt !== 2) {
+    err(`${where}：log 写了一瓶，水量变动必须是 2 L（当前 ${water ?? 0}）`);
+  }
+}
+
+/** skip 还在干活/生病/挨冻时，不该白送体力 */
+function checkSkipStaminaGift(where: string, choiceId: string, log: string, stamina?: number): void {
+  if (choiceId !== 'skip' || !log || (stamina ?? 0) <= 0) return;
+  if (/搬|爬|病|冻|咳/.test(log)) {
+    err(`${where}：skip 在搬/爬/病/冻/咳的 log 里还加了体力`);
+  }
+}
+
 const scheduledFamilies = new Set<string>();
 const PRESSURE_FAMILIES = ['pressure_passerby', 'pressure_scout', 'pressure_tribute', 'raid_attempt'];
 
@@ -164,6 +201,10 @@ for (const f of ALL_FAMILIES) {
           checkFlagList(`${cw}.clearFlags`, e.clearFlags);
           for (const f of e.setFlags ?? []) writtenFlags.add(f);
           checkEmptyPromise(cw, e.log ?? '', e);
+          checkLogVsHp(cw, e.log ?? '', e.stats?.hp);
+          checkLogVsAmmo(cw, e.log ?? '', e.res?.ammo);
+          checkLogVsBottle(cw, e.log ?? '', e.res?.water);
+          checkSkipStaminaGift(cw, c.id, e.log ?? '', e.stats?.stamina);
           for (const s of e.schedule ?? []) {
           scheduledFamilies.add(s.familyId);
           if (!FAMILY_BY_ID[s.familyId]) {
@@ -200,7 +241,10 @@ for (const f of ALL_FAMILIES) {
     f.id === 'env_first_chill' ||
     f.id === 'env_hypo_severe' ||
     f.id === 'env_warmth_return' ||
-    f.id === 'env_woke_cold'
+    f.id === 'env_woke_cold' ||
+    f.id === 'env_co_alarm' ||
+    f.id === 'env_co_vent' ||
+    f.id === 'env_co_drowning'
   ) {
     continue;
   }
@@ -309,6 +353,8 @@ for (const familyId of PRESSURE_FAMILIES) {
 
 const ENGINE_FLAGS = new Set([
   'flag:coAlarm',
+  'flag:coVenting',
+  'flag:coWarned',
   'flag:hasVehicle',
   'flag:intelBonus',
   'flag:raidDefend',

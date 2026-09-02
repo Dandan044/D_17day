@@ -610,6 +610,10 @@ export interface RunState {
   heatMode: HeatMode;
   /** 取暖目标室内温度（°C） */
   heatTarget: number;
+  /** 今晚计划用电热的 kWh；未设则按 heatTarget 电优先 */
+  heatElecWant?: number;
+  /** 今晚计划烧的油（L）；未设则按 heatTarget 用油补缺口 */
+  heatFuelWant?: number;
   /** 当前室内温度。准备期锁在市政供暖值 */
   indoorTemp: number;
   /** 昨夜室内落在哪一档，供回暖事件 */
@@ -624,6 +628,8 @@ export interface RunState {
   powerEnabled: Partial<Record<PowerLoadId, boolean>>;
   /** 碘片效果截止日（含当天） */
   iodineUntil?: number;
+  /** 「前几天的枪声」到期日；夜间结算日数 >= 此值则清旗 */
+  gunshotUntil?: number;
   /** 概率链权重加成 */
   directorBoost: Record<string, number>;
   /** 阈值事件上次触发日 */

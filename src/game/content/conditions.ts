@@ -153,7 +153,7 @@ export const CONDITIONS: ConditionDef[] = [
     id: 'coPoisoning',
     name: '一氧化碳中毒',
     desc: '头疼、恶心、判断力下降。它没有味道，所以你昨晚睡得很沉。',
-    daily: { hp: -11, stamina: -18, sanity: -5 },
+    daily: { hp: -5, stamina: -18, sanity: -5 },
     selfHeal: 0.5,
   },
   {

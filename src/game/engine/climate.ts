@@ -16,6 +16,31 @@ export function isPrecipWeather(weather: WeatherId): boolean {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/** 电优先，油补缺口，总升温不超过 MAX_INDOOR */
+function fitHeat(leaked: number, elecDeg: number, fuelDeg: number) {
+  const maxDeg = Math.max(0, COLD.MAX_INDOOR - leaked);
+  const e = Math.min(Math.max(0, elecDeg), maxDeg);
+  const f = Math.min(Math.max(0, fuelDeg), Math.max(0, maxDeg - e));
+  return {
+    elecDeg: e,
+    fuelDeg: f,
+    heatDegrees: e + f,
+    indoor: round1(leaked + e + f),
+    kwh: round1(e * COLD.ELECTRIC_PER_DEGREE),
+    fuelCost: round1(f * COLD.FUEL_PER_DEGREE),
+  };
+}
+
+/** 从今夜漏热升到上限所需的电/油（尚未和库存取小） */
+export function heatSliderMax(run: RunState, outdoor?: number): { elecKwh: number; fuelL: number } {
+  const { leaked } = leakedTonight(run, outdoor ?? run.world.temperature);
+  const gap = Math.max(0, COLD.MAX_INDOOR - leaked);
+  return {
+    elecKwh: canElectricHeat(run) ? round1(gap * COLD.ELECTRIC_PER_DEGREE) : 0,
+    fuelL: canFuelHeat(run) ? round1(gap * COLD.FUEL_PER_DEGREE) : 0,
+  };
+}
+
 export function insulateLevel(run: RunState): number {
   if (run.projects.some((p) => p.moduleId === 'insulate')) return 0;
   return Math.max(0, Math.min(3, run.modules.insulate ?? 0));
@@ -84,18 +109,78 @@ export function heatWantKwh(run: RunState, outdoor?: number): number {
   if (!canElectricHeat(run)) return 0;
   const out = outdoor ?? run.world.temperature;
   const leaked = leakIndoor(currentIndoor(run), thermalSink(run, out), leakRate(run), occupancyHeat(run));
-  const gap = Math.max(0, (run.heatTarget ?? comfortTemp(run)) - leaked);
+  const gap = Math.max(0, Math.min(COLD.MAX_INDOOR, run.heatTarget ?? comfortTemp(run)) - leaked);
   if (gap <= 0) return 0;
   return round1(gap * COLD.ELECTRIC_PER_DEGREE);
 }
 
-/**
- * 电优先、油补缺口。`elecGrantedKwh` 是供电表按优先级实际分给温控的电。
- */
-export function heatPlan(run: RunState, outdoor: number, elecGrantedKwh = 0): HeatPlan {
+function leakedTonight(run: RunState, outdoor: number): { sink: number; leaked: number } {
   const sink = thermalSink(run, outdoor);
   const leaked = leakIndoor(currentIndoor(run), sink, leakRate(run), occupancyHeat(run));
-  const target = run.heatTarget ?? comfortTemp(run);
+  return { sink, leaked };
+}
+
+/** 玩家拖过油电滑块后写入；目标室内温度随之变成漏热 + 两路升温。 */
+export function applyHeatWants(run: RunState, elecKwh: number, fuelL: number, maxElecKwh?: number): void {
+  let elec = canElectricHeat(run) ? Math.max(0, elecKwh) : 0;
+  if (maxElecKwh !== undefined) elec = Math.min(elec, Math.max(0, maxElecKwh));
+  const fuel = canFuelHeat(run) ? Math.max(0, Math.min(fuelL, run.res.fuel)) : 0;
+  run.heatElecWant = round1(elec);
+  run.heatFuelWant = round1(fuel);
+  const { leaked } = leakedTonight(run, run.world.temperature);
+  const elecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? run.heatElecWant / COLD.ELECTRIC_PER_DEGREE : 0;
+  const fuelDeg = COLD.FUEL_PER_DEGREE > 0 ? run.heatFuelWant / COLD.FUEL_PER_DEGREE : 0;
+  const fitted = fitHeat(leaked, elecDeg, fuelDeg);
+  run.heatTarget = fitted.indoor;
+}
+
+function planFromWants(run: RunState, outdoor: number, elecGrantedKwh: number): HeatPlan {
+  const { sink, leaked } = leakedTonight(run, outdoor);
+  let heatDegrees = 0;
+  let fuelCost = 0;
+  let kwh = 0;
+
+  if (canElectricHeat(run) && elecGrantedKwh > 0 && COLD.ELECTRIC_PER_DEGREE > 0) {
+    const want = Math.max(0, run.heatElecWant ?? 0);
+    const elecKwh = Math.min(want, elecGrantedKwh);
+    const elecDeg = elecKwh / COLD.ELECTRIC_PER_DEGREE;
+    heatDegrees += elecDeg;
+    kwh = round1(elecKwh);
+  }
+
+  if (canFuelHeat(run) && COLD.FUEL_PER_DEGREE > 0) {
+    const want = Math.max(0, run.heatFuelWant ?? 0);
+    const fuel = Math.min(want, run.res.fuel);
+    const fuelDeg = fuel / COLD.FUEL_PER_DEGREE;
+    heatDegrees += fuelDeg;
+    fuelCost = round1(fuel);
+  }
+
+  const fitted = fitHeat(leaked, kwh > 0 && COLD.ELECTRIC_PER_DEGREE > 0 ? kwh / COLD.ELECTRIC_PER_DEGREE : 0, fuelCost > 0 && COLD.FUEL_PER_DEGREE > 0 ? fuelCost / COLD.FUEL_PER_DEGREE : 0);
+  const mode: HeatMode = fitted.kwh > 0 ? 'electric' : fitted.fuelCost > 0 ? 'fuel' : 'off';
+  return {
+    sink,
+    leaked,
+    target: Math.min(COLD.MAX_INDOOR, run.heatTarget ?? fitted.indoor),
+    heatDegrees: fitted.heatDegrees,
+    indoor: fitted.indoor,
+    fuelCost: fitted.fuelCost,
+    kwh: fitted.kwh,
+    mode,
+  };
+}
+
+/**
+ * 未拖过滑块：电优先、油补缺口。拖过之后两路按玩家申请走，互不顶替。
+ * `elecGrantedKwh` 是供电表按优先级实际分给温控的电。
+ */
+export function heatPlan(run: RunState, outdoor: number, elecGrantedKwh = 0): HeatPlan {
+  if (run.heatElecWant !== undefined || run.heatFuelWant !== undefined) {
+    return planFromWants(run, outdoor, elecGrantedKwh);
+  }
+
+  const { sink, leaked } = leakedTonight(run, outdoor);
+  const target = Math.min(COLD.MAX_INDOOR, run.heatTarget ?? comfortTemp(run));
   const gap = Math.max(0, target - leaked);
   let heatDegrees = 0;
   let fuelCost = 0;
@@ -121,7 +206,7 @@ export function heatPlan(run: RunState, outdoor: number, elecGrantedKwh = 0): He
     leaked,
     target,
     heatDegrees,
-    indoor: round1(leaked + heatDegrees),
+    indoor: round1(Math.min(COLD.MAX_INDOOR, leaked + heatDegrees)),
     fuelCost,
     kwh,
     mode,
@@ -148,7 +233,7 @@ export function capHeat(budget: HeatPlan, actual: HeatPlan): HeatPlan {
     ...actual,
     mode,
     heatDegrees,
-    indoor: round1(actual.leaked + heatDegrees),
+    indoor: round1(Math.min(COLD.MAX_INDOOR, actual.leaked + heatDegrees)),
     fuelCost,
     kwh,
   };

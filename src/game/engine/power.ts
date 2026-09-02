@@ -258,19 +258,26 @@ export function loadOnline(run: RunState, id: PowerLoadId, power?: PowerReport):
 
 /** 温控在当前优先级下最多能拿到多少电（探测用，不按今夜目标截断） */
 export function heaterHeadroomKwh(run: RunState): number {
-  if (!canElectricHeat(run) || !loadWanted(run, 'heater')) return 0;
-  return computePower(run, 80).heaterGranted;
+  if (!canElectricHeat(run)) return 0;
+  const probe: RunState = {
+    ...run,
+    powerEnabled: { ...(run.powerEnabled ?? {}), heater: true },
+  };
+  return computePower(probe, 80).heaterGranted;
 }
 
-/** 今晚温控实际会去供电表里申请的电：目标和余电取小 */
+/** 今晚温控实际会去供电表里申请的电：申请量和余电取小 */
 export function heaterDrawKwh(run: RunState, outdoor?: number): number {
   if (!canElectricHeat(run) || !loadWanted(run, 'heater')) return 0;
+  if (run.heatElecWant !== undefined) {
+    return Math.round(Math.min(Math.max(0, run.heatElecWant), heaterHeadroomKwh(run)) * 10) / 10;
+  }
   const need = heatWantKwh(run, outdoor);
   if (need <= 0) return 0;
   return Math.round(Math.min(need, heaterHeadroomKwh(run)) * 10) / 10;
 }
 
-/** 按今日室外估明晚室内：电优先（实得分），油补缺口 */
+/** 按今日室外估明晚室内：未拖滑块时电优先，拖过则按申请量 */
 export function tonightHeat(run: RunState, outdoor?: number): { plan: HeatPlan; power: PowerReport } {
   const out = outdoor ?? run.world.temperature;
   const power = computePower(run, heaterDrawKwh(run, out));

@@ -37,7 +37,7 @@ export const MED_PROGRESS_EVENTS: EventFamily[] = [
           tone: 'grim',
         },
       ),
-      skip({ stats: { stamina: 4, sanity: -2, hp: -2 } }),
+      skip({ stats: { sanity: -2, hp: -2 } }),
     ],
   }),
 
@@ -143,7 +143,7 @@ export const MED_PROGRESS_EVENTS: EventFamily[] = [
           tone: 'grim',
         },
       ),
-      skip({ stats: { sanity: -3 } }),
+      skip({ stats: { sanity: -3, hp: -2 } }),
     ],
   }),
 ];

@@ -302,8 +302,7 @@ export function endDay(run: RunState): NightReport {
   // ---------- 夜间结算 ----------
   if (isPrep) {
     run.indoorTemp = COLD.PREP_INDOOR;
-    // 准备期自来水和超市还在，不做配给结算
-    report.notes.push(...spoilFood(run));
+    // 准备期自来水和超市还在，不做配给结算，生鲜也不按冰箱没电腐
     report.notes.push(...advanceProjects(run, rng).map((t) => ledger(t)));
     tickPrepEconomy(run, rng);
     report.notes.push(ledger(t('ledger.run.price', { idx: run.world.priceIndex.toFixed(2) })));
@@ -315,8 +314,9 @@ export function endDay(run: RunState): NightReport {
       report.notes.push(ledger(t('ledger.run.secret')));
     }
     const budget = tonightHeat(run).plan;
+    const nightWeather = run.world.weather;
     tickClimate(run, rng, run.day + 1);
-    const consume = consumeDaily(run, rng, run.difficulty, budget);
+    const consume = consumeDaily(run, rng, run.difficulty, budget, nightWeather);
     report.notes.push(...consume.notes);
     report.indoor = consume.indoor;
     report.outdoor = run.world.temperature;
@@ -468,13 +468,15 @@ export function resolveChoice(
   if (!run.seenVariants) run.seenVariants = [];
   const seenKey = `${familyId}/${variantId}`;
   if (!run.seenVariants.includes(seenKey)) run.seenVariants.push(seenKey);
+  let applied = choice.effect;
   if (choice.check) {
     const roll = rng.d20();
     const skillVal = run.skills[choice.check.skill];
     const total = roll + skillVal;
     const success = total >= choice.check.dc;
     out.checkRoll = { roll, total, dc: choice.check.dc, success, skill: choice.check.skill };
-    out.notes.push(...applyEffect(run, success ? choice.check.ok : choice.check.bad, rng));
+    applied = success ? choice.check.ok : choice.check.bad;
+    out.notes.push(...applyEffect(run, applied, rng));
   } else if (choice.effect) {
     out.notes.push(...applyEffect(run, choice.effect, rng));
   }
@@ -484,6 +486,9 @@ export function resolveChoice(
   // 车辆与宠物这类由标签驱动的状态需要同步到结构化字段
   if (run.flags.includes('flag:hasVehicle')) run.hasVehicle = true;
 
+  const firedTonight =
+    !!applied?.setFlags?.includes('flag:firedWarning') || (applied?.res?.ammo ?? 0) < 0;
+
   // 选项只表达"你怎么应对"，实际的攻防结算在这里发生
   const defending = run.flags.includes('flag:raidDefend');
   const hiding = run.flags.includes('flag:raidHide');
@@ -491,7 +496,7 @@ export function resolveChoice(
     run.flags = run.flags.filter((f) => f !== 'flag:raidDefend' && f !== 'flag:raidHide');
     // 躲起来保命但守不住东西；土制警报能争取到反应时间
     const strength = hiding ? 1.35 : 1;
-    const raid = resolveRaid(run, rng, strength);
+    const raid = resolveRaid(run, rng, strength, firedTonight);
     out.raid = raid;
     addLog(run, raid.narrative, raid.repelled ? 'good' : 'bad');
     if (!raid.repelled) {
@@ -514,6 +519,20 @@ export function resolveChoice(
         run.stats_meta.daysSurvived = run.day;
         out.died = true;
       }
+    }
+  }
+
+  if (run.stats.hp <= 0 && run.phase !== 'ended') {
+    const coDrown = familyId === 'env_co_drowning';
+    if (run.difficulty === 'story' && !coDrown) {
+      run.stats.hp = 20;
+      out.notes.push(t('ledger.run.storyLive'));
+    } else {
+      const ending = resolveEnding(run, coDrown ? t('ledger.cause.co') : '死亡');
+      run.endingId = ending.id;
+      run.phase = 'ended';
+      run.stats_meta.daysSurvived = run.day;
+      out.died = true;
     }
   }
   // 任何 raid_attempt 结算都算遭遇袭击（谈成成功也要能触发 waitFor 链）

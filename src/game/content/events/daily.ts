@@ -680,7 +680,7 @@ beat({
             id: 'refuse',
 
             effect: {
-              stats: { humanity: -11, sanity: -10 },
+              stats: { humanity: -11, sanity: -8 },
               world: { neighborhood: -6 },
               setFlags: ['flag:refusedChild'],
 
@@ -869,7 +869,7 @@ beat({
             id: 'off',
 
             effect: {
-              stats: { sanity: -8 },
+              stats: { sanity: -4 },
 
               tone: 'grim',
             },
@@ -999,13 +999,13 @@ beat({
               ok: {
                 ap: -1,
                 res: { ammo: 4, foodStaple: 3, parts: 2 },
-                stats: { sanity: -10, humanity: -4 },
+                stats: { sanity: -8, humanity: -4 },
 
                 tone: 'grim',
               },
               bad: {
                 ap: -1,
-                stats: { hp: -12, sanity: -12 },
+                stats: { sanity: -6 },
                 world: { exposure: 10 },
 
                 tone: 'bad',
@@ -1018,7 +1018,7 @@ beat({
             requires: { res: { materials: 2 } },
             effect: {
               res: { materials: -2 },
-              stats: { stamina: -10 },
+              stats: { stamina: -16 },
               world: { exposure: -3 },
 
               tone: 'good',
@@ -1051,7 +1051,7 @@ beat({
             requires: { ap: 1 },
             effect: {
               ap: -1,
-              stats: { stamina: -20, sanity: -12, humanity: 6 },
+              stats: { stamina: -16, sanity: -8, humanity: 6 },
               world: { contagion: -2, exposure: 4 },
 
               tone: 'grim',
@@ -1125,7 +1125,7 @@ beat({
     phase: ['survival'],
     weight: 7,
     cooldown: 14,
-    require: { all: ['hasPet'] },
+    require: { all: ['hasPet', 'flag:petDog'] },
     variants: [
       {
         id: 'dog_warns',
@@ -1166,7 +1166,7 @@ beat({
             requires: { res: { foodStaple: 1 } },
             effect: {
               res: { foodStaple: -1 },
-              stats: { sanity: 8, humanity: 5, hp: -2 },
+              stats: { sanity: 8, humanity: 5 },
 
               tone: 'good',
             },
@@ -1175,7 +1175,7 @@ beat({
             id: 'release',
 
             effect: {
-              stats: { sanity: -10, humanity: -4 },
+              stats: { sanity: -8, humanity: -4 },
               clearFlags: ['flag:hasPet', 'flag:petDog'],
 
               tone: 'grim',

@@ -7,8 +7,8 @@ import { t } from '../copy/t';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
-import type { Difficulty, Location, ResourceId, RunState } from '../types';
-import { canElectricHeat, canFuelHeat, capHeat, heatMissed, indoorBandOf, isPrecipWeather, type HeatPlan } from './climate';
+import type { Difficulty, Location, ResourceId, RunState, WeatherId } from '../types';
+import { canElectricHeat, canFuelHeat, capHeat, comfortTemp, heatMissed, indoorBandOf, isPrecipWeather, survivalTemp, type HeatPlan } from './climate';
 import { computePower, LOAD_NAME, loadOnline, tonightHeat } from './power';
 import { ledger, type LedgerNote } from './ledger';
 import { effectiveModule, grantIodine, headcount, iodineStockCount, waterCapacity } from './tags';
@@ -40,7 +40,7 @@ export interface DailyNeeds {
   recycling: boolean;
 }
 
-export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal'): DailyNeeds {
+export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal', weather: WeatherId = run.world.weather): DailyNeeds {
   const heads = headcount(run);
   const mult = DIFFICULTY[difficulty].needMult;
   let upkeep = 1;
@@ -50,12 +50,12 @@ export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal'): Da
   const food = FOOD_NEED[run.ration] * heads * mult * upkeep;
 
   // 高温天多喝水
-  if (run.world.weather === 'heatwave') water *= 1.3;
+  if (weather === 'heatwave') water *= 1.3;
 
   // 旱天回用：有在线净水时降低耗水（不是往桶里加水）
   let recycling = false;
   const filter = effectiveModule(run, 'filter');
-  const precip = isPrecipWeather(run.world.weather);
+  const precip = isPrecipWeather(weather);
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const hasWell = site.tags.includes('site:hasWell');
   const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
@@ -167,7 +167,7 @@ export function applyProduction(run: RunState): LedgerNote[] {
         notes.push(
           ledger(
             (precip ? t('ledger.filter.rainStored', { stored, overflow }) : t('ledger.filter.wellStored', { stored, overflow })),
-            wasted > 0 ? 'neutral' : 'good',
+            'good',
           ),
         );
       } else {
@@ -266,10 +266,18 @@ export function spoilFood(run: RunState): LedgerNote[] {
   ];
 }
 
-export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = 'normal', budget?: HeatPlan): ConsumeResult {
-  const need = dailyNeeds(run, difficulty);
+export function consumeDaily(
+  run: RunState,
+  rng: Rng,
+  difficulty: Difficulty = 'normal',
+  budget?: HeatPlan,
+  nightWeather?: WeatherId,
+): ConsumeResult {
+  const need = dailyNeeds(run, difficulty, nightWeather ?? run.world.weather);
   const notes: LedgerNote[] = [];
   const filterLv = effectiveModule(run, 'filter');
+  const harvested = !!(run as RunState & { _filterHarvested?: boolean })._filterHarvested;
+  if (harvested) need.recycling = false;
 
   // --- 水 ---
   const waterAvail = run.res.water;
@@ -311,7 +319,6 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
   }
 
   // 今天喝了新滤的水或回用水（用于致病掷骰）
-  const harvested = !!(run as RunState & { _filterHarvested?: boolean })._filterHarvested;
   const drankFiltered =
     filterLv > 0 && waterUsed > 0 && (harvested || need.recycling) && !drankRaw;
 
@@ -445,14 +452,20 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
     }
   }
 
-  if (est.indoor !== indoor) {
-    if (indoor < est.indoor) notes.push(ledger(t('ledger.heat.colderThanEst', { est: est.indoor, actual: indoor }), 'bad'));
-    else notes.push(ledger(t('ledger.heat.warmerThanEst', { est: est.indoor, actual: indoor })));
+  const comfort = comfortTemp(run);
+  const survival = survivalTemp(run);
+  const droppedBand =
+    (est.indoor >= comfort && indoor < comfort) || (est.indoor >= survival && indoor < survival);
+  if (droppedBand && indoor < est.indoor) {
+    notes.push(ledger(t('ledger.heat.colderThanEst', { est: est.indoor, actual: indoor }), 'bad'));
+  } else if (indoor > est.indoor) {
+    notes.push(ledger(t('ledger.heat.warmerThanEst', { est: est.indoor, actual: indoor })));
   }
-  if (resolved.fuelCost < est.fuelCost && est.fuelCost > 0) {
+  const outdoorEased = actual.leaked > est.leaked;
+  if (!droppedBand && outdoorEased && resolved.fuelCost < est.fuelCost && est.fuelCost > 0) {
     notes.push(ledger(t('ledger.heat.savedFuel', { est: est.fuelCost.toFixed(1), spent: resolved.fuelCost.toFixed(1) })));
   }
-  if (resolved.kwh < est.kwh && est.kwh > 0) {
+  if (!droppedBand && outdoorEased && resolved.kwh < est.kwh && est.kwh > 0) {
     notes.push(ledger(t('ledger.heat.savedKwh', { est: est.kwh.toFixed(1), spent: resolved.kwh.toFixed(1) })));
   }
 

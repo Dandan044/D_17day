@@ -1,4 +1,5 @@
 import type { EventFamily, EventVariant } from '../../types';
+import { skip } from './factory';
 
 /** 旗标按主题分簇，避免上百条共用同一篇「洗手想起一件事」 */
 const ECHO_CLUSTERS = {
@@ -151,10 +152,7 @@ function echoVariant(flag: string): EventVariant {
         id: 'ack',
         effect: { stats: { sanity: 2 }, tone: 'good' },
       },
-      {
-        id: 'skip',
-        effect: { stats: { stamina: 4, sanity: -2 }, tone: 'neutral' },
-      },
+      skip(),
     ],
   };
 }

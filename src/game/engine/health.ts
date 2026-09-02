@@ -132,6 +132,13 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     if (addedTonight.has(id)) continue;
     if ((HYPO_IDS as readonly string[]).includes(id)) continue;
 
+    const healP = def.selfHeal ? def.selfHeal * (1 + effectiveModule(run, 'medbay') * 0.3) : 0;
+    if (id === 'coPoisoning' && healP > 0 && rng.chance(healP)) {
+      removeCondition(run, id);
+      notes.push(ledger(t('ledger.health.healed', { name: def.name }), 'good'));
+      continue;
+    }
+
     hit((def.daily.hp ?? 0) * mult, def.name);
     run.stats.stamina = clamp(run.stats.stamina + (def.daily.stamina ?? 0) * mult, 0, 100);
     run.stats.sanity = clamp(run.stats.sanity + (def.daily.sanity ?? 0) * mult, 0, 100);
@@ -151,7 +158,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     run.conditionAge[id] = (run.conditionAge[id] ?? 0) + 1;
     const age = run.conditionAge[id] ?? 0;
 
-    if (def.selfHeal && rng.chance(def.selfHeal * (1 + effectiveModule(run, 'medbay') * 0.3))) {
+    if (id !== 'coPoisoning' && healP > 0 && rng.chance(healP)) {
       removeCondition(run, id);
       notes.push(ledger(t('ledger.health.healed', { name: def.name }), 'good'));
       continue;
@@ -261,10 +268,29 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   }
 
   const sealed = insulate >= 2;
-  if (sealed && consume.heated && consume.heatKind === 'fuel' && !run.flags.includes('flag:coAlarm')) {
+  const coImmune = run.flags.includes('flag:coVenting');
+  if (sealed && consume.heated && consume.heatKind === 'fuel' && !coImmune) {
     if (rng.chance(AIR.CO_RISK)) {
-      if (gainCond('coPoisoning', t('ledger.health.co'))) {
-        addLog(run, t('ledger.health.coLog'), 'bad');
+      const already = (id: string) => run.pending.some((p) => p.familyId === id);
+      if (run.flags.includes('flag:coAlarm')) {
+        if (!run.flags.includes('flag:coVenting')) run.flags.push('flag:coVenting');
+        if (!already('env_co_alarm')) {
+          run.pending.push({ familyId: 'env_co_alarm', dueDay: run.day + 1, retries: 0 });
+        }
+      } else if (run.flags.includes('flag:coWarned')) {
+        if (gainCond('coPoisoning', t('ledger.health.co'))) {
+          addLog(run, t('ledger.health.coLog'), 'bad');
+        }
+        if (!already('env_co_drowning')) {
+          run.pending.push({ familyId: 'env_co_drowning', dueDay: run.day + 1, retries: 0 });
+        }
+      } else {
+        if (gainCond('coPoisoning', t('ledger.health.co'))) {
+          addLog(run, t('ledger.health.coLog'), 'bad');
+        }
+        if (!already('env_co_vent')) {
+          run.pending.push({ familyId: 'env_co_vent', dueDay: run.day + 1, retries: 0 });
+        }
       }
     }
   }

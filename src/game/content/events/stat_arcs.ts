@@ -1,5 +1,5 @@
 import type { EventFamily } from '../../types';
-import { beat, ch, skip } from './factory';
+import { beat, ch, rest, skip } from './factory';
 
 /** 数值跌破阈值时强制插入的短链。首拍 weight 0。 */
 export const STAT_ARC_EVENTS: EventFamily[] = [
@@ -45,7 +45,7 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     choices: [
       ch('sit', { stats: { sanity: 6, stamina: -8 },  tone: 'good' }),
       ch('eat', { res: { foodStaple: -1 }, stats: { sanity: 3, hp: 0 },  tone: 'neutral' }, { requires: { res: { foodStaple: 1 } } }),
-      skip({ stats: { sanity: -6, hp: -2 } }),
+      skip({ stats: { sanity: -6 } }),
     ],
   }),
   beat({
@@ -60,7 +60,7 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     choices: [
       ch('slow', { stats: { sanity: 2, stamina: 4 }, setFlags: ['flag:admittedHurt'], schedule: [{ familyId: 'stat_arc_hp_2', waitFor: 'treat' }],  tone: 'good' }),
       ch('ignore', { stats: { hp: -2, stamina: -8 }, schedule: [{ familyId: 'stat_arc_hp_2', inDays: 2 }],  tone: 'grim' }),
-      skip({ stats: { stamina: 6, sanity: -2 } }),
+      skip({ stats: { sanity: -2, hp: -1 } }),
     ],
   }),
   beat({
@@ -119,7 +119,7 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     choices: [
       ch('wave', { stats: { humanity: 2, reputation: 1, stamina: -2 },  tone: 'good' }),
       ch('hide', { stats: { sanity: -2, reputation: -1 },  tone: 'neutral' }),
-      skip({ stats: { stamina: 4 } }),
+      rest(),
     ],
   }),
   beat({
@@ -211,7 +211,7 @@ export const STAT_ARC_EVENTS: EventFamily[] = [
     choices: [
       ch('no', { stats: { sanity: 2 }, world: { exposure: -2 },  tone: 'good' }),
       ch('yes', { stats: { sanity: -2 }, world: { exposure: 4 },  tone: 'bad' }),
-      skip({ stats: { stamina: 4, sanity: -1 } }),
+      skip({ stats: { sanity: -1 } }),
     ],
   }),
 ];

@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { COLD, RAD, THREAT_DESC, TIME } from '../game/balance';
 import { CONDITION_BY_ID } from '../game/content/conditions';
 import { DISASTER_BY_ID } from '../game/content/disasters';
@@ -6,10 +5,10 @@ import { RES_NAME, RES_UNIT } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
-import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, survivalTemp } from '../game/engine/climate';
+import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, heatSliderMax, survivalTemp } from '../game/engine/climate';
 import { dailyNeeds } from '../game/engine/economy';
 import { dailyExposure, exposureTier, TIER_DESC, TIER_NAMES } from '../game/engine/exposure';
-import { LOAD_NAME, batteryCapacity, heaterHeadroomKwh, loadWanted, tonightHeat } from '../game/engine/power';
+import { LOAD_NAME, batteryCapacity, heaterHeadroomKwh, tonightHeat } from '../game/engine/power';
 import { computePower, effectiveModule, iodineActive, radiationShield, threatName, waterCapacity } from '../game/engine/tags';
 import { WEATHER_DESC, WEATHER_NAME } from '../game/engine/world';
 import { formatSeed } from '../game/rng';
@@ -269,7 +268,7 @@ function BodyPanel({ run }: { run: RunState }) {
 }
 
 // ============================================================
-// 温度计：可拖目标；电优先、油补缺口
+// 温度计：电、油滑块各自控制，升温叠加
 // ============================================================
 
 const THERMO_MIN = -15;
@@ -280,37 +279,37 @@ function thermoPct(temp: number): number {
 }
 
 function HeatThermometer({ run }: { run: RunState }) {
-  const { setHeatTarget } = useGame();
+  const { setHeatMix } = useGame();
   const now = currentIndoor(run);
   const { plan } = tonightHeat(run);
   const comfort = comfortTemp(run);
   const survival = survivalTemp(run);
-  const elecOn = canElectricHeat(run) && loadWanted(run, 'heater');
+  const elecOn = canElectricHeat(run);
   const fuelOn = canFuelHeat(run);
-  const headroom = elecOn ? heaterHeadroomKwh(run) : 0;
-  const maxElecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? headroom / COLD.ELECTRIC_PER_DEGREE : 0;
-  const maxFuelDeg = fuelOn && COLD.FUEL_PER_DEGREE > 0 ? run.res.fuel / COLD.FUEL_PER_DEGREE : 0;
-  const minT = plan.leaked;
-  const maxT = Math.round(Math.max(minT, Math.min(THERMO_MAX, minT + maxElecDeg + maxFuelDeg)) * 10) / 10;
-  const canSlide = maxT - minT >= 0.15;
-  const stored = run.heatTarget ?? comfort;
-  const target = Math.max(minT, Math.min(maxT, stored));
-  const near = (a: number, b: number) => Math.abs(a - b) < 0.2;
-  const setT = (n: number) => setHeatTarget(Math.round(Math.max(minT, Math.min(maxT, n)) * 10) / 10);
-  const maxElecKwh = Math.round(maxElecDeg * COLD.ELECTRIC_PER_DEGREE * 10) / 10;
-  const maxFuelL = Math.round(maxFuelDeg * COLD.FUEL_PER_DEGREE * 10) / 10;
-  const slideLeft = thermoPct(minT);
-  const slideWidth = Math.max(canSlide ? 6 : 2, thermoPct(maxT) - slideLeft);
+  const sliderCap = heatSliderMax(run);
+  const maxElecKwh = elecOn ? Math.round(Math.min(heaterHeadroomKwh(run), sliderCap.elecKwh) * 10) / 10 : 0;
+  const maxFuelL = fuelOn ? Math.round(Math.min(run.res.fuel, sliderCap.fuelL) * 10) / 10 : 0;
+  const elecWant = run.heatElecWant ?? plan.kwh;
+  const fuelWant = run.heatFuelWant ?? plan.fuelCost;
+  const canElec = elecOn && maxElecKwh >= 0.05;
+  const canFuel = fuelOn && maxFuelL >= 0.05;
+  const warn =
+    plan.indoor < survival ? 'heat-module-danger' : plan.indoor < comfort ? 'heat-module-warn' : '';
 
-  useEffect(() => {
-    const clamped = Math.round(Math.max(minT, Math.min(maxT, stored)) * 10) / 10;
-    if (Math.abs(stored - clamped) > 0.049) setHeatTarget(clamped);
-  }, [minT, maxT, stored, setHeatTarget]);
+  const setElec = (kwh: number) => setHeatMix(kwh, fuelWant);
+  const setFuel = (liters: number) => setHeatMix(elecWant, liters);
+
+  const elecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? plan.kwh / COLD.ELECTRIC_PER_DEGREE : 0;
+  const elecIndoor = plan.leaked + elecDeg;
+  const mixElecLeft = thermoPct(plan.leaked);
+  const mixElecWidth = Math.max(0, thermoPct(elecIndoor) - mixElecLeft);
+  const mixFuelLeft = thermoPct(elecIndoor);
+  const mixFuelWidth = Math.max(0, thermoPct(plan.indoor) - mixFuelLeft);
 
   return (
-    <div>
+    <div className={`heat-module ${warn}`}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="label">{t('ui.game.heat', { n: target.toFixed(1) })}</span>
+        <span className="num text-[12px] text-paper">{t('ui.game.heatEst', { n: plan.indoor.toFixed(1) })}</span>
         <span className="num text-[11px] text-dim">{t('ui.game.heatNow', { n: now.toFixed(1) })}</span>
       </div>
 
@@ -328,6 +327,18 @@ function HeatThermometer({ run }: { run: RunState }) {
             className="absolute inset-y-0 bg-safe/25"
             style={{ left: `${thermoPct(comfort)}%`, width: `${100 - thermoPct(comfort)}%` }}
           />
+          {mixElecWidth > 0 && (
+            <div
+              className="absolute inset-y-0 bg-infohi/70"
+              style={{ left: `${mixElecLeft}%`, width: `${mixElecWidth}%` }}
+            />
+          )}
+          {mixFuelWidth > 0 && (
+            <div
+              className="absolute inset-y-0 bg-amber/70"
+              style={{ left: `${mixFuelLeft}%`, width: `${mixFuelWidth}%` }}
+            />
+          )}
         </div>
         <div
           className="absolute top-0 text-[9px] leading-none text-alarmhi"
@@ -346,17 +357,10 @@ function HeatThermometer({ run }: { run: RunState }) {
           style={{ left: `${thermoPct(now)}%`, transform: 'translateX(-50%)' }}
           title={t('ui.game.heatNow', { n: now.toFixed(1) })}
         />
-        <input
-          type="range"
-          min={minT}
-          max={Math.max(minT, maxT)}
-          step={0.1}
-          value={target}
-          disabled={!canSlide}
-          onChange={(e) => setT(Number(e.target.value))}
-          className="thermo-range absolute top-2"
-          style={{ left: `${slideLeft}%`, width: `${slideWidth}%` }}
-          aria-label={t('ui.game.heat', { n: target.toFixed(1) })}
+        <div
+          className="absolute top-[13px] h-3 w-0.5 bg-amberhi"
+          style={{ left: `${thermoPct(plan.indoor)}%`, transform: 'translateX(-50%)' }}
+          title={t('ui.game.heatEst', { n: plan.indoor.toFixed(1) })}
         />
         <div
           className="absolute bottom-0 text-[9px] leading-none text-faint"
@@ -366,39 +370,12 @@ function HeatThermometer({ run }: { run: RunState }) {
         </div>
       </div>
 
-      <div className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="num text-[11px] text-paper">{t('ui.game.heatEst', { n: plan.indoor.toFixed(1) })}</span>
-        <span className="text-[10px] leading-snug text-faint">{t('ui.game.heatEstHint')}</span>
-      </div>
-
-      <div className="mb-1.5 grid grid-cols-3 gap-1">
-        {(
-          [
-            ['survive', survival, t('ui.game.heatTargetSurvive', { n: survival })],
-            ['comfort', comfort, t('ui.game.heatTargetComfort', { n: comfort })],
-            ['buffer', comfort + COLD.BUFFER, t('ui.game.heatTargetBuffer', { n: COLD.BUFFER })],
-          ] as const
-        ).map(([id, value, label]) => {
-          const reachable = value >= minT - 0.05 && value <= maxT + 0.05;
-          return (
-            <button
-              key={id}
-              disabled={!reachable}
-              onClick={() => setT(value)}
-              className={`btn px-1 py-1 text-[11px] ${reachable && near(target, value) ? 'btn-primary' : 'btn-ghost'}`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
       {elecOn && (
         <div className="mb-1.5">
           <div className="mb-0.5 flex items-baseline justify-between">
             <span className="label">{t('ui.game.heatElecSlider')}</span>
             <span className="num text-[11px] text-dim">
-              {plan.kwh.toFixed(1)} / {Math.max(plan.kwh, maxElecKwh).toFixed(1)} kWh
+              {Math.min(elecWant, maxElecKwh).toFixed(1)} / {maxElecKwh.toFixed(1)} kWh
             </span>
           </div>
           <input
@@ -406,9 +383,9 @@ function HeatThermometer({ run }: { run: RunState }) {
             min={0}
             max={Math.max(0.1, maxElecKwh)}
             step={0.1}
-            value={plan.kwh}
-            readOnly
-            tabIndex={-1}
+            value={Math.min(elecWant, Math.max(maxElecKwh, 0))}
+            disabled={!canElec}
+            onChange={(e) => setElec(Number(e.target.value))}
             className="thermo-range thermo-range-elec w-full"
             aria-label={t('ui.game.heatElecSlider')}
           />
@@ -420,7 +397,7 @@ function HeatThermometer({ run }: { run: RunState }) {
           <div className="mb-0.5 flex items-baseline justify-between">
             <span className="label">{t('ui.game.heatFuelSlider')}</span>
             <span className="num text-[11px] text-dim">
-              {plan.fuelCost.toFixed(1)} / {Math.max(plan.fuelCost, maxFuelL).toFixed(1)} L
+              {Math.min(fuelWant, maxFuelL).toFixed(1)} / {maxFuelL.toFixed(1)} L
             </span>
           </div>
           <input
@@ -428,20 +405,14 @@ function HeatThermometer({ run }: { run: RunState }) {
             min={0}
             max={Math.max(0.1, maxFuelL)}
             step={0.1}
-            value={plan.fuelCost}
-            readOnly
-            tabIndex={-1}
+            value={Math.min(fuelWant, Math.max(maxFuelL, 0))}
+            disabled={!canFuel}
+            onChange={(e) => setFuel(Number(e.target.value))}
             className="thermo-range thermo-range-fuel w-full"
             aria-label={t('ui.game.heatFuelSlider')}
           />
         </div>
       )}
-
-      <p className="text-[11px] leading-snug text-faint">
-        {!canSlide && t('ui.game.heatStuck', { n: plan.leaked.toFixed(1) })}
-        {canSlide && plan.kwh <= 0 && plan.fuelCost <= 0 && t('ui.game.heatOff', { n: plan.leaked.toFixed(1) })}
-        {canSlide && (plan.kwh > 0 || plan.fuelCost > 0) && t('ui.game.heatMix', { n: plan.indoor.toFixed(1) })}
-      </p>
     </div>
   );
 }
@@ -520,14 +491,7 @@ function RationPanel({ run }: { run: RunState }) {
             {t('ui.game.powerBtn')}
           </button>
           <p className="mt-1.5 text-[11px] leading-snug text-faint">
-            {t('ui.game.solar', {
-              n: power.solar.toFixed(1),
-              weather: WEATHER_NAME[run.world.weather],
-              mult: power.weatherMult.toFixed(2),
-            })}
-            {power.disasterMult !== 1 ? t('ui.game.nuclear', { n: power.disasterMult.toFixed(2) }) : ''}
-            ）
-            {power.generator > 0 ? t('ui.game.genBit', { n: power.generator.toFixed(1) }) : ''}
+            {t('ui.game.solarEst', { n: power.solar.toFixed(1) })}
           </p>
           {power.offline.length > 0 && (
             <div className="mt-1.5 text-[11px] leading-snug text-alarmhi">

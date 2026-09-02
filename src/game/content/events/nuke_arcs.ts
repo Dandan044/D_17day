@@ -190,7 +190,7 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     choices: [
       ch('dose', { res: { meds: -1 }, stats: { sanity: 4 }, setFlags: ['flag:iodine', 'flag:lateIodine'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 3 }],  tone: 'neutral' }, { requires: { res: { meds: 1 } } }),
       ch('wait_sym', { stats: { sanity: -4 }, setFlags: ['flag:watchedNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', waitFor: 'treat' }],  tone: 'neutral' }),
-      skip({ setFlags: ['flag:ignoredNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 4 }] }),
+      skip({ stats: { hp: -2 }, setFlags: ['flag:ignoredNeck'], schedule: [{ familyId: 'nuke_arc_thyroid_2', inDays: 4 }] }),
     ],
   }),
   beat({
@@ -343,8 +343,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
 
     choices: [
       ch('wash', { res: { water: -3, meds: -0.5 }, stats: { hp: 2, sanity: 2 },  tone: 'good' }, { requires: { res: { water: 3 } } }),
-      ch('ignore_itch', { stats: { sanity: -2 },  tone: 'neutral' }),
-      skip({ stats: { sanity: -2 } }),
+      ch('ignore_itch', { stats: { sanity: -2, hp: -2 },  tone: 'neutral' }),
+      skip({ stats: { sanity: -2, hp: -2 } }),
     ],
   }),
   beat({

@@ -450,8 +450,8 @@ beat({
 
             requires: { tags: { all: ['hasVehicle'] }, reason: '需要有车才能去接' },
             effect: {
-              res: { fuel: -18 },
-              stats: { stamina: -24, sanity: 12, humanity: 8 },
+              res: { fuel: -18, foodFresh: 6, meds: 4 },
+              stats: { stamina: -14, sanity: 12, humanity: 8 },
               survivor: { recruit: 'random' },
               setFlags: ['flag:familyHere'],
 
@@ -473,7 +473,7 @@ beat({
             id: 'lie',
 
             effect: {
-              stats: { sanity: -12, humanity: -6 },
+              stats: { sanity: -8, humanity: -6 },
               setFlags: ['flag:familyLied'],
               schedule: [{ familyId: 'story_family_radio', inDays: 10 }],
 
@@ -503,7 +503,7 @@ beat({
 
             effect: {
               res: { cash: 4200 },
-              stats: { stamina: -20 },
+              stats: { stamina: -12 },
 
               tone: 'neutral',
             },
@@ -711,12 +711,13 @@ beat({
               ok: {
                 res: { cash: -16000 },
                 shelter: { power: 2 },
+                stats: { stamina: -10 },
 
                 tone: 'good',
               },
               bad: {
                 res: { cash: -16000 },
-                stats: { hp: -18, sanity: -10 },
+                stats: { hp: -10, sanity: -8 },
                 addCond: ['woundInfection'],
                 setFlags: ['flag:robbedOnce'],
 
@@ -857,7 +858,7 @@ beat({
             id: 'ignore',
 
             effect: {
-              stats: { stamina: 6 },
+              stats: { stamina: -6 },
 
               tone: 'neutral',
             },

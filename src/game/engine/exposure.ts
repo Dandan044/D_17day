@@ -73,7 +73,20 @@ export function dailyExposure(run: RunState): ExposureBreakdown {
   return { total: Math.round(total * 10) / 10, parts };
 }
 
+export function expireGunshot(run: RunState): void {
+  if (run.gunshotUntil !== undefined && run.day >= run.gunshotUntil) {
+    run.flags = run.flags.filter((f) => f !== 'flag:gunshotRecent');
+    run.gunshotUntil = undefined;
+  }
+}
+
+export function markGunshotRecent(run: RunState): void {
+  if (!run.flags.includes('flag:gunshotRecent')) run.flags.push('flag:gunshotRecent');
+  run.gunshotUntil = Math.max(run.gunshotUntil ?? 0, run.day + 3);
+}
+
 export function applyDailyExposure(run: RunState): ExposureBreakdown {
+  expireGunshot(run);
   const b = dailyExposure(run);
   run.world.exposure = Math.max(0, Math.min(EXPOSURE.MAX, run.world.exposure + b.total));
   return b;
@@ -117,19 +130,19 @@ export interface RaidResult {
   narrative: string;
 }
 
-export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1): RaidResult {
+export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1, fired = false): RaidResult {
   const fortify = effectiveModule(run, 'fortify');
   const underConstruction = run.projects.some((p) => p.moduleId === 'fortify');
   const healthyCrew = run.survivors.filter((s) => s.conditions.length === 0).length;
 
   let defense = fortify * RAID.FORTIFY_DEFENSE + healthyCrew * RAID.COMPANION_DEFENSE;
   let usedAmmo = 0;
-  if (run.res.ammo > 0) {
+  if (fired && run.res.ammo > 0) {
     defense += RAID.ARMED_DEFENSE;
     usedAmmo = run.abilities.includes('veteran_defense') ? rng.int(1, 3) : rng.int(2, 6);
     usedAmmo = Math.min(usedAmmo, run.res.ammo);
     run.res.ammo -= usedAmmo;
-    if (usedAmmo > 0 && !run.flags.includes('flag:gunshotRecent')) run.flags.push('flag:gunshotRecent');
+    if (usedAmmo > 0) markGunshotRecent(run);
   }
   if (run.abilities.includes('veteran_defense')) defense += 0.15;
   // 土制警报换来的三十秒，足够把顶杆架上

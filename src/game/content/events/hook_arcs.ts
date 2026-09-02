@@ -301,7 +301,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
         choices: [
           { id: 'keep',  effect: { stats: { stamina: -6, sanity: 3 },  tone: 'neutral' } },
           { id: 'ease',  effect: { stats: { sanity: 5, stamina: 4 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -311,7 +311,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'trust',  effect: { world: { exposure: -3 }, stats: { sanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -321,7 +321,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'note',  effect: { stats: { humanity: -1, sanity: -2 }, world: { neighborhood: -2 },  tone: 'grim' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -331,7 +331,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'check',  effect: { stats: { sanity: -2, stamina: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -341,7 +341,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'talk',  effect: { stats: { sanity: 4, humanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -351,7 +351,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'disable',  effect: { stats: { sanity: 3 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -361,7 +361,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'lock',  effect: { world: { exposure: -2 }, stats: { sanity: 1 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -371,7 +371,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'read',  effect: { stats: { sanity: -4, humanity: 2 },  tone: 'grim' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -381,7 +381,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'keep_lock',  effect: { stats: { sanity: 2, stamina: -3 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -391,7 +391,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'rewrite',  effect: { stats: { humanity: 2, reputation: 1 }, world: { exposure: 3 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -401,7 +401,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'listen',  effect: { stats: { sanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -411,7 +411,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'write',  effect: { stats: { sanity: 2 }, setFlags: ['flag:knowsNorthRoute'],  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -421,7 +421,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'wash',  effect: { res: { water: -1 }, stats: { sanity: -2, humanity: -1 },  tone: 'grim' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -431,7 +431,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'go',  effect: { stats: { stamina: -12, reputation: 3 }, world: { exposure: 4, neighborhood: 4 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -441,7 +441,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'hide',  effect: { world: { exposure: -4 }, stats: { sanity: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -451,7 +451,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'prepare',  effect: { res: { materials: -1 }, world: { exposure: -2 },  tone: 'good' }, requires: { res: { materials: 1 } } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -461,7 +461,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'correct',  effect: { world: { exposure: 5 }, stats: { sanity: -3 },  tone: 'bad' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -471,7 +471,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'erase',  effect: { stats: { stamina: -8, sanity: -3 }, world: { exposure: 3 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -481,7 +481,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'map',  effect: { stats: { sanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -491,7 +491,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'retry',  effect: { world: { exposure: 3 }, stats: { sanity: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -501,7 +501,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'clean',  effect: { stats: { stamina: -4, sanity: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -511,7 +511,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'avoid',  effect: { stats: { stamina: -6 }, world: { exposure: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -521,7 +521,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'hold',  effect: { stats: { sanity: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -531,7 +531,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'seal',  effect: { res: { materials: -1 },  tone: 'good' }, requires: { res: { materials: 1 } } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -541,7 +541,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'live',  effect: { stats: { sanity: 3, humanity: -2 },  tone: 'grim' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -551,7 +551,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'wake',  effect: { stats: { sanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -561,7 +561,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'test',  effect: { res: { fuel: -0.5 }, stats: { sanity: 2 },  tone: 'good' }, requires: { res: { fuel: 1 } } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -571,7 +571,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'yes',  effect: { stats: { sanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -581,7 +581,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'pot',  effect: { stats: { sanity: 3, stamina: -4 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -591,7 +591,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'note',  effect: { stats: { sanity: 1 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -601,7 +601,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'live',  effect: { stats: { humanity: -2, sanity: -3 },  tone: 'grim' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -611,7 +611,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'hide',  effect: { stats: { sanity: -2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -621,7 +621,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'use',  effect: { stats: { humanity: -2, sanity: -2 },  tone: 'grim' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -631,7 +631,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'keep',  effect: { stats: { sanity: -3, humanity: 2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -641,7 +641,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'write',  effect: { stats: { sanity: 3, humanity: 2 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -651,7 +651,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'stay',  effect: { stats: { sanity: 4 }, setFlags: ['flag:choseToStay'],  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -661,7 +661,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'keep',  effect: { stats: { sanity: 2 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -671,7 +671,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'chain',  effect: { res: { materials: -1 }, world: { exposure: -2 },  tone: 'good' }, requires: { res: { materials: 1 } } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -681,7 +681,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'listen',  effect: { stats: { sanity: 2, humanity: 1 },  tone: 'neutral' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
       {
@@ -691,7 +691,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
         choices: [
           { id: 'burn',  effect: { stats: { sanity: 3, humanity: 1 },  tone: 'good' } },
-          { id: 'skip',  effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' } },
+          skip(),
         ],
       },
     ],

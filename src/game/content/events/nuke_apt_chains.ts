@@ -417,7 +417,7 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
         tone: 'good',
       }),
       ch('go_help', {
-        stats: { stamina: -12, hp: -4, humanity: 4 },
+        stats: { stamina: -12, humanity: 4 },
         world: { exposure: 12 },
 
         tone: 'grim',

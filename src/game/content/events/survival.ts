@@ -165,18 +165,20 @@ beat({
           {
             id: 'confront',
 
+            requires: { res: { water: 2 } },
             check: {
               skill: 'negotiation',
               dc: 12,
               ok: {
-                world: { exposure: -6 },
+                res: { water: -2 },
+                world: { exposure: 6 },
                 stats: { reputation: 3 },
 
                 tone: 'good',
               },
               bad: {
                 world: { exposure: 14 },
-                stats: { hp: -6, sanity: -6 },
+                stats: { sanity: -6 },
                 schedule: [{ familyId: 'raid_attempt', inDays: 2, tags: ['flag:markedByScout'] }],
 
                 tone: 'bad',
@@ -312,7 +314,7 @@ beat({
 
             requires: { stats: { stamina: 30 } },
             effect: {
-              stats: { stamina: -22, reputation: 5, humanity: 2 },
+              stats: { stamina: -12, reputation: 5, humanity: 2 },
               world: { neighborhood: 12, exposure: -4 },
               setFlags: ['flag:joinedWatch'],
 
@@ -366,7 +368,6 @@ beat({
               },
               bad: {
                 res: { foodStaple: -3, water: -6 },
-                stats: { hp: -5 },
                 stance: { militia: 5 },
 
                 tone: 'bad',
@@ -420,7 +421,6 @@ beat({
               },
               bad: {
                 res: { foodStaple: -9, water: -20, meds: -3 },
-                stats: { hp: -8 },
                 stance: { gov: -30 },
                 setFlags: ['flag:govHostile'],
 
@@ -513,9 +513,9 @@ beat({
           {
             id: 'shoot',
 
-            requires: { res: { ammo: 2 }, reason: '需要 2 发弹药' },
+            requires: { res: { ammo: 1 }, reason: '需要 1 发弹药' },
             effect: {
-              res: { ammo: -2 },
+              res: { ammo: -1 },
               stats: { humanity: -6, sanity: -8 },
               world: { exposure: 14 },
               setFlags: ['flag:gunshotRecent', 'flag:firedWarning', 'flag:raidDefend'],
@@ -548,7 +548,7 @@ beat({
 
             effect: {
               setFlags: ['flag:raidHide'],
-              stats: { sanity: -10, humanity: -2 },
+              stats: { sanity: -8, humanity: -2 },
 
               tone: 'grim',
             },
@@ -570,7 +570,7 @@ beat({
 
             effect: {
               res: { foodStaple: -8, water: -18, meds: -4, fuel: -8 },
-              stats: { sanity: -10 },
+              stats: { sanity: -8 },
               stance: { gov: 10 },
               setFlags: ['flag:govLastRequisition'],
 
@@ -582,7 +582,7 @@ beat({
 
             requires: { tags: { all: ['armed'] }, reason: '需要有弹药' },
             effect: {
-              setFlags: ['flag:raidDefend', 'flag:foughtSoldiers', 'flag:govLastRequisition'],
+              setFlags: ['flag:foughtSoldiers', 'flag:govLastRequisition'],
               stats: { humanity: -4 },
 
               tone: 'bad',
@@ -625,13 +625,13 @@ beat({
               skill: 'fitness',
               dc: 12,
               ok: {
-                stats: { stamina: -14 },
+                stats: { stamina: -12 },
                 world: { exposure: 4 },
 
                 tone: 'good',
               },
               bad: {
-                stats: { hp: -14, stamina: -18 },
+                stats: { hp: -10, stamina: -18 },
                 addCond: ['woundInfection'],
                 setFlags: ['flag:raidDefend'],
 
@@ -672,8 +672,7 @@ beat({
             requires: { res: { materials: 5 } },
             effect: {
               res: { materials: -5 },
-              stats: { stamina: -12 },
-              addCond: ['coPoisoning'],
+              stats: { stamina: -12, sanity: -4 },
 
               tone: 'neutral',
             },
@@ -683,7 +682,7 @@ beat({
 
             effect: {
               res: { foodStaple: -7, water: -12, meds: -3 },
-              stats: { sanity: -12, humanity: -2 },
+              stats: { sanity: -8, humanity: -2 },
               world: { exposure: 10 },
 
               tone: 'grim',
@@ -744,7 +743,7 @@ beat({
             id: 'closed',
 
             effect: {
-              stats: { humanity: -12, sanity: -14 },
+              stats: { humanity: -12, sanity: -8 },
               world: { neighborhood: -10 },
               setFlags: ['flag:closedDoorInBlizzard'],
               schedule: [{ familyId: 'story_frozen_morning', inDays: 1 }],
@@ -777,7 +776,7 @@ beat({
             requires: { ap: 1 },
             effect: {
               ap: -1,
-              stats: { stamina: -20, hp: -4 },
+              stats: { stamina: -12, hp: -4 },
               world: { exposure: 3 },
 
               tone: 'neutral',
@@ -786,10 +785,9 @@ beat({
           {
             id: 'clear_masked',
 
-            requires: { res: { meds: 1 }, tags: { all: ['mod:airFilter>=1'] }, reason: '需要 1 级空气过滤提供的防护装备' },
+            requires: { tags: { all: ['mod:airFilter>=1'] }, reason: '需要 1 级空气过滤提供的防护装备' },
             effect: {
-              res: { meds: -1 },
-              stats: { stamina: -18 },
+              stats: { stamina: -12 },
 
               tone: 'good',
             },
@@ -799,7 +797,7 @@ beat({
 
             effect: {
               shelter: { insulate: -1, fortify: -1 },
-              stats: { hp: -8, sanity: -8 },
+              stats: { sanity: -8 },
 
               tone: 'bad',
             },
@@ -828,7 +826,7 @@ beat({
 
             effect: {
               res: { water: -20, foodStaple: -8, materials: -10, parts: -6 },
-              stats: { stamina: -26, sanity: -14 },
+              stats: { stamina: -16, sanity: -8 },
               shelter: { fortify: -2, insulate: -2, conceal: -1 },
               setFlags: ['flag:abandonedShelter'],
 
@@ -844,14 +842,14 @@ beat({
               dc: 13,
               ok: {
                 res: { materials: -14 },
-                stats: { stamina: -24 },
+                stats: { stamina: -16 },
                 setFlags: ['flag:floodWall'],
 
                 tone: 'good',
               },
               bad: {
                 res: { materials: -14, water: -10, foodStaple: -4 },
-                stats: { stamina: -28, hp: -10 },
+                stats: { stamina: -18, hp: -10 },
                 addCond: ['hypothermiaMild'],
 
                 tone: 'bad',
@@ -1007,7 +1005,7 @@ beat({
             requires: { skills: { medicine: 3 }, res: { meds: 2 }, reason: '需要医疗 3 级' },
             effect: {
               res: { meds: -2 },
-              stats: { humanity: 12, hp: -3 },
+              stats: { humanity: 12, stamina: -8 },
               world: { neighborhood: 25, contagion: 3 },
               setFlags: ['flag:treatedChild'],
               schedule: [{ familyId: 'story_neighbor_outcome', inDays: 3 }],
@@ -1072,7 +1070,7 @@ beat({
                 tone: 'good',
               },
               bad: {
-                stats: { hp: -18, sanity: -12 },
+                stats: { hp: -10, sanity: -8 },
 
                 tone: 'bad',
               },
@@ -1150,7 +1148,7 @@ beat({
             id: 'pass',
 
             effect: {
-              res: { water: 2 },
+              res: { water: 4 },
               stance: { trader: 3 },
               setFlags: ['flag:metTrader'],
 
@@ -1163,7 +1161,7 @@ beat({
             requires: { tags: { all: ['armed'] }, reason: '需要有弹药' },
             effect: {
               res: { foodStaple: 9, meds: 3, fuel: 6, ammo: -1 },
-              stats: { humanity: -22, sanity: -16, reputation: -14 },
+              stats: { humanity: -22, sanity: -8, reputation: -14 },
               faction: { trader: -20 },
               stance: { trader: -60 },
               world: { exposure: 12 },
@@ -1201,7 +1199,7 @@ beat({
           {
             id: 'skip',
 
-            effect: { stats: { stamina: 4, sanity: -2 },  tone: 'neutral' },
+            effect: { stats: { sanity: -2 },  tone: 'neutral' },
           },
         ],
       },
@@ -1228,7 +1226,7 @@ beat({
             effect: {
               ap: -1,
               res: { foodStaple: 5, water: 8 },
-              stats: { stamina: -20 },
+              stats: { stamina: -12 },
               world: { contagion: 3, exposure: 4 },
 
               tone: 'good',
@@ -1241,7 +1239,7 @@ beat({
             effect: {
               ap: -1,
               res: { foodStaple: 10, water: 16 },
-              stats: { stamina: -24 },
+              stats: { stamina: -12 },
               world: { contagion: 6, exposure: 7 },
               survivor: { morale: 6 },
 
@@ -1278,7 +1276,7 @@ beat({
             id: 'take',
 
             effect: {
-              res: { water: 20 },
+              res: { water: 80 },
               stats: { sanity: 10, humanity: 4 },
               world: { neighborhood: 10 },
               setFlags: ['flag:pumpRoomKey'],
@@ -1299,7 +1297,7 @@ beat({
 
             effect: {
               res: { meds: 1 },
-              stats: { sanity: -16, humanity: -4 },
+              stats: { sanity: -8, humanity: -4 },
               world: { neighborhood: -12 },
 
               tone: 'grim',
@@ -1336,7 +1334,7 @@ beat({
             requires: { ap: 1 },
             effect: {
               ap: -1,
-              stats: { stamina: -18, sanity: -10, humanity: 6 },
+              stats: { stamina: -16, sanity: -8, humanity: 6 },
               world: { neighborhood: 6 },
 
               tone: 'grim',
@@ -1347,7 +1345,7 @@ beat({
 
             effect: {
               res: { foodStaple: 2, materials: 3, meds: 1 },
-              stats: { humanity: -16, sanity: -18 },
+              stats: { humanity: -16, sanity: -8 },
               setFlags: ['flag:tookFromDead'],
 
               tone: 'grim',
@@ -1357,7 +1355,7 @@ beat({
             id: 'close',
 
             effect: {
-              stats: { sanity: -12 },
+              stats: { sanity: -8 },
 
               tone: 'grim',
             },
@@ -1393,7 +1391,7 @@ beat({
                 tone: 'good',
               },
               bad: {
-                stats: { sanity: -12 },
+                stats: { sanity: -8 },
                 setFlags: ['flag:familyUnknown'],
 
                 tone: 'grim',
@@ -1486,7 +1484,7 @@ beat({
             id: 'claim',
 
             effect: {
-              res: { foodStaple: 8, water: 12, meds: 2 },
+              res: { foodStaple: 6, water: 14, fuel: 6, meds: 4 },
               stance: { gov: 10 },
               stats: { sanity: 6 },
 
@@ -1497,7 +1495,7 @@ beat({
             id: 'share',
 
             effect: {
-              res: { foodStaple: 4, water: 6, meds: 1 },
+              res: { foodStaple: 3, water: 7, fuel: 3, meds: 2 },
               stats: { humanity: 10, reputation: 8 },
               world: { neighborhood: 20 },
 
