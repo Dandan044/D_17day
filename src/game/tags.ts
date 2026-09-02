@@ -54,6 +54,12 @@ export const FLAG_TAGS = [
   'temp:cold',
   'temp:freezing',
   'temp:extreme',
+  'indoor:warm',
+  'indoor:chill',
+  'indoor:freeze',
+  'indoor:missed',
+  'heat:electric',
+  'heat:fuel',
 
   // --- 环境分档 ---
   'air:good',
@@ -104,6 +110,7 @@ export const FLAG_TAGS = [
   'site:damp',
   'site:elevated',
   'site:cramped',
+  'site:drafty',
 
   // --- 避难所状态 ---
   'sealed',
@@ -215,7 +222,9 @@ const CONDITIONS: ConditionId[] = [
   'woundInfection',
   'sepsis',
   'fracture',
-  'hypothermia',
+  'hypothermiaMild',
+  'hypothermiaMod',
+  'hypothermiaSevere',
   'radiationSickness',
   'coPoisoning',
   'moldLung',
@@ -229,6 +238,8 @@ export const NUM_FACT_KEYS: string[] = [
   'crew:count',
   'cond:count',
   'world:temperature',
+  'indoor:temperature',
+  'streak:belowSurvival',
   'world:airPollution',
   'world:radiation',
   'world:contagion',

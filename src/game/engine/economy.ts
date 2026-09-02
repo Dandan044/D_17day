@@ -2,16 +2,16 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { CAPS, COLD, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
+import { CAPS, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
 import { t } from '../copy/t';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { Difficulty, Location, ResourceId, RunState } from '../types';
-import { canElectricHeat, canFuelHeat, fuelHeatCost, isPrecipWeather, unheatedFelt } from './climate';
-import { computePower, LOAD_NAME, loadOnline } from './power';
+import { canElectricHeat, canFuelHeat, capHeat, heatMissed, indoorBandOf, isPrecipWeather, type HeatPlan } from './climate';
+import { computePower, LOAD_NAME, loadOnline, tonightHeat } from './power';
 import { ledger, type LedgerNote } from './ledger';
-import { effectiveModule, grantIodine, headcount, waterCapacity } from './tags';
+import { effectiveModule, grantIodine, headcount, iodineStockCount, waterCapacity } from './tags';
 
 /** 每日采购上限，防止第一天把全城搬空 */
 const DAILY_BUY_CAP: Record<ResourceId, number> = {
@@ -85,6 +85,11 @@ export interface ConsumeResult {
   heated: boolean;
   heatKind?: 'fuel' | 'electric';
   indoor: number;
+  previewIndoor: number;
+  fuelBudget: number;
+  fuelSpent: number;
+  kwhBudget: number;
+  kwhSpent: number;
   notes: LedgerNote[];
 }
 
@@ -261,7 +266,7 @@ export function spoilFood(run: RunState): LedgerNote[] {
   ];
 }
 
-export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = 'normal'): ConsumeResult {
+export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = 'normal', budget?: HeatPlan): ConsumeResult {
   const need = dailyNeeds(run, difficulty);
   const notes: LedgerNote[] = [];
   const filterLv = effectiveModule(run, 'filter');
@@ -339,7 +344,14 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
     notes.push(ledger(t('ledger.ration.foodGap', { pct: ((1 - foodRatio) * 100).toFixed(0) }), 'bad'));
   }
 
-  const power = computePower(run);
+  const est = budget ?? tonightHeat(run).plan;
+  const actual = tonightHeat(run).plan;
+  let resolved = capHeat(est, actual);
+
+  const power = computePower(run, resolved.kwh);
+  if (resolved.kwh > 0 && !(canElectricHeat(run) && power.heaterGranted > 1e-9)) {
+    resolved = capHeat({ ...est, kwh: 0 }, actual);
+  }
   const weatherBit = power.weatherMult !== 1 ? t('ledger.power.weatherBit', { mult: power.weatherMult.toFixed(2) }) : '';
   notes.push(
     ledger(
@@ -359,6 +371,9 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
     if (run.wear.generatorOil <= 0 && rng.chance(0.3)) {
       notes.push(ledger(t('ledger.power.oilWarn'), 'bad'));
     }
+  }
+  if (resolved.fuelCost > run.res.fuel + 1e-9) {
+    resolved = capHeat({ ...est, kwh: resolved.kwh, fuelCost: Math.max(0, run.res.fuel) }, actual);
   }
 
   if (power.battery > 0) {
@@ -386,44 +401,71 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
     notes.push(ledger(t('ledger.power.battIdle', { stored: power.batteryStored.toFixed(1), cap: power.batteryCap })));
   }
 
-  const unheated = unheatedFelt(run);
+  const unheated = actual.leaked;
   let heated = false;
   let heatKind: ConsumeResult['heatKind'];
-  let indoor = unheated;
-  const mode = run.heatMode ?? 'off';
+  let indoor = resolved.indoor;
+  const elecDropped = est.kwh > 0 && resolved.kwh <= 0;
 
-  if (mode === 'fuel') {
-    if (!canFuelHeat(run)) {
-      notes.push(ledger(t('ledger.heat.fuelNoInsulate', { indoor }), 'bad'));
-    } else {
-      const needFuel = fuelHeatCost(run);
-      if (needFuel <= 0) {
-        notes.push(ledger(t('ledger.heat.alreadyWarm', { indoor })));
+  if (resolved.kwh <= 0 && resolved.fuelCost <= 0) {
+    notes.push(
+      ledger(
+        elecDropped
+          ? t(canElectricHeat(run) ? 'ledger.heat.elecFail' : 'ledger.heat.elecLocked', { indoor: unheated })
+          : t('ledger.heat.off', { indoor }),
+        elecDropped ? 'bad' : 'neutral',
+      ),
+    );
+  } else {
+    if (elecDropped) {
+      notes.push(
+        ledger(
+          t(canElectricHeat(run) ? 'ledger.heat.elecFail' : 'ledger.heat.elecLocked', { indoor: unheated }),
+          'bad',
+        ),
+      );
+    }
+    if (resolved.kwh > 0) {
+      heated = true;
+      heatKind = 'electric';
+      notes.push(ledger(t('ledger.heat.elecOn', { indoor })));
+    }
+    if (resolved.fuelCost > 0) {
+      if (!canFuelHeat(run)) {
+        notes.push(ledger(t('ledger.heat.fuelNoInsulate', { indoor }), 'bad'));
       } else if (run.res.fuel <= 0) {
         notes.push(ledger(t('ledger.heat.fuelEmpty', { indoor }), 'bad'));
       } else {
-        const spent = Math.min(run.res.fuel, needFuel);
-        run.res.fuel -= spent;
-        const rise = (COLD.TARGET - unheated) * (spent / needFuel);
-        indoor = Math.round(Math.min(COLD.TARGET, unheated + rise) * 10) / 10;
-        heated = spent > 0;
+        const spent = Math.min(resolved.fuelCost, run.res.fuel);
+        run.res.fuel = Math.max(0, run.res.fuel - spent);
+        heated = true;
         heatKind = 'fuel';
         notes.push(ledger(t('ledger.heat.fuelBurn', { spent: spent.toFixed(1), indoor })));
       }
     }
-  } else if (mode === 'electric') {
-    if (!canElectricHeat(run)) {
-      notes.push(ledger(t('ledger.heat.elecLocked', { indoor }), 'bad'));
-    } else if (loadOnline(run, 'heater', power)) {
-      indoor = COLD.TARGET;
-      heated = true;
-      heatKind = 'electric';
-      notes.push(ledger(t('ledger.heat.elecOn', { indoor })));
-    } else {
-      notes.push(ledger(t('ledger.heat.elecFail', { indoor }), 'bad'));
-    }
-  } else {
-    notes.push(ledger(t('ledger.heat.off', { indoor })));
+  }
+
+  if (est.indoor !== indoor) {
+    if (indoor < est.indoor) notes.push(ledger(t('ledger.heat.colderThanEst', { est: est.indoor, actual: indoor }), 'bad'));
+    else notes.push(ledger(t('ledger.heat.warmerThanEst', { est: est.indoor, actual: indoor })));
+  }
+  if (resolved.fuelCost < est.fuelCost && est.fuelCost > 0) {
+    notes.push(ledger(t('ledger.heat.savedFuel', { est: est.fuelCost.toFixed(1), spent: resolved.fuelCost.toFixed(1) })));
+  }
+  if (resolved.kwh < est.kwh && est.kwh > 0) {
+    notes.push(ledger(t('ledger.heat.savedKwh', { est: est.kwh.toFixed(1), spent: resolved.kwh.toFixed(1) })));
+  }
+
+  run.indoorTemp = indoor;
+  run.heatMissed = heatMissed(est.indoor, indoor);
+  const band = indoorBandOf(run, indoor);
+  run.indoorBand = band;
+  if (!run.streaks) run.streaks = { lowRation: 0, noThreatDays: 0, goodRation: 0, belowSurvival: 0 };
+  if (run.streaks.belowSurvival === undefined) run.streaks.belowSurvival = 0;
+  if (band === 'freeze') run.streaks.belowSurvival += 1;
+  else run.streaks.belowSurvival = 0;
+  if (band === 'chill' || band === 'freeze') {
+    if (!run.flags.includes('flag:wasCold')) run.flags.push('flag:wasCold');
   }
 
   return {
@@ -435,6 +477,11 @@ export function consumeDaily(run: RunState, rng: Rng, difficulty: Difficulty = '
     heated,
     heatKind,
     indoor,
+    previewIndoor: est.indoor,
+    fuelBudget: est.fuelCost,
+    fuelSpent: resolved.fuelCost,
+    kwhBudget: est.kwh,
+    kwhSpent: resolved.kwh,
     notes,
   };
 }
@@ -540,15 +587,11 @@ export function purchase(
 export const IODINE_BOX_PRICE = 220;
 export const IODINE_BOX_LIMIT = 2;
 
-export function iodineBoughtCount(run: RunState): number {
-  if (run.flags.includes('flag:iodineStock2')) return 2;
-  if (run.flags.includes('flag:iodineStock1')) return 1;
-  return 0;
-}
+export { iodineStockCount as iodineBoughtCount };
 
 export function buyIodine(run: RunState, locationId: string): { ok: boolean; reason?: string; spent: number } {
   if (locationId !== 'pharmacy') return { ok: false, reason: t('ledger.buy.iodineShop'), spent: 0 };
-  const bought = iodineBoughtCount(run);
+  const bought = iodineStockCount(run);
   if (bought >= IODINE_BOX_LIMIT) return { ok: false, reason: t('ledger.buy.iodineGone'), spent: 0 };
   const price = Math.max(1, Math.round(IODINE_BOX_PRICE * run.world.priceIndex));
   if (run.res.cash < price) return { ok: false, reason: t('ledger.buy.noCash'), spent: 0 };

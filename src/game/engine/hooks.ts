@@ -83,5 +83,10 @@ export function collectThresholdForced(run: RunState): string[] {
   fire('humanity', 'stat_arc_humanity_1', run.stats.humanity < 35);
   fire('rep', 'stat_arc_rep_1', run.stats.reputation < 35);
   fire('lights', 'stat_arc_dark_1', !loadOnline(run, 'lights') && run.day >= TIME.COLLAPSE_DAY);
+  fire('firstFreeze', 'env_first_freeze', run.indoorBand === 'freeze');
+  fire('firstChill', 'env_first_chill', run.indoorBand === 'chill');
+  fire('hypoSevere', 'env_hypo_severe', run.conditions.includes('hypothermiaSevere'));
+  fire('warmthBack', 'env_warmth_return', run.indoorBand === 'warm' && run.flags.includes('flag:wasCold'));
+  fire('wokeCold', 'env_woke_cold', !!run.heatMissed);
   return out;
 }

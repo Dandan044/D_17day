@@ -76,7 +76,7 @@ export const SITES: Site[] = [
     cost: { cash: 20000, ap: 2, requires: { tags: { all: ['hasVehicle'] }, reason: '需要一辆车才能搬过去' } },
     baseModules: { garden: 1, cistern: 1, filter: 1 },
     caps: { fortify: 2, conceal: 3, cistern: 3, filter: 3, power: 3, insulate: 2, airFilter: 2, medbay: 3, garden: 3, radio: 3 },
-    tags: ['site:isolated', 'site:groundLevel', 'site:hasYard', 'site:hasWell'],
+    tags: ['site:isolated', 'site:groundLevel', 'site:hasYard', 'site:hasWell', 'site:drafty'],
     lootMult: 0.7,
     travelFuel: 2.5,
     travelStamina: 11,

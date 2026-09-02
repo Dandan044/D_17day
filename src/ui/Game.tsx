@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { COLD, RAD, THREAT_DESC, TIME } from '../game/balance';
 import { CONDITION_BY_ID } from '../game/content/conditions';
 import { DISASTER_BY_ID } from '../game/content/disasters';
@@ -5,16 +6,15 @@ import { RES_NAME, RES_UNIT } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
-import { canElectricHeat, canFuelHeat } from '../game/engine/climate';
+import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, survivalTemp } from '../game/engine/climate';
 import { dailyNeeds } from '../game/engine/economy';
 import { dailyExposure, exposureTier, TIER_DESC, TIER_NAMES } from '../game/engine/exposure';
-import { previewIndoor } from '../game/engine/health';
-import { LOAD_NAME } from '../game/engine/power';
+import { LOAD_NAME, batteryCapacity, heaterHeadroomKwh, loadWanted, tonightHeat } from '../game/engine/power';
 import { computePower, effectiveModule, iodineActive, radiationShield, threatName, waterCapacity } from '../game/engine/tags';
 import { WEATHER_DESC, WEATHER_NAME } from '../game/engine/world';
 import { formatSeed } from '../game/rng';
 import { useGame } from '../game/store';
-import type { HeatMode, ModuleId, ResourceId, RunState } from '../game/types';
+import type { ModuleId, ResourceId, RunState } from '../game/types';
 import EventCard from './EventCard';
 import { Bar, Chip, Gauge, Panel, SectionLabel, Stat } from './kit';
 
@@ -72,7 +72,7 @@ function DayHeader({ run }: { run: RunState }) {
   const { setOverlay } = useGame();
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
-  const indoor = previewIndoor(run);
+  const indoorNow = currentIndoor(run);
   const disaster = DISASTER_BY_ID[run.world.disaster];
   const shield = radiationShield(run);
   const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
@@ -108,7 +108,7 @@ function DayHeader({ run }: { run: RunState }) {
           <div className="text-[12.5px] text-paper" title={WEATHER_DESC[run.world.weather]}>
             {WEATHER_NAME[run.world.weather]} ·{' '}
             <span className="num">
-              {t('ui.game.outdoor', { out: run.world.temperature, in: indoor.indoor, target: COLD.TARGET })}
+              {t('ui.game.outdoor', { out: run.world.temperature, in: indoorNow })}
             </span>
           </div>
         </div>
@@ -125,9 +125,12 @@ function DayHeader({ run }: { run: RunState }) {
               )}
               {airLv > 0 && airEff === 0 && <Chip tone="bad">{t('ui.game.filterOff')}</Chip>}
               {iodineActive(run) && <Chip tone="good">{t('ui.game.iodine')}</Chip>}
-              {run.wear.batteryCharge >= 0.5 && (
-                <Chip tone="info">
-                  {t('ui.game.battery', { stored: run.wear.batteryCharge.toFixed(1), cap: computePower(run).batteryCap })}
+              {computePower(run).batteryCap > 0 && (
+                <Chip tone={run.wear.batteryCharge < 0.5 ? 'warn' : 'info'}>
+                  {t('ui.game.battery', {
+                    stored: run.wear.batteryCharge.toFixed(1),
+                    cap: computePower(run).batteryCap,
+                  })}
                 </Chip>
               )}
               {run.world.airPollution > 30 && <Chip tone="warn">{t('ui.game.air', { n: Math.round(run.world.airPollution) })}</Chip>}
@@ -266,17 +269,192 @@ function BodyPanel({ run }: { run: RunState }) {
 }
 
 // ============================================================
+// 温度计：可拖目标；电优先、油补缺口
+// ============================================================
+
+const THERMO_MIN = -15;
+const THERMO_MAX = 25;
+
+function thermoPct(temp: number): number {
+  return Math.max(2, Math.min(98, ((temp - THERMO_MIN) / (THERMO_MAX - THERMO_MIN)) * 100));
+}
+
+function HeatThermometer({ run }: { run: RunState }) {
+  const { setHeatTarget } = useGame();
+  const now = currentIndoor(run);
+  const { plan } = tonightHeat(run);
+  const comfort = comfortTemp(run);
+  const survival = survivalTemp(run);
+  const elecOn = canElectricHeat(run) && loadWanted(run, 'heater');
+  const fuelOn = canFuelHeat(run);
+  const headroom = elecOn ? heaterHeadroomKwh(run) : 0;
+  const maxElecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? headroom / COLD.ELECTRIC_PER_DEGREE : 0;
+  const maxFuelDeg = fuelOn && COLD.FUEL_PER_DEGREE > 0 ? run.res.fuel / COLD.FUEL_PER_DEGREE : 0;
+  const minT = plan.leaked;
+  const maxT = Math.round(Math.max(minT, Math.min(THERMO_MAX, minT + maxElecDeg + maxFuelDeg)) * 10) / 10;
+  const canSlide = maxT - minT >= 0.15;
+  const stored = run.heatTarget ?? comfort;
+  const target = Math.max(minT, Math.min(maxT, stored));
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.2;
+  const setT = (n: number) => setHeatTarget(Math.round(Math.max(minT, Math.min(maxT, n)) * 10) / 10);
+  const maxElecKwh = Math.round(maxElecDeg * COLD.ELECTRIC_PER_DEGREE * 10) / 10;
+  const maxFuelL = Math.round(maxFuelDeg * COLD.FUEL_PER_DEGREE * 10) / 10;
+  const slideLeft = thermoPct(minT);
+  const slideWidth = Math.max(canSlide ? 6 : 2, thermoPct(maxT) - slideLeft);
+
+  useEffect(() => {
+    const clamped = Math.round(Math.max(minT, Math.min(maxT, stored)) * 10) / 10;
+    if (Math.abs(stored - clamped) > 0.049) setHeatTarget(clamped);
+  }, [minT, maxT, stored, setHeatTarget]);
+
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="label">{t('ui.game.heat', { n: target.toFixed(1) })}</span>
+        <span className="num text-[11px] text-dim">{t('ui.game.heatNow', { n: now.toFixed(1) })}</span>
+      </div>
+
+      <div className="relative mb-1 h-11">
+        <div className="absolute inset-x-0 top-4 h-2 overflow-hidden rounded-sm bg-ink ring-1 ring-line2">
+          <div className="absolute inset-y-0 left-0 bg-alarmdim/80" style={{ width: `${thermoPct(survival)}%` }} />
+          <div
+            className="absolute inset-y-0 bg-amberdim/50"
+            style={{
+              left: `${thermoPct(survival)}%`,
+              width: `${Math.max(0, thermoPct(comfort) - thermoPct(survival))}%`,
+            }}
+          />
+          <div
+            className="absolute inset-y-0 bg-safe/25"
+            style={{ left: `${thermoPct(comfort)}%`, width: `${100 - thermoPct(comfort)}%` }}
+          />
+        </div>
+        <div
+          className="absolute top-0 text-[9px] leading-none text-alarmhi"
+          style={{ left: `${thermoPct(survival)}%`, transform: 'translateX(-50%)' }}
+        >
+          {t('ui.game.heatSurvival')}
+        </div>
+        <div
+          className="absolute top-0 text-[9px] leading-none text-safehi"
+          style={{ left: `${thermoPct(comfort)}%`, transform: 'translateX(-50%)' }}
+        >
+          {t('ui.game.heatComfort')}
+        </div>
+        <div
+          className="absolute top-[13px] h-3 w-0.5 bg-paper/80"
+          style={{ left: `${thermoPct(now)}%`, transform: 'translateX(-50%)' }}
+          title={t('ui.game.heatNow', { n: now.toFixed(1) })}
+        />
+        <input
+          type="range"
+          min={minT}
+          max={Math.max(minT, maxT)}
+          step={0.1}
+          value={target}
+          disabled={!canSlide}
+          onChange={(e) => setT(Number(e.target.value))}
+          className="thermo-range absolute top-2"
+          style={{ left: `${slideLeft}%`, width: `${slideWidth}%` }}
+          aria-label={t('ui.game.heat', { n: target.toFixed(1) })}
+        />
+        <div
+          className="absolute bottom-0 text-[9px] leading-none text-faint"
+          style={{ left: `${thermoPct(run.world.temperature)}%`, transform: 'translateX(-50%)' }}
+        >
+          {t('ui.game.heatOutdoor', { n: run.world.temperature })}
+        </div>
+      </div>
+
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <span className="num text-[11px] text-paper">{t('ui.game.heatEst', { n: plan.indoor.toFixed(1) })}</span>
+        <span className="text-[10px] leading-snug text-faint">{t('ui.game.heatEstHint')}</span>
+      </div>
+
+      <div className="mb-1.5 grid grid-cols-3 gap-1">
+        {(
+          [
+            ['survive', survival, t('ui.game.heatTargetSurvive', { n: survival })],
+            ['comfort', comfort, t('ui.game.heatTargetComfort', { n: comfort })],
+            ['buffer', comfort + COLD.BUFFER, t('ui.game.heatTargetBuffer', { n: COLD.BUFFER })],
+          ] as const
+        ).map(([id, value, label]) => {
+          const reachable = value >= minT - 0.05 && value <= maxT + 0.05;
+          return (
+            <button
+              key={id}
+              disabled={!reachable}
+              onClick={() => setT(value)}
+              className={`btn px-1 py-1 text-[11px] ${reachable && near(target, value) ? 'btn-primary' : 'btn-ghost'}`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {elecOn && (
+        <div className="mb-1.5">
+          <div className="mb-0.5 flex items-baseline justify-between">
+            <span className="label">{t('ui.game.heatElecSlider')}</span>
+            <span className="num text-[11px] text-dim">
+              {plan.kwh.toFixed(1)} / {Math.max(plan.kwh, maxElecKwh).toFixed(1)} kWh
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(0.1, maxElecKwh)}
+            step={0.1}
+            value={plan.kwh}
+            readOnly
+            tabIndex={-1}
+            className="thermo-range thermo-range-elec w-full"
+            aria-label={t('ui.game.heatElecSlider')}
+          />
+        </div>
+      )}
+
+      {fuelOn && (
+        <div className="mb-1.5">
+          <div className="mb-0.5 flex items-baseline justify-between">
+            <span className="label">{t('ui.game.heatFuelSlider')}</span>
+            <span className="num text-[11px] text-dim">
+              {plan.fuelCost.toFixed(1)} / {Math.max(plan.fuelCost, maxFuelL).toFixed(1)} L
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={Math.max(0.1, maxFuelL)}
+            step={0.1}
+            value={plan.fuelCost}
+            readOnly
+            tabIndex={-1}
+            className="thermo-range thermo-range-fuel w-full"
+            aria-label={t('ui.game.heatFuelSlider')}
+          />
+        </div>
+      )}
+
+      <p className="text-[11px] leading-snug text-faint">
+        {!canSlide && t('ui.game.heatStuck', { n: plan.leaked.toFixed(1) })}
+        {canSlide && plan.kwh <= 0 && plan.fuelCost <= 0 && t('ui.game.heatOff', { n: plan.leaked.toFixed(1) })}
+        {canSlide && (plan.kwh > 0 || plan.fuelCost > 0) && t('ui.game.heatMix', { n: plan.indoor.toFixed(1) })}
+      </p>
+    </div>
+  );
+}
+
+// ============================================================
 // 配给
 // ============================================================
 
 function RationPanel({ run }: { run: RunState }) {
-  const { setRation, setWaterUse, setHeatMode, setOverlay } = useGame();
+  const { setRation, setWaterUse, setOverlay } = useGame();
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const needs = dailyNeeds(run, run.difficulty);
   const power = computePower(run);
-  const indoor = previewIndoor(run);
-  const heat = run.heatMode ?? 'off';
-  const gap = Math.max(0, COLD.TARGET - indoor.unheated);
 
   if (isPrep) {
     return (
@@ -329,45 +507,7 @@ function RationPanel({ run }: { run: RunState }) {
           </div>
         </div>
 
-        <div>
-          <div className="mb-1 flex items-baseline justify-between">
-            <span className="label">{t('ui.game.heat', { n: COLD.TARGET })}</span>
-            <span className="num text-[11.5px] text-dim">{t('ui.game.indoor', { n: indoor.indoor })}</span>
-          </div>
-          <div className="grid grid-cols-3 gap-1">
-            {(['off', 'fuel', 'electric'] as HeatMode[]).map((m) => {
-              const locked = (m === 'fuel' && !canFuelHeat(run)) || (m === 'electric' && !canElectricHeat(run));
-              return (
-                <button
-                  key={m}
-                  disabled={locked}
-                  onClick={() => setHeatMode(m)}
-                  className={`btn px-1 py-1 text-[11px] ${heat === m ? 'btn-primary' : 'btn-ghost'}`}
-                  title={
-                    locked
-                      ? m === 'fuel'
-                        ? t('ui.game.heatFuelLock')
-                        : t('ui.game.heatElecLock')
-                      : undefined
-                  }
-                >
-                  {t(`ui.game.heatMode.${m}`)}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-1.5 text-[11px] leading-snug text-faint">
-            {heat === 'off' && t('ui.game.heatOff', { n: indoor.unheated })}
-            {heat === 'fuel' &&
-              (gap > 0
-                ? `${t('ui.game.heatFuelNeed', { gap: gap.toFixed(0), fuel: indoor.fuelCost.toFixed(1) })}${run.res.fuel < indoor.fuelCost ? t('ui.game.heatFuelShort') : ''}`
-                : t('ui.game.heatFuelOk'))}
-            {heat === 'electric' &&
-              (gap > 0
-                ? t('ui.game.heatElecNeed', { gap: gap.toFixed(0), kwh: indoor.kwh.toFixed(1) })
-                : t('ui.game.heatElecOk'))}
-          </p>
-        </div>
+        <HeatThermometer run={run} />
 
         <div>
           <div className="mb-1 flex items-baseline justify-between">
@@ -512,6 +652,26 @@ function SuppliesPanel({ run }: { run: RunState }) {
             </div>
           );
         })}
+        {(() => {
+          const battCap = batteryCapacity(run);
+          if (battCap <= 0) return null;
+          const stored = run.wear.batteryCharge ?? 0;
+          const low = !isPrep && stored < Math.max(1, battCap * 0.25);
+          return (
+            <div key="battery">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="label">{t('ui.game.batteryLabel')}</span>
+                <span className={`num text-[12.5px] ${low ? 'text-alarmhi' : 'text-paper'}`}>
+                  {stored.toFixed(1)}/{battCap}
+                  <span className="ml-0.5 text-[10px] text-faint">kWh</span>
+                </span>
+              </div>
+              <div className="mt-0.5">
+                <Bar value={stored} max={battCap} tone={low ? 'bad' : 'info'} />
+              </div>
+            </div>
+          );
+        })()}
       </div>
       <div className="mt-2 border-t border-line pt-2 text-[11px] leading-snug text-faint">
         {t('ui.game.cistern', { n: waterCap })}

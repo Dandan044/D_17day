@@ -1,6 +1,7 @@
 import '../../copy';
 import { hydrateFamilies } from '../../copy/hydrate';
 import type { EventFamily } from '../../types';
+import { COLD_EVENTS } from './cold';
 import { DAILY_EVENTS } from './daily';
 import { ECHO_SLICE_EVENTS } from './echo_flags';
 import { FILTER_BEAT_EVENTS } from './filter_beats';
@@ -20,6 +21,7 @@ export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
   ...PREP_SLICE_EVENTS,
   ...SURVIVAL_EVENTS,
   ...SURV_BEAT_EVENTS,
+  ...COLD_EVENTS,
   ...FILTER_BEAT_EVENTS,
   ...MED_PROGRESS_EVENTS,
   ...NUKE_ARC_EVENTS,
@@ -34,6 +36,7 @@ export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
 export const FAMILY_BY_ID: Record<string, EventFamily> = Object.fromEntries(ALL_FAMILIES.map((f) => [f.id, f]));
 
 export {
+  COLD_EVENTS,
   DAILY_EVENTS,
   FILTER_BEAT_EVENTS,
   HOOK_ARC_EVENTS,

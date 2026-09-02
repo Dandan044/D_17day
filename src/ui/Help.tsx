@@ -1,4 +1,4 @@
-import { TIME } from '../game/balance';
+import { COLD, TIME } from '../game/balance';
 import { t } from '../game/copy/t';
 import { useGame } from '../game/store';
 import { Modal, SectionLabel } from './kit';
@@ -14,6 +14,11 @@ export function HelpPanel() {
 
       <SectionLabel>{t('ui.help.wep')}</SectionLabel>
       <p className="mb-3 text-[12.5px] leading-relaxed text-dim">{t('ui.help.wepBody')}</p>
+
+      <SectionLabel>{t('ui.help.heat')}</SectionLabel>
+      <p className="mb-3 text-[12.5px] leading-relaxed text-dim">
+        {t('ui.help.heatBody', { comfort: COLD.COMFORT, survival: COLD.SURVIVAL })}
+      </p>
 
       <SectionLabel>{t('ui.help.exposure')}</SectionLabel>
       <p className="mb-3 text-[12.5px] leading-relaxed text-dim">{t('ui.help.exposureBody')}</p>

@@ -2,10 +2,11 @@ import { COLD, POWER, TIME } from '../game/balance';
 import { MODULE_IDS } from '../game/content/modules';
 import { t } from '../game/copy/t';
 import { WEATHER_NAME } from '../game/engine/world';
-import { canElectricHeat, canFuelHeat, heatGap } from '../game/engine/climate';
+import { canElectricHeat } from '../game/engine/climate';
 import {
   LOAD_NAME,
   computePower,
+  heaterDrawKwh,
   loadWanted,
   mergedPriority,
   potentialDrawKwh,
@@ -19,7 +20,7 @@ export function PowerPanel({ run }: { run: RunState }) {
   const power = computePower(run);
   const order = mergedPriority(run).filter((id) => {
     if (id === 'lights' || id === 'fridge') return true;
-    if (id === 'heater') return (run.heatMode ?? 'off') === 'electric' && canElectricHeat(run);
+    if (id === 'heater') return canElectricHeat(run);
     if ((MODULE_IDS as readonly string[]).includes(id)) {
       const level = run.modules[id as ModuleId] ?? 0;
       if (level <= 0) return false;
@@ -71,14 +72,12 @@ export function PowerPanel({ run }: { run: RunState }) {
             {power.batteryGain > 0 ? t('ui.power.charge', { n: power.batteryGain.toFixed(1) }) : ''}
           </div>
         )}
-        {run.modules.power >= 3 ? (
+        {run.modules.power >= 3 && (
           <div>
             {power.generator > 0
               ? t('ui.power.dieselOn', { gen: power.generator.toFixed(1), fuel: power.fuelBurn.toFixed(1) })
               : t('ui.power.dieselIdle')}
           </div>
-        ) : (
-          <div className="text-faint">{t('ui.power.dieselLock')}</div>
         )}
         <div className="mt-1">
           {t('ui.power.tonight')}
@@ -93,9 +92,7 @@ export function PowerPanel({ run }: { run: RunState }) {
         {order.map((id, idx) => {
           const draw = power.draws.find((d) => d.id === id);
           let kwh = draw?.kwh ?? potentialDrawKwh(run, id);
-          if (id === 'heater' && !draw) {
-            kwh = heatGap(run) * (COLD.ELECTRIC_PER_DEGREE[run.modules.insulate] ?? 0);
-          }
+          if (id === 'heater') kwh = draw?.kwh ?? heaterDrawKwh(run);
           if (kwh <= 0) {
             if (id === 'lights') kwh = POWER.LIGHTS_KWH;
             else if (id === 'fridge') kwh = POWER.FRIDGE_KWH;
@@ -118,7 +115,12 @@ export function PowerPanel({ run }: { run: RunState }) {
                 {id === 'lights' && <div className="text-[11px] text-faint">{t('ui.power.lights')}</div>}
                 {id === 'fridge' && <div className="text-[11px] text-faint">{t('ui.power.fridge')}</div>}
                 {id === 'heater' && (
-                  <div className="text-[11px] text-faint">{t('ui.power.heater', { n: COLD.TARGET })}</div>
+                  <div className="text-[11px] text-faint">
+                    {t('ui.power.heater', {
+                      n: run.heatTarget ?? COLD.COMFORT,
+                      kwh: kwh.toFixed(1),
+                    })}
+                  </div>
                 )}
                 {id === 'airFilter' && <div className="text-[11px] text-faint">{t('ui.power.air')}</div>}
                 {id === 'radio' && <div className="text-[11px] text-faint">{t('ui.power.radio')}</div>}
@@ -145,9 +147,6 @@ export function PowerPanel({ run }: { run: RunState }) {
           );
         })}
       </div>
-      {canFuelHeat(run) && (run.heatMode ?? 'off') !== 'electric' && (
-        <p className="mt-3 text-[11.5px] leading-snug text-faint">{t('ui.power.heatHint')}</p>
-      )}
     </Modal>
   );
 }

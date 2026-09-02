@@ -136,6 +136,7 @@ interface GameState {
   setRation: (r: RationLevel) => void;
   setWaterUse: (w: WaterLevel) => void;
   setHeatMode: (h: HeatMode) => void;
+  setHeatTarget: (n: number) => void;
   setPowerMode: (p: PowerMode) => void;
   setPowerPriority: (order: PowerLoadId[]) => void;
   togglePowerLoad: (id: PowerLoadId, on: boolean) => void;
@@ -643,6 +644,10 @@ export const useGame = create<GameState>()(
             const rng = makeRng(r.seed, r.rngCursor);
             emitHook(r, 'setHeatMode', rng);
             r.rngCursor = rng.cursor();
+          }),
+        setHeatTarget: (heatTarget) =>
+          mutate((r) => {
+            r.heatTarget = heatTarget;
           }),
         setPowerPriority: (order) =>
           mutate((r) => {

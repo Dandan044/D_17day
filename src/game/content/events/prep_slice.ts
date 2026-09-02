@@ -65,10 +65,10 @@ export const PREP_SLICE_EVENTS: EventFamily[] = [
     kind: 'opportunity',
     phase: ['prep'],
     once: true,
-
+    forbid: { any: ['hasIodine'] },
 
     choices: [
-      ch('buy', { res: { cash: -180, meds: 2 }, setFlags: ['flag:iodine', 'flag:iodineDoubt'],  tone: 'good' }, { requires: { res: { cash: 180 } } }),
+      ch('buy', { res: { cash: -180, meds: 2 }, setFlags: ['flag:iodine', 'flag:iodineStock1', 'flag:iodineDoubt'],  tone: 'good' }, { requires: { res: { cash: 180 } } }),
       ch('argue', { stats: { reputation: 3, sanity: 2 }, setFlags: ['flag:iodineDoubt'],  tone: 'neutral' }),
       skip(),
     ],

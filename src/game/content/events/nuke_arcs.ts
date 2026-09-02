@@ -63,7 +63,7 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
 
 
     choices: [
-      ch('hide', { stats: { stamina: -10, sanity: -3 }, world: { exposure: -3 }, setFlags: ['flag:hidFromLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 2, waitFor: 'raid' }],  tone: 'neutral' }),
+      ch('hide', { stats: { stamina: -10, sanity: -3 }, world: { exposure: -3 }, setFlags: ['flag:hidFromLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 2, waitFor: ['raid', 'raidFailed', 'raidRepelled'] }],  tone: 'neutral' }),
       ch('give', { res: { foodStaple: -4, water: -6 }, world: { exposure: -6 }, stats: { sanity: 2 }, setFlags: ['flag:paidLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 3 }],  tone: 'neutral' }, { requires: { res: { foodStaple: 4, water: 6 } } }),
       skip({ world: { exposure: 4 }, setFlags: ['flag:ignoredLevy'], schedule: [{ familyId: 'nuke_arc_levy_2', inDays: 1 }] }),
     ],

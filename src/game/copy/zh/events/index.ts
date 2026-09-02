@@ -1,3 +1,4 @@
+import './cold';
 import './daily';
 import './echo_flags';
 import './filter_beats';

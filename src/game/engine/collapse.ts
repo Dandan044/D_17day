@@ -12,6 +12,7 @@ import { t } from '../copy/t';
 import type { Rng } from '../rng';
 import type { RunState } from '../types';
 import { addCondition, addLog } from './effects';
+import { hasIodinePrep } from './tags';
 
 export interface CollapseReport {
   score: number;
@@ -43,7 +44,7 @@ export function assessCollapse(run: RunState, rng: Rng): CollapseReport {
 
   // ---------- 关键小物 ----------
   if (run.world.disaster === 'nuclear') {
-    if (run.flags.includes('flag:iodine')) {
+    if (hasIodinePrep(run)) {
       moduleScore += 12;
       hits.push(t('ledger.collapse.iodineHit'));
     } else if (run.flags.includes('flag:sawIodineOffer')) {

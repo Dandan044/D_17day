@@ -44,7 +44,9 @@ export type ConditionId =
   | 'woundInfection' // 伤口感染
   | 'sepsis' // 败血症
   | 'fracture' // 骨折
-  | 'hypothermia' // 失温
+  | 'hypothermiaMild' // 低温症（轻）
+  | 'hypothermiaMod' // 低温症（中）
+  | 'hypothermiaSevere' // 低温症（重）
   | 'radiationSickness' // 辐射病
   | 'coPoisoning' // 一氧化碳中毒
   | 'moldLung' // 霉菌性肺病
@@ -123,6 +125,7 @@ export type WaterLevel = 'full' | 'normal' | 'limited';
 /** @deprecated 供电三档已删除，旧存档可能仍带此字段 */
 export type PowerMode = 'full' | 'thrifty' | 'blackout';
 export type HeatMode = 'off' | 'fuel' | 'electric';
+export type IndoorBand = 'warm' | 'chill' | 'freeze';
 /** 供电表里的一行：建筑模块或家电 */
 export type ApplianceId = 'lights' | 'fridge' | 'heater';
 export type PowerLoadId = ModuleId | ApplianceId;
@@ -237,6 +240,10 @@ export interface Effect {
   shelter?: Partial<Record<ModuleId, number>>;
   /** 易耗品增量：滤芯寿命、机油、蓄电 */
   wear?: Partial<{ filterLife: number; generatorOil: number; batteryCharge: number }>;
+  /** 室内温度增量（开门漏热、半夜添火） */
+  indoor?: number;
+  /** 事件里改取暖模式（电热坏了改烧油） */
+  heatMode?: HeatMode;
   skills?: Partial<Record<SkillId, number>>;
   /** 世界状态增量 */
   world?: Partial<{
@@ -310,6 +317,8 @@ export interface EventVariant {
   id: string;
   require?: TagQuery;
   forbid?: TagQuery;
+  /** 文案键：hydrate 优先读 event.family.copyKey，再回退 variantId / _shared */
+  copyKey?: string;
   title?: string;
   body?: string;
   choices: Choice[];
@@ -594,11 +603,19 @@ export interface RunState {
   /** 滤芯剩余天数、发电机保养度等易耗品 */
   wear: { filterLife: number; generatorOil: number; batteryCharge: number };
   /** 连续状态计数器 */
-  streaks: { lowRation: number; noThreatDays: number; goodRation: number };
+  streaks: { lowRation: number; noThreatDays: number; goodRation: number; belowSurvival: number };
 
   ration: RationLevel;
   waterUse: WaterLevel;
   heatMode: HeatMode;
+  /** 取暖目标室内温度（°C） */
+  heatTarget: number;
+  /** 当前室内温度。准备期锁在市政供暖值 */
+  indoorTemp: number;
+  /** 昨夜室内落在哪一档，供回暖事件 */
+  indoorBand?: IndoorBand;
+  /** 昨夜实际室内明显低于估值 */
+  heatMissed?: boolean;
   /** 旧存档兼容，引擎不再读取 */
   powerMode?: PowerMode;
   /** 缺电时的停摆优先级，靠前的先保 */

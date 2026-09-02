@@ -10,7 +10,7 @@ import { WEATHER_DESC, WEATHER_NAME } from '../copy/names';
 import { DISASTER_BY_ID } from '../content/disasters';
 import type { Rng } from '../rng';
 import type { DisasterId, FactionId, RunState, WeatherId, WorldState } from '../types';
-import { effectiveModule } from './tags';
+import { activateIodineProtection, effectiveModule } from './tags';
 
 export { WEATHER_DESC, WEATHER_NAME };
 
@@ -94,8 +94,9 @@ function decoyWeather(run: RunState, actual: WeatherId, rng: Rng): WeatherId {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /** 掷出次日天候。预报按准确度对 queuedWeather 撒谎或说真话。 */
-export function tickClimate(run: RunState, rng: Rng): void {
+export function tickClimate(run: RunState, rng: Rng, forDay?: number): void {
   const w = run.world;
+  const day = forDay ?? run.day;
   const acc = forecastAccuracy(run);
   const today = w.queuedWeather ?? pickWeather(run, rng);
   const tomorrow = pickWeather(run, rng);
@@ -108,14 +109,14 @@ export function tickClimate(run: RunState, rng: Rng): void {
   ];
 
   const def = DISASTER_BY_ID[w.disaster];
-  const threat = threatOfDay(run.day);
-  if (run.day < TIME.COLLAPSE_DAY) {
-    w.temperature = Math.round(baseTemperature(run.day) + WEATHER_TEMP[w.weather] + rng.float(-1.5, 1.5));
+  const threat = threatOfDay(day);
+  if (day < TIME.COLLAPSE_DAY) {
+    w.temperature = Math.round(baseTemperature(day) + WEATHER_TEMP[w.weather] + rng.float(-1.5, 1.5));
     w.season = 'autumn';
   } else {
     const bias = def.tempBias * Math.min(1, threat / 3);
-    w.temperature = Math.round(baseTemperature(run.day) + bias + WEATHER_TEMP[w.weather] + rng.float(-2, 2));
-    w.season = baseTemperature(run.day) + bias < 9 ? 'winter' : 'autumn';
+    w.temperature = Math.round(baseTemperature(day) + bias + WEATHER_TEMP[w.weather] + rng.float(-2, 2));
+    w.season = baseTemperature(day) + bias < 9 ? 'winter' : 'autumn';
   }
 }
 
@@ -189,11 +190,13 @@ export function applyOnset(run: RunState, rng: Rng): void {
 
   w.queuedWeather = undefined;
   tickClimate(run, rng);
+
+  // 准备期囤的碘片从今天起才开始保护甲状腺
+  activateIodineProtection(run);
 }
 
 /** 生存期的每日演化 */
 export function advanceWorldSurvival(run: RunState, rng: Rng): void {
-  decayExposure(run);
   tickSurvivalPressures(run, rng);
   tickClimate(run, rng);
 }

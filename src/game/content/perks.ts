@@ -14,7 +14,7 @@ export const PERKS: PerkDef[] = [
   { id: 'perk_camel', tree: 'survival', tier: 1, name: '耐渴', desc: '每日饮水需求 -15%。', cost: 30, wip: true },
   { id: 'perk_ironstomach', tree: 'survival', tier: 1, name: '铁胃', desc: '喝未净化水的患病概率减半。', cost: 30, wip: true },
   { id: 'perk_scavenger', tree: 'survival', tier: 2, name: '拾荒直觉', desc: '搜刮产出 +15%，且能看到地点的剩余存量。', cost: 60 },
-  { id: 'perk_thickblood', tree: 'survival', tier: 2, name: '抗寒体质', desc: '失温判定的温度下限降低 4°C。', cost: 60, requires: ['perk_ironstomach'], wip: true },
+  { id: 'perk_thickblood', tree: 'survival', tier: 2, name: '抗寒体质', desc: '舒适线和生存线各降低 4°C。', cost: 60, requires: ['perk_ironstomach'], wip: true },
   { id: 'perk_nightowl', tree: 'survival', tier: 3, name: '夜行', desc: '夜间搜刮的危险度 -25%，产出加成提高到 1.6 倍。', cost: 110, requires: ['perk_scavenger'] },
   { id: 'perk_ghost', tree: 'survival', tier: 3, name: '不存在的人', desc: '隐蔽的每级效果提高 50%，暴露度自然衰减 +3。', cost: 110, requires: ['perk_thickblood'], wip: true },
 

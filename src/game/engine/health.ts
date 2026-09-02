@@ -11,7 +11,7 @@ import { CONDITION_BY_ID } from '../content/conditions';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ConditionId, RunState } from '../types';
-import { canElectricHeat, canFuelHeat, electricHeatKwh, fuelHeatCost, unheatedFelt } from './climate';
+import { comfortTemp, currentIndoor, HYPO_IDS, hypoStageOf, previewNight, survivalTemp } from './climate';
 import type { ConsumeResult } from './economy';
 import { addCondition, addLog, removeCondition } from './effects';
 import { ledger, type LedgerNote } from './ledger';
@@ -37,32 +37,10 @@ function has(run: RunState, ability: string): boolean {
   return run.abilities.includes(ability);
 }
 
-export { unheatedFelt };
-
-/** 预览今晚室内温度（不扣资源） */
-export function previewIndoor(run: RunState): { unheated: number; indoor: number; fuelCost: number; kwh: number } {
-  const unheated = unheatedFelt(run);
-  const mode = run.heatMode ?? 'off';
-  const fuelCost = mode === 'fuel' && canFuelHeat(run) ? fuelHeatCost(run) : 0;
-  const kwh = mode === 'electric' && canElectricHeat(run) ? electricHeatKwh(run) : 0;
-  let indoor = unheated;
-  if (mode === 'fuel' && fuelCost > 0) {
-    const spent = Math.min(run.res.fuel, fuelCost);
-    indoor = unheated + (COLD.TARGET - unheated) * (fuelCost > 0 ? spent / fuelCost : 0);
-  } else if (mode === 'electric' && kwh > 0 && loadOnline(run, 'heater')) {
-    indoor = COLD.TARGET;
-  }
-  indoor = Math.round(Math.min(COLD.TARGET, indoor) * 10) / 10;
-  return { unheated, indoor, fuelCost, kwh };
-}
-
-/**
- * 体感温度：未加热站点修正，或传入夜间结算后的室内温度。
- */
+/** 体感温度：当前室内，或未加热估值。 */
 export function feltTemperature(run: RunState, heated?: boolean): number {
-  const preview = previewIndoor(run);
-  if (heated === false) return preview.unheated;
-  return preview.indoor;
+  if (heated === false) return previewNight(run).leaked;
+  return currentIndoor(run);
 }
 
 export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): HealthReport {
@@ -152,6 +130,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     mult *= 1 / (1 + effectiveModule(run, 'medbay') * 0.2);
 
     if (addedTonight.has(id)) continue;
+    if ((HYPO_IDS as readonly string[]).includes(id)) continue;
 
     hit((def.daily.hp ?? 0) * mult, def.name);
     run.stats.stamina = clamp(run.stats.stamina + (def.daily.stamina ?? 0) * mult, 0, 100);
@@ -198,18 +177,77 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     }
   }
 
-  // ---------- 3. 低温 ----------
+  // ---------- 3. 低温症 ----------
   const insulate = effectiveModule(run, 'insulate');
-  const felt = consume.indoor ?? unheatedFelt(run);
-  const floor = COLD.INSULATE_FLOOR[insulate] ?? COLD.INSULATE_FLOOR[0]!;
-  if (felt < floor) {
-    const gap = floor - felt;
-    hit(-gap * COLD.HP_PER_DEGREE, t('ledger.cause.cold'));
-    notes.push(ledger(t('ledger.health.cold', { felt, floor }), 'bad'));
-    if (gap >= COLD.HYPOTHERMIA_GAP) gainCond('hypothermia', t('ledger.health.hypo'));
-  } else if (felt > floor + 4) {
-    removeCondition(run, 'hypothermia');
+  const felt = consume.indoor ?? currentIndoor(run);
+  const comfort = comfortTemp(run);
+  const survival = survivalTemp(run);
+  const layered = run.flags.includes('flag:layeredClothes');
+
+  const setHypo = (stage: 0 | 1 | 2 | 3) => {
+    for (const id of HYPO_IDS) removeCondition(run, id);
+    if (stage === 1) addCondition(run, 'hypothermiaMild');
+    if (stage === 2) addCondition(run, 'hypothermiaMod');
+    if (stage === 3) addCondition(run, 'hypothermiaSevere');
+  };
+
+  const applyHypoDrain = (stage: 0 | 1 | 2 | 3) => {
+    const hp = COLD.STAGE_HP[stage] ?? 0;
+    if (hp) hit(hp, t('ledger.cause.cold'));
+    const sta = [0, -6, -12, -18][stage] ?? 0;
+    const san = [0, -1, -2, -4][stage] ?? 0;
+    if (sta) run.stats.stamina = clamp(run.stats.stamina + sta, 0, 100);
+    if (san) run.stats.sanity = clamp(run.stats.sanity + san, 0, 100);
+  };
+
+  let stage = hypoStageOf(run);
+  if (felt >= comfort) {
+    if (stage > 0) {
+      const next = (stage <= 2 ? 0 : 1) as 0 | 1;
+      setHypo(next);
+      notes.push(ledger(next === 0 ? t('ledger.health.hypoGone') : t('ledger.health.hypoEase'), 'good'));
+      stage = next;
+    }
+    applyHypoDrain(stage);
+  } else if (felt < survival) {
+    if (stage >= 3) {
+      hit(-HEALTH.MAX, t('ledger.cause.cold'));
+      notes.push(ledger(t('ledger.health.hypoDeath', { felt, survival }), 'bad'));
+    } else {
+      const next = (Math.min(3, Math.max(1, stage + 1))) as 1 | 2 | 3;
+      setHypo(next);
+      notes.push(ledger(stage === 0 ? t('ledger.health.hypo1', { felt }) : t('ledger.health.hypoUp', { n: next, felt }), 'bad'));
+      stage = next;
+      applyHypoDrain(stage);
+    }
+    if (!run.conditions.includes('flu')) {
+      gainCond('flu', t('ledger.health.fluCold'));
+    } else if (!run.conditions.includes('pneumonia') && rng.chance(COLD.PNEUMONIA_CHANCE)) {
+      gainCond('pneumonia', t('ledger.health.fluToPneumonia'));
+    }
+  } else {
+    const mildChance = COLD.MILD_CHANCE * (layered ? 0.5 : 1);
+    const fluChance = COLD.FLU_CHANCE * (layered ? 0.5 : 1);
+    if (stage === 0) {
+      if (rng.chance(mildChance)) {
+        setHypo(1);
+        stage = 1;
+        notes.push(ledger(t('ledger.health.hypo1', { felt }), 'bad'));
+      }
+    } else if (stage < 3 && rng.chance(COLD.PROGRESS_CHANCE)) {
+      const next = (stage + 1) as 2 | 3;
+      setHypo(next);
+      stage = next;
+      notes.push(ledger(t('ledger.health.hypoUp', { n: next, felt }), 'bad'));
+    }
+    applyHypoDrain(stage);
+    if (!run.conditions.includes('flu') && rng.chance(fluChance)) {
+      gainCond('flu', t('ledger.health.fluCold'));
+    }
   }
+
+  notes.push(ledger(t('ledger.health.indoor', { felt, comfort, survival })));
+  run.flags = run.flags.filter((f) => f !== 'flag:layeredClothes');
 
   // ---------- 4. 空气 ----------
   const airFilter = effectiveModule(run, 'airFilter');
@@ -326,7 +364,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   // ---------- 9. 睡眠恢复 ----------
   let recover = 34;
   if (run.conditions.length > 0) recover -= run.conditions.length * 5;
-  if (felt < floor) recover -= 8;
+  if (felt < comfort) recover -= 8;
   if (run.stats.sanity < 30) recover -= 6;
   const medbay = effectiveModule(run, 'medbay');
   recover += HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0;
@@ -335,7 +373,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   const sleepSta = HEALTH.MEDBAY_SLEEP_STAMINA[medbay] ?? 0;
   if (sleepSan > 0) run.stats.sanity = clamp(run.stats.sanity + sleepSan, 0, 100);
   if (sleepSan > 0 || sleepSta > 0) {
-    if (felt < floor) {
+    if (felt < comfort) {
       notes.push(ledger(t('ledger.health.medbayCold'), 'neutral'));
     } else if (sleepSan > 0) {
       notes.push(ledger(t('ledger.health.medbayFull', { sta: sleepSta, san: sleepSan }), 'good'));

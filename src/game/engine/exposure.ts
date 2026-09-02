@@ -11,6 +11,7 @@ import { t } from '../copy/t';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ResourceId, RunState } from '../types';
+import { hypoStageOf } from './climate';
 import { effectiveModule } from './tags';
 import { computePower, loadOnline } from './power';
 
@@ -135,7 +136,7 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1): RaidResu
   if (run.flags.includes('flag:alarmRig')) defense += 0.1;
   if (run.flags.includes('flag:floodWall')) defense += 0.05;
   if (underConstruction) defense -= RAID.UNDER_CONSTRUCTION_PENALTY;
-  if (run.conditions.includes('fracture') || run.conditions.includes('hypothermia')) defense -= 0.1;
+  if (run.conditions.includes('fracture') || hypoStageOf(run) > 0) defense -= 0.1;
 
   const attack = RAID.BASE * (RAID.THREAT_MULT[Math.min(6, run.threat)] ?? 1) * strengthMult;
   const successChance = Math.max(0.05, Math.min(0.95, attack - defense));

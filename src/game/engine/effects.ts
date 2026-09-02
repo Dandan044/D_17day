@@ -169,6 +169,17 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     if (eff.world.temperature) w.temperature += eff.world.temperature;
   }
 
+  if (eff.indoor) {
+    run.indoorTemp = Math.round(((run.indoorTemp ?? 18) + eff.indoor) * 10) / 10;
+  }
+
+  if (eff.heatMode) {
+    run.heatMode = eff.heatMode;
+    if (!run.powerEnabled) run.powerEnabled = {};
+    if (eff.heatMode === 'fuel') run.powerEnabled.heater = false;
+    if (eff.heatMode === 'electric') run.powerEnabled.heater = true;
+  }
+
   if (eff.faction) {
     for (const [k, delta] of Object.entries(eff.faction)) {
       if (!delta) continue;

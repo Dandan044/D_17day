@@ -2,7 +2,7 @@
  * 单局生命周期：创建、选址、每日推进、阶段切换。
  */
 
-import { AP, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, WEAR, threatOfDay } from '../balance';
+import { AP, COLD, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, WEAR, threatOfDay } from '../balance';
 import { t } from '../copy/t';
 import { CLASS_BY_ID, PACK_BY_ID } from '../content/classes';
 import { DISASTER_BY_ID } from '../content/disasters';
@@ -33,12 +33,11 @@ import { emitHook, emitThresholdHooks, collectThresholdForced } from './hooks';
 import { applyDailyExposure, pickPressureFamily, resolveRaid, type RaidResult } from './exposure';
 import { resolveHealth } from './health';
 import { ledger, type LedgerNote } from './ledger';
-import { settleBattery } from './power';
+import { settleBattery, tonightHeat } from './power';
 import { checkRequirement, deriveFacts, effectiveModule } from './tags';
 import {
   applyOnset,
   createWorld,
-  decayExposure,
   tickClimate,
   tickPrepEconomy,
   tickSurvivalPressures,
@@ -113,10 +112,12 @@ export function createRun(opts: CreateRunOptions): RunState {
     modules,
     projects: [],
     wear: { filterLife: WEAR.FILTER_LIFE, generatorOil: WEAR.GENERATOR_OIL, batteryCharge: 0 },
-    streaks: { lowRation: 0, noThreatDays: 0, goodRation: 0 },
+    streaks: { lowRation: 0, noThreatDays: 0, goodRation: 0, belowSurvival: 0 },
     ration: 'normal',
     waterUse: 'normal',
     heatMode: 'off',
+    heatTarget: COLD.COMFORT,
+    indoorTemp: COLD.PREP_INDOOR,
     powerPriority: [...POWER.DEFAULT_PRIORITY],
     powerEnabled: {},
     directorBoost: {},
@@ -257,6 +258,11 @@ export interface NightReport {
   hpAfter?: number;
   indoor?: number;
   outdoor?: number;
+  previewIndoor?: number;
+  fuelBudget?: number;
+  fuelSpent?: number;
+  kwhBudget?: number;
+  kwhSpent?: number;
   exposureAdded: number;
   exposureDecay?: number;
   exposureAfter?: number;
@@ -295,6 +301,7 @@ export function endDay(run: RunState): NightReport {
 
   // ---------- 夜间结算 ----------
   if (isPrep) {
+    run.indoorTemp = COLD.PREP_INDOOR;
     // 准备期自来水和超市还在，不做配给结算
     report.notes.push(...spoilFood(run));
     report.notes.push(...advanceProjects(run, rng).map((t) => ledger(t)));
@@ -307,10 +314,17 @@ export function endDay(run: RunState): NightReport {
       addLog(run, secret, 'grim');
       report.notes.push(ledger(t('ledger.run.secret')));
     }
-    const consume = consumeDaily(run, rng, run.difficulty);
+    const budget = tonightHeat(run).plan;
+    tickClimate(run, rng, run.day + 1);
+    const consume = consumeDaily(run, rng, run.difficulty, budget);
     report.notes.push(...consume.notes);
     report.indoor = consume.indoor;
     report.outdoor = run.world.temperature;
+    report.previewIndoor = consume.previewIndoor;
+    report.fuelBudget = consume.fuelBudget;
+    report.fuelSpent = consume.fuelSpent;
+    report.kwhBudget = consume.kwhBudget;
+    report.kwhSpent = consume.kwhSpent;
     const health = resolveHealth(run, consume, rng);
     report.healthNotes = health.notes;
     report.hpDelta = health.hpDelta;
@@ -322,11 +336,6 @@ export function endDay(run: RunState): NightReport {
     const exposure = applyDailyExposure(run);
     report.exposureAdded = exposure.total;
     report.exposureAfter = Math.round(run.world.exposure * 10) / 10;
-    const decay = decayExposure(run);
-    report.exposureDecay = decay;
-    if (decay > 0) {
-      report.notes.push(ledger(t('ledger.run.exposureDecay', { n: decay })));
-    }
 
     tickSurvivalPressures(run, rng);
 
@@ -393,16 +402,16 @@ export function endDay(run: RunState): NightReport {
     generateIntel(run, rng);
     const { picks } = selectEvents(run, rng, rng.int(DIRECTOR.PREP_EVENTS_PER_DAY[0], DIRECTOR.PREP_EVENTS_PER_DAY[1]));
     run.queue = picks;
+    tickClimate(run, rng);
   } else {
     const forced: string[] = [];
     const pressure = pickPressureFamily(run, rng);
     if (pressure) forced.push(pressure);
     forced.push(...collectThresholdForced(run));
     const count = rng.int(DIRECTOR.EVENTS_PER_DAY[0], DIRECTOR.EVENTS_PER_DAY[1]);
-    const { picks } = selectEvents(run, rng, Math.max(count, forced.length), forced);
+    const { picks } = selectEvents(run, rng, Math.max(count, forced.length + 1), forced);
     run.queue = picks;
   }
-  tickClimate(run, rng);
   emitHook(run, 'endDay', rng);
   if (report.weekly) emitHook(run, 'threatUp', rng);
   if (!isPrep) emitThresholdHooks(run, rng);
@@ -494,7 +503,6 @@ export function resolveChoice(
     if (raid.usedAmmo > 0) out.notes.push(t('ledger.run.ammo', { n: raid.usedAmmo }));
     if (raid.moduleDamaged) out.notes.push(t('ledger.run.moduleBroke', { name: raid.moduleDamaged }));
     emitHook(run, raid.repelled ? 'raidRepelled' : 'raidFailed', rng);
-    emitHook(run, 'raid', rng);
     if (run.stats.hp <= 0) {
       if (run.difficulty === 'story') {
         run.stats.hp = 20;
@@ -507,6 +515,10 @@ export function resolveChoice(
         out.died = true;
       }
     }
+  }
+  // 任何 raid_attempt 结算都算遭遇袭击（谈成成功也要能触发 waitFor 链）
+  if (familyId === 'raid_attempt') {
+    emitHook(run, 'raid', rng);
   }
 
   recordBeat(run, familyId);

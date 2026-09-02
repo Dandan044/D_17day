@@ -201,8 +201,20 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
   }
   run.pending = stillPending;
 
-  // ---------- 2. 强制插入（暴露度阶梯） ----------
-  for (const id of forcedFamilies) tryPush(id);
+  // ---------- 2. 强制插入（暴露度阶梯）——同样认冷却 / once ----------
+  for (const id of forcedFamilies) {
+    const f = FAMILY_BY_ID[id];
+    if (!f) {
+      rejected.push({ familyId: id, reason: '家族不存在' });
+      continue;
+    }
+    const why = isEligible(f, run, facts);
+    if (why) {
+      rejected.push({ familyId: id, reason: why });
+      continue;
+    }
+    tryPush(id);
+  }
 
   // ---------- 3. 按权重补足 ----------
   const pool = ALL_FAMILIES.filter((f) => {

@@ -159,23 +159,40 @@ export const FILTER = {
   GIARDIA_SHARE: 0.35,
 } as const;
 
-/** 失温判定：体感温度低于阈值且保温不足 */
+/**
+ * 惯性温度：保温只决定漏热快慢，伤人走低温症。
+ * 预览按今日室外估；结算用真实次日室外，升温不超过预估预算。
+ */
 export const COLD = {
-  /** 各保温等级能抵御的温度下限 */
-  INSULATE_FLOOR: [9, 1, -9, -20],
-  /** 每低于下限 1 度的 HP 损失 */
-  HP_PER_DEGREE: 0.38,
-  /** 触发失温状态的温差 */
-  HYPOTHERMIA_GAP: 7,
-  /** 取暖目标室内温度 */
-  TARGET: 25,
-  /** 烧燃料：每升高 1°C 耗油 (L)，0 级不可烧 */
-  FUEL_PER_DEGREE: [0, 0.14, 0.09, 0.06],
-  /** 电热：每升高 1°C 耗电 (kWh)，0/1 级不可用电热 */
-  ELECTRIC_PER_DEGREE: [0, 0, 0.18, 0.1],
-  HEAT_BASE: 4,
-  HEAT_PER_INSULATE: 2,
-  HEAT_FUEL: 1,
+  /** 一晚向热汇靠拢的比例，保温 0..3 */
+  LEAK: [0.82, 0.52, 0.3, 0.14],
+  /** 农舍漏风、水塔高处额外漏热 */
+  DRAFTY_LEAK: 0.12,
+  ELEVATED_LEAK: 0.08,
+  /** 人体阈值（抗寒体质再降 PERK_SHIFT） */
+  COMFORT: 16,
+  SURVIVAL: 4,
+  BUFFER: 4,
+  PERK_SHIFT: 4,
+  /** 准备期市政供暖把室内锁在此值 */
+  PREP_INDOOR: 18,
+  /** 地下站热汇，不跟室外暴风雪走 */
+  GROUND_TEMP: 12,
+  BODY_HEAT_PER_HEAD: 0.3,
+  /** 每升高 1°C 的油 / 电。保温的好处在漏热，不再打折每度成本 */
+  FUEL_PER_DEGREE: 0.12,
+  ELECTRIC_PER_DEGREE: 0.16,
+  /** 预估室内比实际高这么多，算「估错了」 */
+  SURPRISE_GAP: 4,
+  /** 舒适以下得轻度低温症 / 流感 */
+  MILD_CHANCE: 0.28,
+  FLU_CHANCE: 0.22,
+  /** 生存~舒适带里已有低温症时升一级 */
+  PROGRESS_CHANCE: 0.4,
+  /** 生存以下已有流感时升肺炎 */
+  PNEUMONIA_CHANCE: 0.4,
+  /** 轻度 / 中度 / 重度（带内）日损 HP */
+  STAGE_HP: [0, -5, -15, -25],
 } as const;
 
 /** 空气：过滤等级能抵御的污染上限 */
@@ -204,7 +221,7 @@ export const RAD = {
 
 export const EXPOSURE = {
   MAX: 100,
-  /** 每日自然衰减 */
+  /** 每日自然衰减（已并入 dailyExposure 的隐蔽/天气项，勿在 endDay 再扣一遍） */
   DECAY: 4,
   /** 各来源的每日增量 */
   SRC_POWER_FULL: 9,

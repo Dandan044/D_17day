@@ -93,14 +93,14 @@ export const MODULES: ModuleDef[] = [
     id: 'insulate',
     name: '保温',
     short: '温',
-    desc: '决定你能扛住多低的温度。严冬期它比加固更重要。',
+    desc: '决定屋里的热能留多久。漏得慢，炉子就不用通宵烧。',
     zero: '一层单薄的墙和会漏风的窗框。',
     buildPenaltyTags: ['building:insulate'],
     buildPenaltyDesc: '墙体开了洞，保温效果暂时归零。',
     levels: [
       { materials: 10, parts: 2, labor: 8, hireCash: 2200, buyCash: 2800, buyDays: 1, desc: '门窗贴密封条，墙面挂厚毯，做出一间"保温核心房"。' },
       { materials: 20, parts: 5, labor: 16, hireCash: 5600, buyCash: 7000, buyDays: 2, desc: '内墙加聚苯板，双层窗，柴火炉接了烟道。' },
-      { materials: 32, parts: 12, labor: 27, hireCash: 13500, buyCash: 16500, buyDays: 3, skill: { id: 'mechanics', level: 3 }, desc: '全屋气密改造 + 热回收换气。零下十八度也活得下去。' },
+      { materials: 32, parts: 12, labor: 27, hireCash: 13500, buyCash: 16500, buyDays: 3, skill: { id: 'mechanics', level: 3 }, desc: '全屋气密改造 + 热回收换气。一晚只能漏掉一点点热。' },
     ],
   },
   {
@@ -203,9 +203,9 @@ export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1):
     }
     case 'insulate':
       return (
-        t('ledger.module.insulate', { floor: COLD.INSULATE_FLOOR[lv] }) +
-        (lv >= 1 ? t('ledger.module.insulateFuel', { fuel: COLD.FUEL_PER_DEGREE[lv] }) : '') +
-        (lv >= 2 ? t('ledger.module.insulateElec', { elec: COLD.ELECTRIC_PER_DEGREE[lv] }) : '')
+        t('ledger.module.insulate', { leak: Math.round((COLD.LEAK[lv] ?? 0) * 100) }) +
+        (lv >= 1 ? t('ledger.module.insulateFuel', { fuel: COLD.FUEL_PER_DEGREE }) : '') +
+        (lv >= 2 ? t('ledger.module.insulateElec', { elec: COLD.ELECTRIC_PER_DEGREE }) : '')
       );
     case 'airFilter':
       return t('ledger.module.air', { tol: AIR.FILTER_TOLERANCE[lv], lvl: lv });

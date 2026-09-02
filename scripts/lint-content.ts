@@ -194,6 +194,16 @@ for (const f of ALL_FAMILIES) {
   if (PRESSURE_FAMILIES.includes(f.id)) continue;
   if (f.id === 'daily_recruit' || f.id === 'daily_crew_friction') continue;
   if (f.id.startsWith('stat_arc_')) continue;
+  // collectThresholdForced 插入的阈值事件，不进随机池
+  if (
+    f.id === 'env_first_freeze' ||
+    f.id === 'env_first_chill' ||
+    f.id === 'env_hypo_severe' ||
+    f.id === 'env_warmth_return' ||
+    f.id === 'env_woke_cold'
+  ) {
+    continue;
+  }
   err(`事件家族 ${f.id}：baseWeight 为 0，又没有任何 schedule 指向它，也不在暴露度阶梯里——这是死内容`);
 }
 
@@ -304,6 +314,9 @@ const ENGINE_FLAGS = new Set([
   'flag:raidDefend',
   'flag:raidHide',
   'flag:iodine',
+  'flag:iodineStock1',
+  'flag:iodineStock2',
+  'flag:sawIodineOffer',
   'flag:geiger',
   'flag:mask',
   'flag:hasPet',
@@ -317,7 +330,9 @@ const ENGINE_FLAGS = new Set([
   'flag:lootedNeighbor',
   'flag:scoutInside',
   'flag:knowsNorthRoute',
-  'flag:petDog',
+  'flag:layeredClothes',
+  'flag:wasCold',
+  'flag:burnedChair',
 ]);
 
 for (const f of writtenFlags) {
@@ -395,7 +410,8 @@ for (const f of writtenFlags) {
 // 7. 文案目录：缺键、skip 共用键、名表唯一
 // ============================================================
 
-function copyKey(familyId: string, variantId: string, suffix: string): boolean {
+function copyKey(familyId: string, variantId: string, suffix: string, clusterKey?: string): boolean {
+  if (clusterKey && hasCopy(`event.${familyId}.${clusterKey}.${suffix}`)) return true;
   return hasCopy(`event.${familyId}.${variantId}.${suffix}`) || hasCopy(`event.${familyId}._shared.${suffix}`);
 }
 
@@ -404,28 +420,72 @@ const SKIP_EXCEPT = new Set(['什么都不做，继续观察']);
 const SHARED_ECHO = new Set(['hook_echo_sliceflags']);
 const bodyDup = new Map<string, string[]>();
 
+/** 廉价文学腔：场面写完后再加的废话收束 / 禁句公式 */
+const CHEAP_VOICE_HARD: Array<{ re: RegExp; tip: string }> = [
+  { re: /屋里只有你/, tip: '屋里只有你（废话收束）' },
+  { re: /听见自己的呼吸/, tip: '听见自己的呼吸（气氛收束）' },
+  { re: /只剩自己的呼吸/, tip: '只剩自己的呼吸（气氛收束）' },
+  { re: /数自己的呼吸/, tip: '数自己的呼吸（气氛收束）' },
+  { re: /这就够了/, tip: '这就够了（金句收束）' },
+  { re: /也是一种/, tip: '也是一种（定义句）' },
+  { re: /人还在屋里/, tip: '人还在屋里（模板收束）' },
+  { re: /也许是[^。]{0,20}。也许不是/, tip: '也许是/也许不是' },
+  { re: /可能是误触。可能不是/, tip: '可能是误触。可能不是' },
+  { re: /手指黑的。/, tip: '手指黑的。（两字砸点）' },
+  { re: /没有大人。/, tip: '没有大人。（气氛收束）' },
+  { re: /灰在光里慢慢飘/, tip: '灰在光里慢慢飘（纯氛围）' },
+  { re: /成为家具/, tip: '物件拟人收束' },
+  { re: /安静很贵/, tip: '金句收束' },
+  { re: /胸口还是闷/, tip: '抽象收束' },
+];
+
+/** 后补拍额外拦：双悬空「可能是…也可能」；对照样本（prep/daily）不套这条 */
+const CHEAP_VOICE_SOFT: Array<{ re: RegExp; tip: string }> = [
+  { re: /可能是[^。]{0,16}，也可能/, tip: '可能是…也可能…（双悬空）' },
+];
+
+const POST_BEAT_PREFIX =
+  /^(filter_|surv_beat_|hook_|nuke_arc_|nuke_chain_|nuke_build_|stat_arc_|med_)/;
+
 for (const f of ALL_FAMILIES) {
   for (const v of f.variants) {
     const vw = `事件家族 ${f.id} / 变体 ${v.id}`;
-    if (!copyKey(f.id, v.id, 'title')) err(`${vw}：缺少文案键 title`);
-    if (!copyKey(f.id, v.id, 'body')) err(`${vw}：缺少文案键 body`);
+    const ck = v.copyKey;
+    if (!copyKey(f.id, v.id, 'title', ck)) err(`${vw}：缺少文案键 title`);
+    if (!copyKey(f.id, v.id, 'body', ck)) err(`${vw}：缺少文案键 body`);
     if (!SHARED_ECHO.has(f.id)) {
       const sig = `${v.title ?? ''}\n${v.body ?? ''}`;
       const hits = bodyDup.get(sig) ?? [];
       hits.push(`${f.id}/${v.id}`);
       bodyDup.set(sig, hits);
     }
+    const texts = [v.title ?? '', v.body ?? ''];
     for (const c of v.choices) {
       const cw = `${vw} / 选项 ${c.id}`;
-      if (!copyKey(f.id, v.id, `choice.${c.id}.label`)) err(`${cw}：缺少文案键 label`);
+      if (!copyKey(f.id, v.id, `choice.${c.id}.label`, ck)) err(`${cw}：缺少文案键 label`);
       if (c.check) {
-        if (!copyKey(f.id, v.id, `choice.${c.id}.ok.log`)) err(`${cw}：缺少文案键 ok.log`);
-        if (!copyKey(f.id, v.id, `choice.${c.id}.bad.log`)) err(`${cw}：缺少文案键 bad.log`);
-      } else if (!copyKey(f.id, v.id, `choice.${c.id}.log`)) {
+        if (!copyKey(f.id, v.id, `choice.${c.id}.ok.log`, ck)) err(`${cw}：缺少文案键 ok.log`);
+        if (!copyKey(f.id, v.id, `choice.${c.id}.bad.log`, ck)) err(`${cw}：缺少文案键 bad.log`);
+        texts.push(c.check.ok.log ?? '', c.check.bad.log ?? '');
+      } else if (!copyKey(f.id, v.id, `choice.${c.id}.log`, ck)) {
         err(`${cw}：缺少文案键 log`);
+      } else {
+        texts.push(c.effect?.log ?? '');
       }
+      if (c.label) texts.push(c.label);
       if (c.id === 'skip' && c.label && c.label !== SKIP_LABEL && !SKIP_EXCEPT.has(c.label)) {
         err(`${cw}：skip 标签应走 ui.choice.skip（当前「${c.label}」）`);
+      }
+    }
+    if (!SHARED_ECHO.has(f.id)) {
+      const blob = texts.join('\n');
+      for (const rule of CHEAP_VOICE_HARD) {
+        if (rule.re.test(blob)) warn(`${vw}：廉价腔「${rule.tip}」`);
+      }
+      if (POST_BEAT_PREFIX.test(f.id)) {
+        for (const rule of CHEAP_VOICE_SOFT) {
+          if (rule.re.test(blob)) warn(`${vw}：廉价腔「${rule.tip}」`);
+        }
       }
     }
   }

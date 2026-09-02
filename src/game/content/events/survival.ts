@@ -489,6 +489,7 @@ beat({
     intensity: 5,
     phase: ['survival'],
     weight: 0,
+    cooldown: 4,
     variants: [
       {
         // 通用兜底变体：只要不是地下、不是被水围住，就是最朴素的那种破门
@@ -558,7 +559,11 @@ beat({
         id: 'requisition_raid',
 
 
-        require: { all: ['disaster:nuclear'], any: ['faction:gov:active'] },
+        require: {
+          all: ['disaster:nuclear', 'flag:govRegistered'],
+          any: ['faction:gov:active'],
+        },
+        forbid: { any: ['flag:govLastRequisition'] },
         choices: [
           {
             id: 'give_all',
@@ -567,6 +572,7 @@ beat({
               res: { foodStaple: -8, water: -18, meds: -4, fuel: -8 },
               stats: { sanity: -10 },
               stance: { gov: 10 },
+              setFlags: ['flag:govLastRequisition'],
 
               tone: 'grim',
             },
@@ -576,7 +582,7 @@ beat({
 
             requires: { tags: { all: ['armed'] }, reason: '需要有弹药' },
             effect: {
-              setFlags: ['flag:raidDefend', 'flag:foughtSoldiers'],
+              setFlags: ['flag:raidDefend', 'flag:foughtSoldiers', 'flag:govLastRequisition'],
               stats: { humanity: -4 },
 
               tone: 'bad',
@@ -592,12 +598,13 @@ beat({
               ok: {
                 res: { foodStaple: -3, water: -6 },
                 stance: { gov: 20 },
-                setFlags: ['flag:officerFavor'],
+                setFlags: ['flag:officerFavor', 'flag:govLastRequisition'],
 
                 tone: 'good',
               },
               bad: {
                 res: { foodStaple: -8, water: -16, meds: -3 },
+                setFlags: ['flag:govLastRequisition'],
 
                 tone: 'bad',
               },
@@ -845,7 +852,7 @@ beat({
               bad: {
                 res: { materials: -14, water: -10, foodStaple: -4 },
                 stats: { stamina: -28, hp: -10 },
-                addCond: ['hypothermia'],
+                addCond: ['hypothermiaMild'],
 
                 tone: 'bad',
               },

@@ -5,17 +5,29 @@
  * 于是"什么情况下这件事合理"这个判断就集中在了标签定义里，可以被 lint 检查。
  */
 
-import { AIR, CAPS, EXPOSURE, HEALTH, RAD, THREAT_NAMES } from '../balance';
+import { AIR, CAPS, EXPOSURE, HEALTH, RAD, TIME, THREAT_NAMES } from '../balance';
 import { RES_NAME, SKILL_NAME } from '../copy/names';
 import { t } from '../copy/t';
 import { MODULE_BY_ID, MODULE_IDS } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { parseTag } from '../tags';
 import type { Facts, ModuleId, Requirement, RunState, TagQuery, WeatherId } from '../types';
-import { isPrecipWeather } from './climate';
-import { computePower, loadOnline, type PowerReport } from './power';
+import { isPrecipWeather, currentIndoor, indoorBandOf } from './climate';
+import { computePower, loadOnline, type PowerReport, tonightHeat } from './power';
 
 export { computePower, loadOnline, type PowerReport } from './power';
+
+/** 药店/事件买过几盒碘片（库存旗标，与是否正在生效无关） */
+export function iodineStockCount(run: RunState): number {
+  if (run.flags.includes('flag:iodineStock2')) return 2;
+  if (run.flags.includes('flag:iodineStock1')) return 1;
+  return 0;
+}
+
+/** 备过碘片：库存或已记账（含尚未开保护计时） */
+export function hasIodinePrep(run: RunState): boolean {
+  return iodineStockCount(run) > 0 || run.flags.includes('flag:iodine');
+}
 
 /** 能掩盖行踪的天气 */
 const COVER_WEATHER: WeatherId[] = ['snow', 'blizzard', 'fog', 'storm', 'ashfall'];
@@ -65,10 +77,26 @@ export function iodineActive(run: RunState): boolean {
   return true;
 }
 
+/**
+ * 记下碘片。准备期只记账，不开始保护倒计时——否则第 1–4 天买的片
+ * 会在崩溃日之前过期，清算误判成「那两盒你没买」。
+ * 崩溃日及之后才写 iodineUntil。
+ */
 export function grantIodine(run: RunState, days = RAD.IODINE_DAYS): void {
   if (!run.flags.includes('flag:iodine')) run.flags.push('flag:iodine');
   if (!run.flags.includes('flag:sawIodineOffer')) run.flags.push('flag:sawIodineOffer');
-  run.iodineUntil = Math.max(run.iodineUntil ?? 0, run.day + days);
+  if (run.day >= TIME.COLLAPSE_DAY) {
+    run.iodineUntil = Math.max(run.iodineUntil ?? 0, run.day + days);
+  }
+}
+
+/** 崩溃日启动已备碘片的保护窗（若尚未计时） */
+export function activateIodineProtection(run: RunState, days = RAD.IODINE_DAYS): void {
+  if (!hasIodinePrep(run)) return;
+  if (!run.flags.includes('flag:iodine')) run.flags.push('flag:iodine');
+  if (run.iodineUntil === undefined || run.day >= run.iodineUntil) {
+    run.iodineUntil = run.day + days;
+  }
 }
 
 export function waterCapacity(run: RunState): number {
@@ -111,6 +139,14 @@ export function deriveFacts(run: RunState): Facts {
   if (isPrecipWeather(w.weather)) add('weather:precip');
   add(`season:${w.season}`);
   add(band(w.temperature, [-15, -5, 5, 15], ['temp:extreme', 'temp:freezing', 'temp:cold', 'temp:cool', 'temp:mild']));
+  const indoor = currentIndoor(run);
+  add(`indoor:${indoorBandOf(run, indoor)}`);
+  if (run.heatMissed) add('indoor:missed');
+  const heat = tonightHeat(run).plan;
+  if (heat.kwh > 0) add('heat:electric');
+  if (heat.fuelCost > 0) add('heat:fuel');
+  nums['indoor:temperature'] = indoor;
+  nums['streak:belowSurvival'] = run.streaks?.belowSurvival ?? 0;
 
   // --- 环境（均为越高越糟） ---
   add(band(w.airPollution, [25, 50, 75], ['air:good', 'air:poor', 'air:bad', 'air:lethal']));
@@ -180,7 +216,7 @@ export function deriveFacts(run: RunState): Facts {
   if (run.hasVehicle) add('hasVehicle');
   // 几件"便宜但关键"的小物：内容里既可以查 flag:xxx，也可以查语义化标签
   if (run.flags.includes('flag:hasPet')) add('hasPet');
-  if (iodineActive(run)) add('hasIodine');
+  if (hasIodinePrep(run)) add('hasIodine');
   if (run.flags.includes('flag:geiger')) add('hasGeiger');
   if (run.flags.includes('flag:mask')) add('hasMask');
 

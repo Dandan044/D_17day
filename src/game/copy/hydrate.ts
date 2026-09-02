@@ -1,8 +1,11 @@
 import type { Choice, Effect, EventFamily, EventVariant } from '../types';
 import { hasCopy, pickCopy, tList } from './t';
 
-function eventBase(familyId: string, variantId: string): string[] {
-  return [`event.${familyId}.${variantId}`, `event.${familyId}._shared`];
+function eventBase(familyId: string, variantId: string, copyKey?: string): string[] {
+  const bases: string[] = [];
+  if (copyKey) bases.push(`event.${familyId}.${copyKey}`);
+  bases.push(`event.${familyId}.${variantId}`, `event.${familyId}._shared`);
+  return bases;
 }
 
 function firstKey(bases: string[], suffix: string): string {
@@ -51,7 +54,7 @@ function hydrateChoice(bases: string[], c: Choice): Choice {
 }
 
 function hydrateVariant(familyId: string, v: EventVariant): EventVariant {
-  const bases = eventBase(familyId, v.id);
+  const bases = eventBase(familyId, v.id, v.copyKey);
   return {
     ...v,
     title: pickCopy(firstKey(bases, 'title'), v.title),

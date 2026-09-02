@@ -168,7 +168,8 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
 
     choices: [
       ch('trade', {
-        res: { water: -4, parts: 2 },
+        res: { water: -4 },
+        wear: { batteryCharge: 2 },
         stats: { sanity: 2 },
         world: { exposure: 5 },
         setFlags: ['flag:tradedFlashMan'],
@@ -180,7 +181,7 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
         stats: { humanity: -1 },
         world: { exposure: 3 },
         setFlags: ['flag:refusedFlashMan'],
-        schedule: [{ familyId: 'nuke_chain_flash_3', waitFor: 'raid' }],
+        schedule: [{ familyId: 'nuke_chain_flash_3', waitFor: ['raid', 'raidFailed', 'raidRepelled'] }],
 
         tone: 'neutral',
       }),
@@ -376,7 +377,7 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
         stats: { sanity: 4, reputation: 3 },
         world: { neighborhood: 5, exposure: 2 },
         setFlags: ['flag:ashMomWatch'],
-        schedule: [{ familyId: 'nuke_chain_ashkid_3', waitFor: 'raid' }],
+        schedule: [{ familyId: 'nuke_chain_ashkid_3', waitFor: ['raid', 'raidFailed', 'raidRepelled'] }],
 
         tone: 'good',
       }),
@@ -403,7 +404,6 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    minThreat: 2,
     require: {
       any: ['flag:ashMomWatch', 'flag:gaveKidMask', 'flag:liedToAshMom'],
     },

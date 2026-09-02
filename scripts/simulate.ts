@@ -7,7 +7,9 @@
  * 用法：npm run sim -- 200
  */
 
-import { TIME } from '../src/game/balance';
+import { COLD, TIME } from '../src/game/balance';
+import { comfortTemp, survivalTemp } from '../src/game/engine/climate';
+import { tonightHeat } from '../src/game/engine/power';
 import { DISASTERS, DISASTER_BY_ID } from '../src/game/content/disasters';
 import { ENDING_BY_ID } from '../src/game/content/endings';
 import { FAMILY_BY_ID } from '../src/game/content/events';
@@ -236,6 +238,19 @@ function prepDay(run: RunState): void {
   run.ap = 0;
 }
 
+function planHeat(run: RunState): void {
+  const leaked = tonightHeat(run).plan.leaked;
+  const surv = survivalTemp(run);
+  const comf = comfortTemp(run);
+  if (leaked < surv) {
+    run.heatTarget = run.res.fuel >= 18 ? comf + COLD.BUFFER : surv;
+  } else if (leaked < comf && run.res.fuel >= 36) {
+    run.heatTarget = comf + COLD.BUFFER;
+  } else {
+    run.heatTarget = leaked;
+  }
+}
+
 function survivalDay(run: RunState): void {
   // 配给策略：储备越少越省
   const dw = daysOfWater(run);
@@ -244,8 +259,7 @@ function survivalDay(run: RunState): void {
   run.waterUse = dw > 12 ? 'normal' : 'limited';
   if (!run.powerEnabled) run.powerEnabled = {};
   run.powerEnabled.lights = run.world.exposure <= 45;
-  if (run.world.temperature < 12 && (run.modules.insulate ?? 0) >= 1) run.heatMode = 'fuel';
-  else run.heatMode = 'off';
+  planHeat(run);
 
   // 有药就治病
   for (const c of [...run.conditions]) {

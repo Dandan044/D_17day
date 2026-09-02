@@ -124,7 +124,7 @@ export const MODULE_NAME: Record<ModuleId, string> = {
 export const APPLIANCE_NAME: Record<ApplianceId, string> = {
   lights: '灯光照明',
   fridge: '冰箱',
-  heater: '电热',
+  heater: '温控',
 };
 
 export const LOAD_NAME: Record<PowerLoadId, string> = {
@@ -216,6 +216,7 @@ export const SITE_TAG_NAME: Record<string, string> = {
   'site:noSignal': '无信号',
   'site:elevated': '高处',
   'site:cramped': '狭窄',
+  'site:drafty': '漏风',
 };
 
 registerTree('name', {

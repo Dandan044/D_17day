@@ -123,10 +123,22 @@ export const CONDITIONS: ConditionDef[] = [
     medsCure: 3,
   },
   {
-    id: 'hypothermia',
-    name: '失温',
-    desc: '你已经不觉得冷了，手指开始不听话。这是最危险的阶段。',
-    daily: { hp: -9, stamina: -16, sanity: -3 },
+    id: 'hypothermiaMild',
+    name: '低温症（轻）',
+    desc: '手指发僵，说话有点含糊。屋里再暖一点就会好。',
+    daily: { stamina: -6, sanity: -1 },
+  },
+  {
+    id: 'hypothermiaMod',
+    name: '低温症（中）',
+    desc: '牙齿对不上，穿衣服要试两次。药没用，得把炉子烧起来。',
+    daily: { stamina: -12, sanity: -2 },
+  },
+  {
+    id: 'hypothermiaSevere',
+    name: '低温症（重）',
+    desc: '你已经不觉得冷了。这是最危险的阶段。明天屋里若还低于生存线，就过不去这一夜。',
+    daily: { stamina: -18, sanity: -4 },
   },
   {
     id: 'radiationSickness',

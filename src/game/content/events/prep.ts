@@ -276,6 +276,7 @@ beat({
     weight: 6,
     once: true,
     require: NUC,
+    forbid: { any: ['hasIodine'] },
     variants: [
       {
         id: 'pharmacy',
@@ -288,7 +289,7 @@ beat({
             requires: { res: { cash: 900 } },
             effect: {
               res: { cash: -900, meds: 1 },
-              setFlags: ['flag:iodine'],
+              setFlags: ['flag:iodine', 'flag:iodineStock2'],
 
               tone: 'neutral',
             },
@@ -299,7 +300,7 @@ beat({
             requires: { res: { cash: 450 } },
             effect: {
               res: { cash: -450 },
-              setFlags: ['flag:iodine'],
+              setFlags: ['flag:iodine', 'flag:iodineStock1'],
 
               tone: 'neutral',
             },

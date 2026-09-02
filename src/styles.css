@@ -299,6 +299,73 @@
   .anim-flash {
     animation: seven-flash 900ms ease-out both;
   }
+  .thermo-range {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 16px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  .thermo-range::-webkit-slider-runnable-track {
+    height: 8px;
+    background: transparent;
+  }
+  .thermo-range::-moz-range-track {
+    height: 8px;
+    background: var(--color-ink);
+    border: 1px solid var(--color-line2);
+    border-radius: 1px;
+  }
+  .thermo-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -2px;
+    border: 1px solid var(--color-ink);
+    border-radius: 1px;
+    background: var(--color-amberhi);
+    box-shadow: 0 0 0 1px var(--color-amberdim);
+  }
+  .thermo-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--color-ink);
+    border-radius: 1px;
+    background: var(--color-amberhi);
+  }
+  .thermo-range:disabled {
+    cursor: not-allowed;
+  }
+  .thermo-range:disabled::-webkit-slider-thumb {
+    background: var(--color-faint);
+    box-shadow: none;
+  }
+  .thermo-range-elec,
+  .thermo-range-fuel {
+    pointer-events: none;
+  }
+  .thermo-range-elec::-webkit-slider-runnable-track,
+  .thermo-range-fuel::-webkit-slider-runnable-track {
+    height: 6px;
+    background: var(--color-ink);
+    border: 1px solid var(--color-line2);
+    border-radius: 1px;
+  }
+  .thermo-range-elec::-webkit-slider-thumb {
+    background: var(--color-infohi);
+    box-shadow: 0 0 0 1px #2a5a68;
+    width: 9px;
+    height: 9px;
+    margin-top: -2px;
+  }
+  .thermo-range-fuel::-webkit-slider-thumb {
+    background: var(--color-amber);
+    width: 9px;
+    height: 9px;
+    margin-top: -2px;
+  }
+
   .scroll-y {
     overflow-y: auto;
     overscroll-behavior: contain;

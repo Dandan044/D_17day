@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { COLD, THREAT_DESC, TIME } from '../game/balance';
+import { THREAT_DESC, TIME } from '../game/balance';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { LOCATION_BY_ID, RES_NAME, RES_UNIT } from '../game/content/locations';
 import { SKILL_NAME } from '../game/copy/names';
@@ -207,7 +207,17 @@ export function NightReportModal({ run }: { run: RunState }) {
           )}
           {r.indoor !== undefined && r.outdoor !== undefined && (
             <div>
-              {t('ui.night.outdoor', { out: r.outdoor, in: r.indoor, target: COLD.TARGET })}
+              {t('ui.night.outdoor', {
+                out: r.outdoor,
+                in: r.indoor,
+                est: r.previewIndoor ?? r.indoor,
+              })}
+              {r.fuelBudget !== undefined && r.fuelSpent !== undefined && r.fuelBudget > 0
+                ? ` · ${t('ui.night.fuel', { est: r.fuelBudget.toFixed(1), spent: r.fuelSpent.toFixed(1) })}`
+                : ''}
+              {r.kwhBudget !== undefined && r.kwhSpent !== undefined && r.kwhBudget > 0
+                ? ` · ${t('ui.night.kwh', { est: r.kwhBudget.toFixed(1), spent: r.kwhSpent.toFixed(1) })}`
+                : ''}
             </div>
           )}
         </div>
@@ -232,9 +242,6 @@ export function NightReportModal({ run }: { run: RunState }) {
                   {r.exposureAdded > 0 ? '+' : ''}
                   {r.exposureAdded}
                 </span>
-              )}
-              {!!r.exposureDecay && r.exposureDecay > 0 && (
-                <span className="ml-1 text-[11px] text-safehi">{t('ui.night.decay', { n: r.exposureDecay })}</span>
               )}
             </div>
           </div>

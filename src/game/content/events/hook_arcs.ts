@@ -6,7 +6,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
   beat({
     id: 'hook_arm_buy',
     kind: 'opportunity',
-    phase: ['prep', 'survival'],
+    phase: ['prep'],
     once: true,
     weight: 7,
 
@@ -71,7 +71,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
 
     choices: [
       ch('ready', { stats: { stamina: -6 }, setFlags: ['flag:bracedDoor'], schedule: [{ familyId: 'hook_follow_raid', waitFor: ['raid', 'raidFailed', 'raidRepelled'] }],  tone: 'neutral' }),
-      skip({ schedule: [{ familyId: 'hook_follow_raid', waitFor: 'raid' }] }),
+      skip({ schedule: [{ familyId: 'hook_follow_raid', waitFor: ['raid', 'raidFailed', 'raidRepelled'] }] }),
     ],
   }),
   beat({
