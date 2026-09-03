@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { TIME } from '../game/balance';
+import { BANK, TIME } from '../game/balance';
 import { DISASTERS, DISASTER_BY_ID } from '../game/content/disasters';
 import { SOURCE_NAME } from '../game/content/intel';
 import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locations';
@@ -14,8 +14,9 @@ import {
   buildOptions,
   maintenanceOptions,
   nextLevel,
+  nextWorkPortion,
 } from '../game/engine/construction';
-import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, iodineBoughtCount, remainingBuyLimit, waterRoom } from '../game/engine/economy';
+import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, CO_ALARM_PRICE, iodineBoughtCount, remainingBuyLimit, waterRoom } from '../game/engine/economy';
 import { effectiveModule, waterCapacity } from '../game/engine/tags';
 import { forecastAccuracy, WEATHER_NAME } from '../game/engine/world';
 import { useGame } from '../game/store';
@@ -118,12 +119,27 @@ export function ShelterPanel({ run }: { run: RunState }) {
                         <Bar value={(project.laborDone / Math.max(1, project.laborTotal)) * 100} tone="warn" />
                       )}
                       <p className="mt-2 text-[11.5px] leading-snug text-alarmhi">{m.buildPenaltyDesc}</p>
+                      {project.path === 'diy' && (() => {
+                        const portion = nextWorkPortion(run, id);
+                        if (!portion) return null;
+                        return (
+                          <p className="mt-1 text-[11px] text-dim">
+                            {t('ledger.build.workCost', { mat: portion.materials, parts: portion.parts })}
+                          </p>
+                        );
+                      })()}
                       <div className="mt-2 flex gap-2">
-                        {project.path === 'diy' && (
-                          <button className="btn px-3 py-1 text-[11.5px]" disabled={run.ap < 1} onClick={() => work(id)}>
-                            {t('ui.shelter.work')}
-                          </button>
-                        )}
+                        {project.path === 'diy' && (() => {
+                          const portion = nextWorkPortion(run, id);
+                          const lackMat = portion && run.res.materials < portion.materials;
+                          const lackParts = portion && run.res.parts < portion.parts;
+                          const blocked = run.ap < 1 || !!lackMat || !!lackParts;
+                          return (
+                            <button className="btn px-3 py-1 text-[11.5px]" disabled={blocked} onClick={() => work(id)}>
+                              {t('ui.shelter.work')}
+                            </button>
+                          );
+                        })()}
                         <button className="btn btn-danger px-3 py-1 text-[11.5px]" onClick={() => cancelProject(id)}>
                           {t('ui.shelter.cancel')}
                         </button>
@@ -668,7 +684,7 @@ export function LogPanel({ run }: { run: RunState }) {
 // ============================================================
 
 export function ShopModal({ run, locationId }: { run: RunState; locationId: string }) {
-  const { closeShop, buy, buyIodine } = useGame();
+  const { closeShop, buy, buyIodine, buyCoAlarm, withdraw } = useGame();
   const loc = LOCATIONS.find((l) => l.id === locationId);
   if (!loc) return null;
   const hasClerk = run.abilities.includes('clerk_network');
@@ -676,6 +692,8 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
   const sellable = Object.keys(loc.prices ?? {}) as ResourceId[];
   const iodineLeft = IODINE_BOX_LIMIT - iodineBoughtCount(run);
   const iodinePrice = Math.max(1, Math.round(IODINE_BOX_PRICE * run.world.priceIndex));
+  const hasCoAlarm = run.flags.includes('flag:coAlarm');
+  const coAlarmPrice = Math.max(1, Math.round(CO_ALARM_PRICE * run.world.priceIndex));
 
   return (
     <Modal
@@ -686,8 +704,63 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
       onClose={closeShop}
       width="max-w-2xl"
     >
-      {sellable.length === 0 && locationId !== 'pharmacy' && <Empty>{t('ui.shop.empty')}</Empty>}
+      {sellable.length === 0 && locationId !== 'pharmacy' && locationId !== 'hardware' && locationId !== 'bank' && (
+        <Empty>{t('ui.shop.empty')}</Empty>
+      )}
+      {locationId === 'bank' && (
+        <div className="panel flex flex-wrap items-center gap-3 p-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[13px] text-paper">{t('ui.shop.atmTitle')}</span>
+              <span className="num text-[11.5px] text-amberdim">
+                {t('ui.shop.savings', { n: Math.floor(run.savings) })}
+              </span>
+            </div>
+            <div className="text-[11px] leading-snug text-faint">{t('ui.shop.atmHint')}</div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              className="btn px-3 py-1 text-[11px]"
+              disabled={run.savings <= 0 || BANK.DAILY_LIMIT - run.atmUsed <= 0}
+              onClick={() => withdraw(locationId, Math.min(BANK.DAILY_LIMIT, run.savings))}
+            >
+              {t('ui.shop.withdraw', { n: Math.min(BANK.DAILY_LIMIT, Math.floor(run.savings)) })}
+            </button>
+            <span className="text-[10.5px] text-faint">
+              {run.savings <= 0
+                ? t('ui.shop.savingsEmpty')
+                : BANK.DAILY_LIMIT - run.atmUsed <= 0
+                  ? t('ui.shop.atmLimit')
+                  : t('ui.shop.atmLeft', { n: BANK.DAILY_LIMIT - run.atmUsed })}
+            </span>
+          </div>
+        </div>
+      )}
       <div className="space-y-2">
+        {locationId === 'hardware' && (
+          <div className="panel flex flex-wrap items-center gap-3 p-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[13px] text-paper">{t('ui.shop.coAlarm')}</span>
+                <span className="num text-[11.5px] text-amberdim">{t('ui.shop.coAlarmUnit', { n: coAlarmPrice })}</span>
+              </div>
+              <div className="text-[11px] leading-snug text-faint">{t('ui.shop.coAlarmHint')}</div>
+            </div>
+            <div>
+              {hasCoAlarm ? (
+                <span className="text-[11px] text-faint">{t('ui.shop.bought')}</span>
+              ) : (
+                <button
+                  className="btn px-2 py-1 text-[11px]"
+                  disabled={run.res.cash < coAlarmPrice}
+                  onClick={() => buyCoAlarm(locationId)}
+                >
+                  {t('ui.shop.buyOne')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {locationId === 'pharmacy' && (
           <div className="panel flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">

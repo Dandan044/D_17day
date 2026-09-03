@@ -10,8 +10,8 @@ import { t } from '../copy/t';
 import { MODULE_BY_ID, moduleSpec } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
-import type { BuildPath, ModuleId, Project, RunState } from '../types';
-import { addLog } from './effects';
+import type { BuildPath, ModuleId, ModuleLevelSpec, Project, RunState } from '../types';
+import { addCondition, addLog } from './effects';
 
 export interface BuildOption {
   path: BuildPath;
@@ -30,6 +30,42 @@ export interface BuildOption {
 
 function has(run: RunState, ability: string): boolean {
   return run.abilities.includes(ability);
+}
+
+/** 累计四舍五入差：做到 done 工时时已应付的建材/零件总量 */
+export function materialShare(total: number, done: number, laborTotal: number): number {
+  if (laborTotal <= 0 || total <= 0) return 0;
+  const clamped = Math.max(0, Math.min(done, laborTotal));
+  return Math.round((total * clamped) / laborTotal);
+}
+
+/** 本次从 fromDone 推进到 toDone 应扣的建材/零件 */
+export function portionForGain(
+  spec: Pick<ModuleLevelSpec, 'materials' | 'parts'>,
+  laborTotal: number,
+  fromDone: number,
+  gain: number,
+): { materials: number; parts: number } {
+  const toDone = Math.min(laborTotal, fromDone + Math.max(0, gain));
+  return {
+    materials: materialShare(spec.materials, toDone, laborTotal) - materialShare(spec.materials, fromDone, laborTotal),
+    parts: materialShare(spec.parts, toDone, laborTotal) - materialShare(spec.parts, fromDone, laborTotal),
+  };
+}
+
+/** 预估下一次投工会扣多少（按钮提示用） */
+export function nextWorkPortion(run: RunState, id: ModuleId): { materials: number; parts: number } | null {
+  const p = run.projects.find((x) => x.moduleId === id);
+  if (!p || p.path !== 'diy' || !p.payAsYouGo) return null;
+  if (p.laborDone >= p.laborTotal) return null;
+  const spec = moduleSpec(id, p.toLevel);
+  if (!spec) return null;
+  const gain = Math.min(diyLaborGain(run), p.laborTotal - p.laborDone);
+  return portionForGain(spec, p.laborTotal, p.laborDone, gain);
+}
+
+function diyLaborGain(run: RunState): number {
+  return 4 + Math.floor(run.skills.mechanics * 0.8) + Math.floor(run.skills.fitness * 0.5);
 }
 
 /** 目标等级：当前等级 + 1 */
@@ -168,8 +204,8 @@ export function startProject(run: RunState, id: ModuleId, path: BuildPath): Star
   };
 
   if (path === 'diy') {
-    run.res.materials -= opt.materials ?? 0;
-    run.res.parts -= opt.parts ?? 0;
+    // 开工不预扣：材料按次施工消耗。payAsYouGo 标记新规则。
+    project.payAsYouGo = true;
     addLog(run, t('ledger.build.startDiy', { name: MODULE_BY_ID[id].name, target, penalty: MODULE_BY_ID[id].buildPenaltyDesc }), 'neutral');
   } else if (path === 'hire') {
     if (run.ap < 1) return { ok: false, reason: t('ledger.build.needAp') };
@@ -197,32 +233,75 @@ export function investLabor(run: RunState, id: ModuleId, rng: Rng): { ok: boolea
   if (!p) return { ok: false, reason: t('ledger.build.noProject') };
   if (p.path !== 'diy') return { ok: false, reason: t('ledger.build.notDiy') };
   if (run.ap < 1) return { ok: false, reason: t('ledger.build.noAp') };
+  if (p.laborDone >= p.laborTotal) return { ok: false, reason: t('ledger.build.queued') };
+
+  const gain = diyLaborGain(run);
+  const remaining = p.laborTotal - p.laborDone;
+  const appliedGain = Math.min(gain, remaining);
+  const spec = moduleSpec(id, p.toLevel);
+  const payg = !!p.payAsYouGo;
+  let portion = { materials: 0, parts: 0 };
+  if (payg && spec) {
+    portion = portionForGain(spec, p.laborTotal, p.laborDone, appliedGain);
+    if (portion.materials <= 0 && portion.parts <= 0 && remaining > 0) {
+      // 四舍五入尾差已分光时，至少扣 1 建材（仍有工时要做）
+      portion.materials = Math.min(1, Math.max(0, spec.materials - materialShare(spec.materials, p.laborDone, p.laborTotal)));
+      if (portion.materials <= 0 && spec.parts > 0) {
+        portion.parts = Math.min(1, Math.max(0, spec.parts - materialShare(spec.parts, p.laborDone, p.laborTotal)));
+      }
+    }
+    if (run.res.materials < portion.materials) {
+      return { ok: false, reason: t('ledger.build.lackWorkMat', { n: Math.ceil(portion.materials - run.res.materials) }) };
+    }
+    if (run.res.parts < portion.parts) {
+      return { ok: false, reason: t('ledger.build.lackWorkParts', { n: Math.ceil(portion.parts - run.res.parts) }) };
+    }
+  }
 
   run.ap -= 1;
   run.stats.stamina = Math.max(0, run.stats.stamina - STAMINA.BUILD);
 
-  let gain = 4 + Math.floor(run.skills.mechanics * 0.8) + Math.floor(run.skills.fitness * 0.5);
-
-  const spec = moduleSpec(id, p.toLevel);
   if (spec?.skill) {
     const have = run.skills[spec.skill.id];
     if (have < spec.skill.level && !has(run, 'engineer_efficiency')) {
       const risk = Math.min(0.5, (spec.skill.level - have) * 0.16);
       if (rng.chance(risk)) {
-        const wasted = Math.max(1, Math.round((spec.materials ?? 4) * 0.2));
-        run.res.materials = Math.max(0, run.res.materials - wasted);
-        gain = Math.max(1, Math.floor(gain * 0.3));
-        if (rng.chance(0.25)) {
-          run.stats.hp = Math.max(1, run.stats.hp - rng.int(4, 12));
-          return { ok: true, note: t('ledger.build.failHurt', { n: wasted }) };
+        if (payg) {
+          run.res.materials -= portion.materials;
+          run.res.parts -= portion.parts;
         }
-        return { ok: true, note: t('ledger.build.failWaste', { n: wasted }) };
+        // 旧存档：已预扣全额，失败不再从库存「浪费」
+        if (rng.chance(0.25)) {
+          const alreadyHurt =
+            run.conditions.includes('wound') ||
+            run.conditions.includes('woundInfection') ||
+            run.conditions.includes('sepsis');
+          if (!alreadyHurt) addCondition(run, 'wound');
+          addLog(run, t('ledger.build.failHurt'), 'bad');
+          return { ok: true, note: t('ledger.build.failHurt') };
+        }
+        const note = t('ledger.build.failWaste', { mat: portion.materials, parts: portion.parts });
+        addLog(run, note, 'bad');
+        return { ok: true, note };
       }
     }
   }
 
-  p.laborDone += gain;
-  return { ok: true, note: t('ledger.build.labor', { gain, done: p.laborDone, total: p.laborTotal }) };
+  if (payg) {
+    run.res.materials -= portion.materials;
+    run.res.parts -= portion.parts;
+  }
+  p.laborDone += appliedGain;
+  return {
+    ok: true,
+    note: t('ledger.build.labor', {
+      gain: appliedGain,
+      done: p.laborDone,
+      total: p.laborTotal,
+      mat: portion.materials,
+      parts: portion.parts,
+    }),
+  };
 }
 
 /** 每日结算：同伴自动投工、雇工与成品到货、完工判定 */
@@ -233,8 +312,24 @@ export function grantCompanionLabor(run: RunState): string[] {
   if (helpers.length > 0 && diyProjects.length > 0) {
     const perProject = Math.floor((helpers.length * AP.COMPANION_LABOR) / diyProjects.length);
     if (perProject > 0) {
-      for (const p of diyProjects) p.laborDone += perProject;
-      notes.push(t('ledger.build.companion', { n: perProject * diyProjects.length }));
+      let applied = 0;
+      let skipped = false;
+      for (const p of diyProjects) {
+        const spec = moduleSpec(p.moduleId, p.toLevel);
+        if (p.payAsYouGo && spec) {
+          const portion = portionForGain(spec, p.laborTotal, p.laborDone, perProject);
+          if (run.res.materials < portion.materials || run.res.parts < portion.parts) {
+            skipped = true;
+            continue;
+          }
+          run.res.materials -= portion.materials;
+          run.res.parts -= portion.parts;
+        }
+        p.laborDone += perProject;
+        applied += perProject;
+      }
+      if (applied > 0) notes.push(t('ledger.build.companion', { n: applied }));
+      if (skipped) notes.push(t('ledger.build.companionSkip'));
     }
   }
   return notes;
@@ -301,11 +396,19 @@ export function cancelProject(run: RunState, id: ModuleId): void {
   if (!p) return;
   run.projects = run.projects.filter((x) => x !== p);
   if (p.path === 'diy') {
-    // 退回一部分材料
     const spec = moduleSpec(p.moduleId, p.toLevel);
     if (spec) {
-      run.res.materials += Math.floor(spec.materials * 0.5);
-      run.res.parts += Math.floor(spec.parts * 0.5);
+      if (p.payAsYouGo) {
+        // 只退已成功投入部分的一半
+        const spentMat = materialShare(spec.materials, p.laborDone, p.laborTotal);
+        const spentParts = materialShare(spec.parts, p.laborDone, p.laborTotal);
+        run.res.materials += Math.floor(spentMat * 0.5);
+        run.res.parts += Math.floor(spentParts * 0.5);
+      } else {
+        // 旧存档：开工已预扣全额，按原规则退一半
+        run.res.materials += Math.floor(spec.materials * 0.5);
+        run.res.parts += Math.floor(spec.parts * 0.5);
+      }
     }
     addLog(run, t('ledger.build.cancel', { name: MODULE_BY_ID[id].name }), 'bad');
   }

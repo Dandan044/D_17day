@@ -2,7 +2,7 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { CAPS, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, WATER_NEED, WEAR } from '../balance';
+import { BANK, CAPS, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, TIME, WATER_NEED, WEAR } from '../balance';
 import { t } from '../copy/t';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
@@ -289,10 +289,10 @@ export function consumeDaily(
   if (need.recycling) {
     if (!run.flags.includes('flag:waterRecyclingToday')) run.flags.push('flag:waterRecyclingToday');
     const mult = FILTER.RECYCLE_NEED[filterLv] ?? 1;
+    notes.push(ledger(t('ledger.ration.recycle', { mult: mult.toFixed(2) })));
     notes.push(
       ledger(
-        t('ledger.ration.recycle', {
-          mult: mult.toFixed(2),
+        t('ledger.ration.recycleUse', {
           used: waterUsed.toFixed(1),
           need: need.water.toFixed(1),
           left: waterLeft,
@@ -567,7 +567,9 @@ export function purchase(
   const st = run.locations.find((l) => l.id === locationId);
   const shelf = st?.stock ?? loc.stock;
   const stockFactor = Math.max(0, shelf / 100);
-  const available = Math.floor(want * Math.max(0.15, stockFactor));
+  // 货架仍有货时就保底能买到 1 件：否则低库存时 UI 亮着 +1 按钮，
+  // 引擎却算出 floor(1 × 库存系数) = 0 而报「货架空了」，三方数据不一致
+  const available = shelf > 0 ? Math.max(1, Math.floor(want * Math.max(0.15, stockFactor))) : 0;
   if (available <= 0) return { ok: false, reason: t('ledger.buy.empty'), spent: 0, got: 0 };
 
   let price = unitPrice(run, res, locationId);
@@ -600,6 +602,23 @@ export function purchase(
 export const IODINE_BOX_PRICE = 220;
 export const IODINE_BOX_LIMIT = 2;
 
+/**
+ * 准备期银行取款：存款 → 手持现金。
+ * 只在崩溃日前可用（崩溃后 ATM 断电，只能去大厅里翻现金），每日受 ATM 限额约束。
+ */
+export function withdrawCash(run: RunState, amount: number): { ok: boolean; reason?: string; got: number } {
+  if (run.day >= TIME.COLLAPSE_DAY) return { ok: false, reason: t('ledger.atm.down'), got: 0 };
+  const left = BANK.DAILY_LIMIT - run.atmUsed;
+  if (left <= 0) return { ok: false, reason: t('ledger.atm.limit'), got: 0 };
+  if (run.savings <= 0) return { ok: false, reason: t('ledger.atm.noSavings'), got: 0 };
+  const got = Math.max(0, Math.min(Math.floor(amount), left, Math.floor(run.savings)));
+  if (got <= 0) return { ok: false, reason: t('ledger.atm.limit'), got: 0 };
+  run.savings = Math.round((run.savings - got) * 10) / 10;
+  run.res.cash = Math.round(run.res.cash + got);
+  run.atmUsed += got;
+  return { ok: true, got };
+}
+
 export { iodineStockCount as iodineBoughtCount };
 
 export function buyIodine(run: RunState, locationId: string): { ok: boolean; reason?: string; spent: number } {
@@ -615,6 +634,19 @@ export function buyIodine(run: RunState, locationId: string): { ok: boolean; rea
     run.flags.push('flag:iodineStock2');
   }
   grantIodine(run);
+  return { ok: true, spent: price };
+}
+
+/** 一氧化碳报警器：准备期五金店货架特卖，买下只写 flag，不占资源格。 */
+export const CO_ALARM_PRICE = 68;
+
+export function buyCoAlarm(run: RunState, locationId: string): { ok: boolean; reason?: string; spent: number } {
+  if (locationId !== 'hardware') return { ok: false, reason: t('ledger.buy.coAlarmShop'), spent: 0 };
+  if (run.flags.includes('flag:coAlarm')) return { ok: false, reason: t('ledger.buy.coAlarmGone'), spent: 0 };
+  const price = Math.max(1, Math.round(CO_ALARM_PRICE * run.world.priceIndex));
+  if (run.res.cash < price) return { ok: false, reason: t('ledger.buy.noCash'), spent: 0 };
+  run.res.cash -= price;
+  run.flags.push('flag:coAlarm');
   return { ok: true, spent: price };
 }
 

@@ -11,11 +11,11 @@ import { FAMILY_BY_ID } from '../src/game/content/events';
 import { LOCATION_BY_ID } from '../src/game/content/locations';
 import { SITE_BY_ID } from '../src/game/content/sites';
 import { COLD, POWER, TIME } from '../src/game/balance';
-import { applyProduction, buyIodine, consumeDaily, dailyNeeds, travelCost, type ConsumeResult } from '../src/game/engine/economy';
-import { applyEffect } from '../src/game/engine/effects';
+import { applyProduction, buyIodine, buyCoAlarm, consumeDaily, dailyNeeds, travelCost, type ConsumeResult } from '../src/game/engine/economy';
+import { applyEffect, sequelWaitLabel } from '../src/game/engine/effects';
 import { applyHeatWants, capHeat, heatPlan, leakRate, thermalSink } from '../src/game/engine/climate';
-import { resolveRaid } from '../src/game/engine/exposure';
-import { startProject, grantCompanionLabor, completeReadyProjects } from '../src/game/engine/construction';
+import { pickPressureFamily, resolveRaid } from '../src/game/engine/exposure';
+import { startProject, grantCompanionLabor, completeReadyProjects, investLabor } from '../src/game/engine/construction';
 import { chooseSite, createRun, endDay, resolveChoice } from '../src/game/engine/run';
 import { computePower, deriveFacts } from '../src/game/engine/tags';
 import { settleBattery, batteryCapacity, tonightHeat } from '../src/game/engine/power';
@@ -26,6 +26,8 @@ import { applyOnset } from '../src/game/engine/world';
 import { pruneOrphanQueue, rebuildSettlement } from '../src/game/store';
 import { makeRng, type Rng } from '../src/game/rng';
 import type { MetaState, ModuleId, RunState, SiteId } from '../src/game/types';
+import { HOOK_NAME } from '../src/game/copy/names';
+import '../src/game/copy';
 
 const yesRng = (): Rng => {
   const r = makeRng(1, 0);
@@ -307,7 +309,7 @@ console.log('\n  审计修复  蓄电消耗 / 饥饿双扣 / 没下雨去重 / �
     run.res.water = 40;
     run.res.foodStaple = 40;
     const notes = [...applyProduction(run), ...consumeDaily(run, makeRng(2, 0), 'story').notes];
-    const rainLines = notes.filter((n) => n.text.includes('没下雨'));
+    const rainLines = notes.filter((n) => n.text.includes('没有下雨'));
     check('旱夜「没下雨」只出现一次', rainLines.length === 1, rainLines.map((n) => n.text).join(' | '));
   }
 
@@ -482,6 +484,42 @@ console.log('\n  高暴露：最后一次登记只演一次 / 强制插入认冷
       withForced.picks.length >= 2,
       withForced.picks.map((p) => `${p.familyId}/${p.variantId}`).join(', '),
     );
+  }
+
+  // frozen_crowd 拆分 + 救助-袭击联动替换
+  {
+    const run = mkNuke();
+    run.world.weather = 'blizzard';
+    run.world.exposure = 95;
+    check('寒冷夜 tier4 分流到 frozen_crowd', pickPressureFamily(run, yesRng()) === 'frozen_crowd');
+  }
+  {
+    const run = mkNuke();
+    run.world.exposure = 95;
+    check('非寒冷夜 tier4 仍是 raid_attempt', pickPressureFamily(run, yesRng()) === 'raid_attempt');
+  }
+  {
+    const run = mkNuke();
+    run.flags.push('flag:shelteredInBlizzard');
+    const { picks } = selectEvents(run, makeRng(8, 0), 2, ['raid_attempt']);
+    check(
+      '有援助钩子时袭击替换为联动剧情',
+      picks.some((p) => p.familyId === 'raid_aided_repel' && p.variantId === 'shelter_crowd'),
+      picks.map((p) => `${p.familyId}/${p.variantId}`).join(','),
+    );
+  }
+  {
+    const run = mkNuke();
+    const { picks } = selectEvents(run, makeRng(9, 0), 2, ['raid_attempt']);
+    check('无援助钩子时袭击照常入队', picks.some((p) => p.familyId === 'raid_attempt'), picks.map((p) => p.familyId).join(','));
+  }
+  {
+    const run = mkNuke();
+    run.flags.push('flag:shelteredInBlizzard');
+    run.res.materials = 10;
+    run.queue = [{ familyId: 'raid_aided_repel', variantId: 'shelter_crowd' }];
+    resolveChoice(run, 'raid_aided_repel', 'shelter_crowd', 'help');
+    check('联动结算消耗援助钩子', !run.flags.includes('flag:shelteredInBlizzard'), run.flags.filter((f) => f.includes('shelter')).join(','));
   }
 }
 
@@ -821,7 +859,7 @@ console.log('\n  结算撒谎 / 温控 / 一氧化碳');
   rain.world.weather = 'clear';
   const afterRain = consumeDaily(rain, makeRng(2, 0), 'story', undefined, 'rain');
   const afterText = afterRain.notes.map((n) => n.text).join('\n');
-  check('接雨之夜不写没下雨回用', !afterText.includes('没下雨'), afterText);
+  check('接雨之夜不写没下雨回用', !afterText.includes('没有下雨') && !afterText.includes('没下雨'), afterText);
   check('接雨笔记是好消息', prodNotes.some((n) => n.text.includes('接雨雪') && n.tone === 'good'));
 
   const cap = createRun({ seed: 9103, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
@@ -946,6 +984,167 @@ console.log('\n  结算撒谎 / 温控 / 一氧化碳');
   );
   const died = resolveChoice(drown, 'env_co_drowning', 'main', 'sleep');
   check('沉浸选项打出六十八块', died.died === true && drown.endingId === 'death_co', `died=${died.died} ending=${drown.endingId}`);
+}
+
+// ============================================================
+console.log('\n  内容与建造修复：报警器货架 / 续篇汉化 / 回用两行 / DIY按次扣料 / 伤口 / 停水链');
+// ============================================================
+{
+  const run = createRun({ seed: 3301, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  run.day = 2;
+  run.phase = 'prep';
+  run.res.cash = 5000;
+  const badShop = buyCoAlarm(run, 'pharmacy');
+  check('药店不能买一氧化碳报警器', !badShop.ok);
+  const bought = buyCoAlarm(run, 'hardware');
+  check('五金店能买一氧化碳报警器', bought.ok, bought.reason);
+  check('买下写 flag:coAlarm', run.flags.includes('flag:coAlarm'));
+  const again = buyCoAlarm(run, 'hardware');
+  check('已有报警器不能再买', !again.ok);
+  const prepCo = FAMILY_BY_ID['prep_coalarm']!;
+  const whyCo = isEligible(prepCo, run, deriveFacts(run));
+  check('已购时 prep_coalarm 不合格', whyCo !== null, whyCo ?? '仍可触发');
+}
+
+{
+  const raidLabel = sequelWaitLabel(['raid', 'raidFailed', 'raidRepelled']);
+  check('袭击三元组只显示遭遇袭击', raidLabel === '遭遇袭击', raidLabel);
+  const haulLabel = sequelWaitLabel('takeHaul');
+  check('takeHaul 显示中文', haulLabel === '带回战利品', haulLabel);
+  check('续篇标签不含内部 ID', !raidLabel.includes('raid') && !haulLabel.includes('takeHaul'));
+  check('HOOK_NAME 覆盖 takeHaul', HOOK_NAME.takeHaul === '带回战利品');
+}
+
+{
+  const run = createRun({ seed: 3302, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  run.day = 12;
+  run.phase = 'survival';
+  run.modules.filter = 1;
+  run.modules.cistern = 1;
+  run.wear.filterLife = 30;
+  run.world.weather = 'clear';
+  run.res.water = 30;
+  run.res.foodStaple = 40;
+  run.ration = 'normal';
+  run.waterUse = 'normal';
+  const consume = consumeDaily(run, makeRng(3302, 0), 'story');
+  const texts = consume.notes.map((n) => n.text);
+  const recycleIdx = texts.findIndex((x) => x.includes('没有下雨'));
+  check('回用账本有「没有下雨」行', recycleIdx >= 0, texts.join(' | '));
+  check(
+    '回用饮水单独一行',
+    recycleIdx >= 0 && texts[recycleIdx + 1]?.startsWith('饮水 −'),
+    texts.slice(recycleIdx, recycleIdx + 2).join(' | '),
+  );
+}
+
+{
+  const run = createRun({ seed: 3303, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  run.day = 12;
+  run.phase = 'survival';
+  run.res.materials = 10;
+  run.res.parts = 2;
+  run.res.cash = 0;
+  run.ap = 3;
+  run.skills.mechanics = 0;
+  run.skills.fitness = 0;
+  const beforeMat = run.res.materials;
+  const beforeParts = run.res.parts;
+  const started = startProject(run, 'fortify', 'diy');
+  check('DIY 能开工', started.ok, started.reason);
+  check('开工不预扣建材', run.res.materials === beforeMat, `${beforeMat} -> ${run.res.materials}`);
+  check('开工不预扣零件', run.res.parts === beforeParts, `${beforeParts} -> ${run.res.parts}`);
+  check('新工程带 payAsYouGo', run.projects[0]?.payAsYouGo === true);
+
+  // 低技能第一次施工：强制成功（不掷失败）
+  const noFailRng = (): Rng => {
+    const r = makeRng(3303, 0);
+    return { ...r, chance: () => false };
+  };
+  const work1 = investLabor(run, 'fortify', noFailRng());
+  check('第一次施工成功', work1.ok, work1.reason);
+  check('第一次施工扣了材料', run.res.materials < beforeMat || run.res.parts < beforeParts, `mat=${run.res.materials} parts=${run.res.parts}`);
+  check('第一次施工推进了工时', (run.projects[0]?.laborDone ?? 0) > 0);
+  check('第一次施工未完工', (run.projects[0]?.laborDone ?? 0) < (run.projects[0]?.laborTotal ?? 0));
+
+  // 清空库存后不能再施工
+  run.res.materials = 0;
+  run.res.parts = 0;
+  run.ap = 2;
+  const blocked = investLabor(run, 'fortify', noFailRng());
+  check('库存不足不能施工', !blocked.ok, blocked.reason);
+  check('库存不足不扣 AP', run.ap === 2, `ap=${run.ap}`);
+}
+
+{
+  // 技能不足 + 必失败 RNG → 扣料、无工时、得伤口
+  const run = createRun({ seed: 3304, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  run.day = 12;
+  run.phase = 'survival';
+  run.modules.fortify = 1;
+  run.res.materials = 40;
+  run.res.parts = 20;
+  run.ap = 3;
+  run.skills.mechanics = 0;
+  run.skills.fitness = 0;
+  const hpBefore = run.stats.hp;
+  startProject(run, 'fortify', 'diy'); // 升到 2 级，需要 mechanics 2
+  const matBefore = run.res.materials;
+  const laborBefore = run.projects[0]!.laborDone;
+  const fail = investLabor(run, 'fortify', yesRng());
+  check('技能不足失败仍返回 ok', fail.ok, fail.reason);
+  check('失败扣了材料', run.res.materials < matBefore, `${matBefore} -> ${run.res.materials}`);
+  check('失败不加工时', run.projects[0]!.laborDone === laborBefore, `${laborBefore} -> ${run.projects[0]!.laborDone}`);
+  check('划伤得到伤口', run.conditions.includes('wound'), run.conditions.join(','));
+  check('划伤当晚不直接扣 HP', run.stats.hp === hpBefore, `${hpBefore} -> ${run.stats.hp}`);
+  check('失败文案提到伤口或浪费', !!(fail.note && (fail.note.includes('伤口') || fail.note.includes('浪费'))), fail.note);
+}
+
+{
+  const run = createRun({ seed: 3305, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  run.day = 15;
+  run.phase = 'survival';
+  run.res.cash = 500;
+  run.res.water = 10;
+  run.stats.sanity = 80;
+  // 模拟第 2 拍「不买」
+  const notes = applyEffect(
+    run,
+    {
+      stats: { sanity: -2 },
+      setFlags: ['flag:refusedStairWater'],
+    },
+    makeRng(3305, 0),
+  );
+  void notes;
+  check('拒绝买水写拒绝旗标', run.flags.includes('flag:refusedStairWater'));
+  check('拒绝买水不排程腹泻续篇', !run.pending.some((p) => p.familyId === 'nuke_chain_nopressure_3'), run.pending.map((p) => p.familyId).join(','));
+
+  // 对照：买了才会排程
+  const buyRun = createRun({ seed: 3306, classId: 'clerk', packId: 'none', difficulty: 'story', metaPerks: [] });
+  chooseSite(buyRun, 'apartment');
+  buyRun.day = 15;
+  buyRun.phase = 'survival';
+  buyRun.res.cash = 500;
+  applyEffect(
+    buyRun,
+    {
+      res: { cash: -100, water: 8 },
+      setFlags: ['flag:boughtStairWater'],
+      schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 3, require: { all: ['flag:boughtStairWater'] } }],
+    },
+    makeRng(3306, 0),
+  );
+  check(
+    '买了上门水会排程腹泻续篇',
+    buyRun.pending.some((p) => p.familyId === 'nuke_chain_nopressure_3'),
+    buyRun.pending.map((p) => p.familyId).join(','),
+  );
 }
 
 console.log(`\n  结果：${pass} 通过 · ${fail} 失败\n`);

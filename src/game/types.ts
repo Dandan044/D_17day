@@ -41,6 +41,7 @@ export type ConditionId =
   | 'jaundice' // 黄疸
   | 'flu' // 流感
   | 'pneumonia' // 肺炎
+  | 'wound' // 伤口（未感染）
   | 'woundInfection' // 伤口感染
   | 'sepsis' // 败血症
   | 'fracture' // 骨折
@@ -249,6 +250,7 @@ export interface Effect {
   world?: Partial<{
     lawOrder: number;
     scarcity: number;
+    /** 待开发：社区系统未接入玩法；数值仅由事件记录，暂无结算意义 */
     neighborhood: number;
     exposure: number;
     airPollution: number;
@@ -425,6 +427,11 @@ export interface Project {
   /** buy 路径是否已付款 */
   paid?: boolean;
   startedDay: number;
+  /**
+   * 新 DIY：开工不预扣，按次投工扣料。
+   * 旧存档缺此字段 = 开工时已预扣全额，成功施工不再扣、失败也不再从库存「浪费」。
+   */
+  payAsYouGo?: boolean;
 }
 
 // ============================================================
@@ -534,6 +541,8 @@ export interface WorldState {
   queuedWeather?: WeatherId;
   temperature: number;
   season: 'autumn' | 'winter';
+  /** 核冬天锚点温度（严冬期首日骤降后的室外温），仅 nuclear 局存在 */
+  nwStartTemp?: number;
   /** 以下三项均为"越高越糟" */
   airPollution: number;
   radiation: number;
@@ -542,6 +551,7 @@ export interface WorldState {
   powerGrid: 'on' | 'rolling' | 'off';
   lawOrder: number;
   scarcity: number;
+  /** 待开发：社区系统未接入玩法；数值仅由事件记录，暂无结算意义 */
   neighborhood: number;
   /** 暴露度热度条：累积值，决定"谁来找你" */
   exposure: number;
@@ -641,6 +651,10 @@ export interface RunState {
   boughtToday: Partial<Record<ResourceId, number>>;
   /** 今天已经跑过的地点，重复进入不再消耗行动点 */
   visitedToday: string[];
+  /** 银行存款：只在准备期可经 ATM 取出，每日限额 */
+  savings: number;
+  /** 今日已从 ATM 取走的金额 */
+  atmUsed: number;
   hasVehicle: boolean;
 
   world: WorldState;

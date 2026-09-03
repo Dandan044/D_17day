@@ -96,6 +96,15 @@ export const CONDITIONS: ConditionDef[] = [
     selfHeal: 0.03,
   },
   {
+    id: 'wound',
+    name: '伤口',
+    desc: '手背裂开一道口子。不深，但在脏地方干活，过夜会渗。',
+    daily: { hp: -2, stamina: -4 },
+    medsCure: 1,
+    selfHeal: 0.22,
+    worsen: { into: 'woundInfection', chance: 0.22, afterDays: 2 },
+  },
+  {
     id: 'woundInfection',
     name: '伤口感染',
     desc: '边缘红肿发烫，有一道红线正沿着手臂往上走。你知道那条线意味着什么。',

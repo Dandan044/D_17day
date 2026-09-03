@@ -7,6 +7,7 @@ import './med_progress';
 import './nuke_apt_chains';
 import './nuke_arcs';
 import './nuke_build_checks';
+import './nuclear_winter';
 import './prep';
 import './prep_slice';
 import './stat_arcs';

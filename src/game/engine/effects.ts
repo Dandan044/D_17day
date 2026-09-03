@@ -21,18 +21,34 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 export function clampResources(run: RunState): void {
   const waterCap = waterCapacity(run);
-  run.res.water = clamp(run.res.water, 0, waterCap);
+  // 所有资源结算后统一保留一位小数：百分比类效果（掠夺、腐坏等）的
+  // 浮点误差会累积成十几位小数，这里做统一兜底
+  run.res.water = Math.round(clamp(run.res.water, 0, waterCap) * 10) / 10;
   for (const k of Object.keys(run.res) as ResourceId[]) {
     if (k === 'water') continue;
-    run.res[k] = Math.max(0, run.res[k]);
+    if (k === 'cash') {
+      run.res[k] = Math.round(run.res[k]);
+      continue;
+    }
+    run.res[k] = Math.max(0, Math.round(run.res[k] * 10) / 10);
   }
-  run.res.cash = Math.round(run.res.cash);
 }
 
 function waitForLabel(hooks: ActionHook | ActionHook[] | undefined): string {
   if (!hooks) return '';
   const list = Array.isArray(hooks) ? hooks : [hooks];
-  return list.map((h) => HOOK_NAME[h] ?? h).join(' / ');
+  const labels: string[] = [];
+  for (const h of list) {
+    const name = HOOK_NAME[h];
+    if (!name) continue;
+    if (!labels.includes(name)) labels.push(name);
+  }
+  return labels.join(' / ');
+}
+
+/** 给校验脚本用：把 waitFor 数组收成玩家可见标签 */
+export function sequelWaitLabel(hooks: ActionHook | ActionHook[] | undefined): string {
+  return waitForLabel(hooks);
 }
 
 export function addLog(run: RunState, text: string, tone: 'good' | 'bad' | 'neutral' | 'grim' = 'neutral'): void {

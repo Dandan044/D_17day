@@ -5,11 +5,12 @@
  * 事件只读标签，标签只读这里，所以气温曲线一改，整个事件池的语气会跟着变。
  */
 
-import { EXPOSURE, TIME, threatOfDay } from '../balance';
+import { EXPOSURE, COLD, NUCLEAR_WINTER, PRICE, TIME, threatOfDay } from '../balance';
 import { WEATHER_DESC, WEATHER_NAME } from '../copy/names';
 import { DISASTER_BY_ID } from '../content/disasters';
 import type { Rng } from '../rng';
 import type { DisasterId, FactionId, RunState, WeatherId, WorldState } from '../types';
+import { comfortTemp, insulateLevel, leakRate } from './climate';
 import { activateIodineProtection, effectiveModule } from './tags';
 
 export { WEATHER_DESC, WEATHER_NAME };
@@ -68,6 +69,7 @@ export function createWorld(disaster: DisasterId, rng: Rng): WorldState {
     exposure: 0,
     factions,
     factionStance,
+    // 初始物价为 1，通胀靠每日 ×1.35 复利推高（难度调整）
     priceIndex: 1,
   };
 }
@@ -113,6 +115,33 @@ export function tickClimate(run: RunState, rng: Rng, forDay?: number): void {
   if (day < TIME.COLLAPSE_DAY) {
     w.temperature = Math.round(baseTemperature(day) + WEATHER_TEMP[w.weather] + rng.float(-1.5, 1.5));
     w.season = 'autumn';
+  } else if (w.disaster === 'nuclear' && threat >= NUCLEAR_WINTER.THREAT_PHASE) {
+    // 核冬天：骤降锚定在「昨日实测温度 − X」，X 触发当日按漏热率/目标室温/舒适线
+    // 动态计算，分支落点精确；此后沿曲线线性下沉到 FLOOR，天气只剩残余影响。
+    const startDay = TIME.COLLAPSE_DAY + (NUCLEAR_WINTER.THREAT_PHASE - 1) * TIME.WEEK;
+    if (w.nwStartTemp === undefined) {
+      // 骤降当日：精确等于「昨日实测温度 − X」，不掺天气噪声，
+      // 保证 室温 = 目标温度 − k·X 的分支判定在任何天气下都成立
+      const k = leakRate(run);
+      const targetIndoor = Math.min(COLD.MAX_INDOOR, run.heatTarget ?? comfortTemp(run));
+      const branchTarget =
+        insulateLevel(run) >= NUCLEAR_WINTER.PREPARED_LEVEL
+          ? comfortTemp(run) + NUCLEAR_WINTER.MARGIN_SAFE
+          : comfortTemp(run) - NUCLEAR_WINTER.MARGIN_COLD;
+      const x = Math.max(
+        NUCLEAR_WINTER.DROP_MIN,
+        Math.min(NUCLEAR_WINTER.DROP_MAX, Math.round((targetIndoor - branchTarget) / k)),
+      );
+      w.nwStartTemp = Math.round(w.temperature - x);
+      w.temperature = w.nwStartTemp;
+    } else {
+      const dailySink = (w.nwStartTemp - NUCLEAR_WINTER.FLOOR) / NUCLEAR_WINTER.RAMP_DAYS;
+      const curve = w.nwStartTemp - dailySink * (day - startDay);
+      w.temperature = Math.round(
+        Math.max(NUCLEAR_WINTER.FLOOR, curve + WEATHER_TEMP[w.weather] * NUCLEAR_WINTER.WEATHER_WEIGHT + rng.float(-1, 1)),
+      );
+    }
+    w.season = 'winter';
   } else {
     const bias = def.tempBias * Math.min(1, threat / 3);
     w.temperature = Math.round(baseTemperature(day) + bias + WEATHER_TEMP[w.weather] + rng.float(-2, 2));
@@ -132,9 +161,9 @@ export function decayExposure(run: RunState): number {
 /** 准备期的物价/秩序（不含天候，天候在抽完次日事件后再掷） */
 export function tickPrepEconomy(run: RunState, rng: Rng): void {
   const w = run.world;
-  const daysLeft = TIME.PREP_DAYS - run.day + 1;
 
-  w.priceIndex *= 1 + rng.float(0.16, 0.4) * (daysLeft <= 3 ? 1.35 : 1);
+  // 通胀改为确定性复利：当日物价 = 昨日 × 1.35，囤货必须趁早
+  w.priceIndex *= PRICE.DAILY_MULT;
   w.lawOrder = clamp(w.lawOrder - rng.float(2.5, 6), 0, 100);
   w.scarcity = clamp(w.scarcity + rng.float(6, 13), 0, 100);
 

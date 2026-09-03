@@ -182,15 +182,21 @@ export const DIFFICULTY_NAME: Record<Difficulty, string> = {
   harsh: '严苛',
 };
 
-export const HOOK_NAME: Partial<Record<ActionHook, string>> = {
+export const HOOK_NAME: Record<ActionHook, string> = {
   endDay: '过完这一天',
+  collapse: '灾难降临',
+  threatUp: '威胁升级',
   scavenge: '外出搜刮',
+  scavengeDay: '白天搜刮',
   scavengeNight: '夜间搜刮',
-  buy: '采购',
+  takeHaul: '带回战利品',
   visitShop: '进店',
+  buy: '采购',
   rest: '休息',
   build: '施工',
   work: '动手干活',
+  cancelProject: '停工',
+  salvage: '拆解回收',
   maintain: '保养',
   treat: '治疗',
   verifyIntel: '核实情报',
@@ -200,6 +206,19 @@ export const HOOK_NAME: Partial<Record<ActionHook, string>> = {
   setPowerPriority: '改供电优先级',
   setHeatMode: '改取暖',
   raid: '遭遇袭击',
+  raidRepelled: '遭遇袭击',
+  raidFailed: '遭遇袭击',
+  choice: '做出选择',
+  foodLow: '口粮见底',
+  waterLow: '饮水见底',
+  hpLow: '生命过低',
+  sanityLow: '理智过低',
+  staminaLow: '体力过低',
+  humanityLow: '人性过低',
+  repLow: '声望过低',
+  lightsOff: '关灯',
+  filterExpired: '滤芯耗尽',
+  exposureUp: '暴露升高',
 };
 
 export const SITE_TAG_NAME: Record<string, string> = {

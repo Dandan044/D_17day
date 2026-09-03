@@ -229,6 +229,7 @@ beat({
     phase: ['prep'],
     weight: 7,
     once: true,
+    forbid: { any: ['flag:coAlarm'] },
     variants: [
       {
         id: 'hardware_tip',

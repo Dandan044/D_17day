@@ -28,6 +28,7 @@ export const PERKS: PerkDef[] = [
 
   // ============ 人际系 ============
   { id: 'perk_haggler', tree: 'social', tier: 1, name: '会砍价', desc: '所有采购价 -12%。', cost: 30, wip: true },
+  { id: 'perk_cashout', tree: 'social', tier: 2, name: '取出来的钱', desc: '开局立刻取出一半银行存款，直接变成手持现金。', cost: 60, requires: ['perk_haggler'] },
   { id: 'perk_analyst', tree: 'social', tier: 1, name: '情报分析', desc: '真情报比例 +12%，且每天可标记一条情报进行核实。', cost: 30 },
   { id: 'perk_contacts', tree: 'social', tier: 2, name: '人脉', desc: '雇工价格 -20%，成品价格 -12%。', cost: 60 },
   { id: 'perk_reputation', tree: 'social', tier: 2, name: '街坊眼里的好人', desc: '初始名声 +20，初始社区关系 +20。', cost: 60, requires: ['perk_analyst'] },

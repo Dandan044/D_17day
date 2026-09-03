@@ -147,21 +147,6 @@ export const LOCATIONS: Location[] = [
     loot: [{ res: 'cash', min: 500, max: 2500, chance: 0.85, weight: 0 }],
   },
   {
-    id: 'neighbors',
-    name: '邻里互助',
-    desc: '三楼的李姐、对门的老陈、楼下开小卖部的一家。你们互相借过酱油和钱。现在能借的东西不一样了。',
-    descSurvival: '有的门上画了记号，有的门再也没开过。楼道里的味道告诉你谁还在，谁把钥匙留给了别人。',
-    distance: 1,
-    danger: 5,
-    stock: 100,
-    tags: ['loc:social'],
-    loot: [
-      { res: 'foodStaple', min: 1, max: 4, chance: 0.7, weight: RES_WEIGHT.foodStaple },
-      { res: 'water', min: 2, max: 6, chance: 0.6, weight: RES_WEIGHT.water },
-      { res: 'meds', min: 0, max: 2, chance: 0.35, weight: RES_WEIGHT.meds },
-    ],
-  },
-  {
     id: 'school',
     name: '废弃小学',
     desc: '搬迁了三年，铁门用铁丝拧着。操场的塑胶跑道翻起来了，但食堂的不锈钢水箱还在，教具室里有木板。',

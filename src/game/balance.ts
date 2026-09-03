@@ -197,6 +197,39 @@ export const COLD = {
   STAGE_HP: [0, -5, -15, -25],
 } as const;
 
+/**
+ * 核冬天（仅 nuclear）：严冬期首日的骤降与持续下沉。
+ *
+ * 骤降值 X 在触发当日动态计算，保证分支落点精确：
+ * 夜间结算用「预估按当日室外、实际按次日室外」，供暖预算按预估封顶，
+ * 因此拉满目标温度过夜后，实际室温 = 目标温度 − k·X（k = 漏热率，含站点修正）。
+ *   - 保温 ≤2 级判定为准：未备（≤1 级）目标室温 = 舒适线 − MARGIN_COLD → 必入寒冬分支；
+ *     已备（≥2 级）目标室温 = 舒适线 + MARGIN_SAFE → 必守在舒适线上、入奖励分支。
+ *   - X = (目标温度 − 分支目标室温) / k，再夹取 [DROP_MIN, DROP_MAX]。
+ *     农舍漏风（k=0.42）、水塔高处（k=0.38）、抗寒体质（舒适线 −4）全部被公式自动吸收。
+ *   - 地下站点热汇恒为 GROUND_TEMP，室外骤降不影响其室温，天然落入奖励分支。
+ * 骤降后从锚点温度线性下沉到 FLOOR，天气只剩残余影响。
+ */
+export const NUCLEAR_WINTER = {
+  /** 从哪一档末世等级开始（4 = 严冬期，「气温断崖下跌」） */
+  THREAT_PHASE: 4,
+  /** 骤降度数下限 / 上限（动态值夹取区间） */
+  DROP_MIN: 10,
+  DROP_MAX: 30,
+  /** 未备玩家的分支目标室温 = 舒适线 − COLD_MARGIN（必入寒冬分支） */
+  MARGIN_COLD: 1.5,
+  /** 已备玩家的分支目标室温 = 舒适线 + SAFE_MARGIN（必守在舒适线上） */
+  MARGIN_SAFE: 1.5,
+  /** 已备判定线：保温达到该等级才按「守得住」计算骤降值 */
+  PREPARED_LEVEL: 2,
+  /** 温度下限：骤降后线性下沉，最终稳定在此值 */
+  FLOOR: -35,
+  /** 从骤降日到触底的持续天数（日 49 = FINAL_DAY） */
+  RAMP_DAYS: 20,
+  /** 触底后天气对温度的残余影响减半，避免暴风雪把曲线砸穿下限 */
+  WEATHER_WEIGHT: 0.5,
+} as const;
+
 /** 空气：过滤等级能抵御的污染上限 */
 export const AIR = {
   FILTER_TOLERANCE: [42, 62, 82, 97],
@@ -281,8 +314,8 @@ export const LOOT = {
 } as const;
 
 export const PRICE = {
-  /** 准备期每日通胀区间 */
-  DAILY_INFLATION: [0.16, 0.4] as const,
+  /** 准备期每日通胀基数：当日物价 = 昨日 × 该值（确定性复利） */
+  DAILY_MULT: 1.35,
   /** D-3 起限购，单次采购上限倍率 */
   RATION_FROM_DAY: 5,
   RATION_CAP: 0.5,
@@ -456,6 +489,14 @@ export const START_RES: Record<ResourceId, number> = {
   ammo: 0,
   cash: 8000,
 };
+
+/** 银行网点：准备期可取款的存款与 ATM 每日限额 */
+export const BANK = {
+  /** 开局存款（与手持现金分开记，只在准备期可取；「取出来的钱」天赋可开局全取） */
+  SAVINGS: 12000,
+  /** ATM 每日取款限额（每次去银行默认取满这一额度） */
+  DAILY_LIMIT: 2000,
+} as const;
 
 export const START_STATS: Record<StatId, number> = {
   hp: 100,

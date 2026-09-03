@@ -28,6 +28,8 @@ import {
   rollHaul,
   travelCost,
   buyIodine as engineBuyIodine,
+  buyCoAlarm as engineBuyCoAlarm,
+  withdrawCash as engineWithdrawCash,
   type Haul,
   type HaulItem,
 } from './engine/economy';
@@ -124,6 +126,8 @@ interface GameState {
   closeShop: () => void;
   buy: (locationId: string, res: ResourceId, qty: number) => void;
   buyIodine: (locationId: string) => void;
+  buyCoAlarm: (locationId: string) => void;
+  withdraw: (locationId: string, amount: number) => void;
   rest: () => void;
   build: (moduleId: ModuleId, path: BuildPath) => void;
   work: (moduleId: ModuleId) => void;
@@ -482,6 +486,37 @@ export const useGame = create<GameState>()(
           pushToast(t('ledger.toast.iodineOk', { spent: r.spent }), 'good');
         },
 
+        withdraw: (locationId, amount) => {
+          const run = get().run;
+          if (!run || locationId !== 'bank') return;
+          const next = structuredClone(run) as RunState;
+          const r = engineWithdrawCash(next, amount);
+          if (!r.ok) {
+            pushToast(r.reason ?? t('ledger.atm.limit'), 'bad');
+            return;
+          }
+          clampResources(next);
+          set({ run: next });
+          pushToast(t('ledger.atm.ok', { got: r.got, left: next.savings }), 'good');
+        },
+
+        buyCoAlarm: (locationId) => {
+          const run = get().run;
+          if (!run) return;
+          const next = structuredClone(run) as RunState;
+          const r = engineBuyCoAlarm(next, locationId);
+          if (!r.ok) {
+            pushToast(r.reason ?? t('ledger.toast.coAlarmFail'), 'bad');
+            return;
+          }
+          clampResources(next);
+          const rng = makeRng(next.seed, next.rngCursor);
+          emitHook(next, 'buy', rng);
+          next.rngCursor = rng.cursor();
+          set({ run: next });
+          pushToast(t('ledger.toast.coAlarmOk', { spent: r.spent }), 'good');
+        },
+
         rest: () => {
           const run = get().run;
           if (!run || run.ap < 1) {
@@ -540,7 +575,14 @@ export const useGame = create<GameState>()(
           emitHook(next, 'work', rng);
           next.rngCursor = rng.cursor();
           set({ run: next });
-          if (r.note) pushToast(r.note, r.note.includes('浪费') ? 'bad' : 'neutral');
+          if (r.note) {
+            const bad =
+              r.note.includes('浪费') ||
+              r.note.includes('划伤') ||
+              r.note.includes('伤口') ||
+              r.note.includes('做坏');
+            pushToast(r.note, bad ? 'bad' : 'neutral');
+          }
           for (const d of done) pushToast(d, 'good');
         },
 

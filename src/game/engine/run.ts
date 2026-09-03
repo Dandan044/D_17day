@@ -2,7 +2,7 @@
  * 单局生命周期：创建、选址、每日推进、阶段切换。
  */
 
-import { AP, COLD, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, WEAR, threatOfDay } from '../balance';
+import { AP, BANK, COLD, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, WEAR, threatOfDay } from '../balance';
 import { t } from '../copy/t';
 import { CLASS_BY_ID, PACK_BY_ID } from '../content/classes';
 import { DISASTER_BY_ID } from '../content/disasters';
@@ -67,6 +67,9 @@ export function createRun(opts: CreateRunOptions): RunState {
   const res = { ...START_RES } as Record<ResourceId, number>;
   for (const [k, v] of Object.entries(cls.res)) res[k as ResourceId] += v ?? 0;
   for (const [k, v] of Object.entries(pack.res)) res[k as ResourceId] += v ?? 0;
+  // 「取出来的钱」：开局把银行存款提现一半，剩一半留在银行
+  const cashout = abilities.includes('perk_cashout');
+  if (cashout) res.cash += BANK.SAVINGS / 2;
 
   const stats = { ...START_STATS } as Record<StatId, number>;
   if (cls.perk === 'hoarder_stash') stats.sanity -= 15;
@@ -126,6 +129,8 @@ export function createRun(opts: CreateRunOptions): RunState {
     locations: LOCATIONS.map((l) => ({ id: l.id, stock: l.stock })),
     visitedToday: [],
     boughtToday: {},
+    savings: cashout ? BANK.SAVINGS / 2 : BANK.SAVINGS,
+    atmUsed: 0,
     hasVehicle: cls.perk === 'trucker_vehicle',
     world,
     intel: [],
@@ -385,6 +390,7 @@ export function endDay(run: RunState): NightReport {
   run.queue = [];
   run.visitedToday = [];
   run.boughtToday = {};
+  run.atmUsed = 0;
 
   // ---------- 崩溃日 ----------
   if (run.day === TIME.COLLAPSE_DAY) {
@@ -538,6 +544,10 @@ export function resolveChoice(
   // 任何 raid_attempt 结算都算遭遇袭击（谈成成功也要能触发 waitFor 链）
   if (familyId === 'raid_attempt') {
     emitHook(run, 'raid', rng);
+  }
+  // 救助-袭击联动：门口确实打了一架且已击退，'修门框'收尾照常出现（waitFor 含 raidRepelled）
+  if (familyId === 'raid_aided_repel') {
+    emitHook(run, 'raidRepelled', rng);
   }
 
   recordBeat(run, familyId);

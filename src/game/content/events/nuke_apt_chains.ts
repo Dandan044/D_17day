@@ -273,7 +273,7 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
         stats: { stamina: -8 },
         world: { exposure: 4 },
         setFlags: ['flag:boughtStairWater'],
-        schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 2 }],
+        schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 2, require: { all: ['flag:boughtStairWater'] } }],
 
         tone: 'neutral',
       }, { requires: { res: { cash: 200 } } }),
@@ -281,14 +281,13 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
         res: { cash: -100, water: 8 },
         world: { exposure: 3 },
         setFlags: ['flag:boughtStairWater'],
-        schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 3 }],
+        schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 3, require: { all: ['flag:boughtStairWater'] } }],
 
         tone: 'neutral',
       }, { requires: { res: { cash: 100 } } }),
       skip({
         stats: { sanity: -2 },
         setFlags: ['flag:refusedStairWater'],
-        schedule: [{ familyId: 'nuke_chain_nopressure_3', inDays: 2 }],
       }),
     ],
   }),
@@ -300,7 +299,10 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 0,
     require: {
-      any: ['flag:boughtStairWater', 'flag:refusedStairWater'],
+      all: ['flag:boughtStairWater'],
+    },
+    forbid: {
+      any: ['flag:refusedStairWater'],
     },
 
 

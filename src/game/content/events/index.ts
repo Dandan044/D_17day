@@ -10,6 +10,7 @@ import { MED_PROGRESS_EVENTS } from './med_progress';
 import { NUKE_APT_CHAIN_EVENTS } from './nuke_apt_chains';
 import { NUKE_ARC_EVENTS } from './nuke_arcs';
 import { NUKE_BUILD_CHECK_EVENTS } from './nuke_build_checks';
+import { NUCLEAR_WINTER_EVENTS } from './nuclear_winter';
 import { PREP_EVENTS } from './prep';
 import { PREP_SLICE_EVENTS } from './prep_slice';
 import { SURV_BEAT_EVENTS } from './surv_beats';
@@ -27,6 +28,7 @@ export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
   ...NUKE_ARC_EVENTS,
   ...NUKE_APT_CHAIN_EVENTS,
   ...NUKE_BUILD_CHECK_EVENTS,
+  ...NUCLEAR_WINTER_EVENTS,
   ...HOOK_ARC_EVENTS,
   ...ECHO_SLICE_EVENTS,
   ...DAILY_EVENTS,
@@ -44,6 +46,7 @@ export {
   NUKE_APT_CHAIN_EVENTS,
   NUKE_ARC_EVENTS,
   NUKE_BUILD_CHECK_EVENTS,
+  NUCLEAR_WINTER_EVENTS,
   PREP_EVENTS,
   PREP_SLICE_EVENTS,
   STAT_ARC_EVENTS,

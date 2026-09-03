@@ -171,6 +171,8 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
         if (!def.worsen.afterDays) chance *= 0.5;
         // 肾伤：脱水拖坏且当天走了回用
         if (def.worsen.into === 'kidneyStrain' && !consume.recycling) chance = 0;
+        // 伤口：医疗站显著降低感染概率
+        if (id === 'wound') chance *= 1 / (1 + effectiveModule(run, 'medbay') * 0.4);
         if (chance > 0 && rng.chance(chance)) {
           if (gainCond(def.worsen.into, t('ledger.health.worsen', { from: def.name, to: CONDITION_BY_ID[def.worsen.into].name }))) {
             // noted

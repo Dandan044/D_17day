@@ -3,10 +3,11 @@
  * pending.waitFor 命中则把后续事件推进当天队列。
  */
 
-import { HEALTH, TIME } from '../balance';
+import { HEALTH, NUCLEAR_WINTER, TIME } from '../balance';
 import { FAMILY_BY_ID } from '../content/events';
 import type { Rng } from '../rng';
 import type { ActionHook, PendingEvent, RunState } from '../types';
+import { comfortTemp, currentIndoor } from './climate';
 import { pickVariant } from './director';
 import { loadOnline } from './power';
 import { deriveFacts, matchQuery } from './tags';
@@ -75,6 +76,13 @@ export function collectThresholdForced(run: RunState): string[] {
     out.push(familyId);
     run.thresholdFired[key] = run.day;
   };
+  // 核冬天首日：室温跌破舒适线走「寒冬来临」，守住舒适线走奖励分支，
+  // 当日不重复触发通用冷醒事件（两个分支已各自完整叙事）
+  const nwMorning =
+    run.world.disaster === 'nuclear' &&
+    run.day === TIME.COLLAPSE_DAY + (NUCLEAR_WINTER.THREAT_PHASE - 1) * TIME.WEEK;
+  fire('nwCold', 'nw_winter_arrives', nwMorning && currentIndoor(run) < comfortTemp(run));
+  fire('nwWarm', 'nw_winter_reward', nwMorning && currentIndoor(run) >= comfortTemp(run));
   fire('sanity35', 'stat_arc_sanity_1', run.stats.sanity < HEALTH.SANITY_UNRELIABLE && run.stats.sanity >= HEALTH.SANITY_BREAK);
   fire('sanity15', 'stat_arc_sanity_break', run.stats.sanity < HEALTH.SANITY_BREAK);
   fire('hp40', 'stat_arc_hp_1', run.stats.hp < HEALTH.HP_WARN && run.stats.hp >= HEALTH.HP_CRIT);
@@ -87,6 +95,6 @@ export function collectThresholdForced(run: RunState): string[] {
   fire('firstChill', 'env_first_chill', run.indoorBand === 'chill');
   fire('hypoSevere', 'env_hypo_severe', run.conditions.includes('hypothermiaSevere'));
   fire('warmthBack', 'env_warmth_return', run.indoorBand === 'warm' && run.flags.includes('flag:wasCold'));
-  fire('wokeCold', 'env_woke_cold', !!run.heatMissed);
+  fire('wokeCold', 'env_woke_cold', !!run.heatMissed && !nwMorning);
   return out;
 }

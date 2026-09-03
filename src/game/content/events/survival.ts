@@ -709,46 +709,93 @@ beat({
           },
         ],
       },
+    ],
+  }),
+beat({
+    // 暴雪/极寒夜里，暴露度 tier4 的"上门压力"分流成道德事件而不是破门袭击：
+    // 被盯上的那晚恰好冻着一大群人，你的暖气是灯塔。只由 pickPressureFamily 分流触发。
+    id: 'frozen_crowd',
+    kind: 'moral',
+    intensity: 3,
+    phase: ['survival'],
+    weight: 0,
+    once: true,
+    require: { any: ['weather:blizzard', 'temp:freezing', 'temp:extreme'] },
+
+    choices: [
       {
-        id: 'frozen_crowd',
+        id: 'let_in',
 
+        effect: {
+          res: { fuel: -8, water: -10, foodStaple: -5 },
+          stats: { humanity: 14, sanity: 6 },
+          world: { exposure: 18, neighborhood: 20 },
+          setFlags: ['flag:openedDoorInBlizzard', 'flag:shelteredInBlizzard'],
 
-        require: { any: ['weather:blizzard', 'temp:freezing', 'temp:extreme'] },
+          tone: 'good',
+        },
+      },
+      {
+        id: 'let_child',
+
+        effect: {
+          res: { fuel: -3, water: -4, foodStaple: -2 },
+          stats: { humanity: 6, sanity: -6 },
+          world: { exposure: 8 },
+
+          tone: 'neutral',
+        },
+      },
+      {
+        id: 'closed',
+
+        effect: {
+          stats: { humanity: -12, sanity: -8 },
+          world: { neighborhood: -10 },
+          setFlags: ['flag:closedDoorInBlizzard'],
+          schedule: [{ familyId: 'story_frozen_morning', inDays: 1 }],
+
+          tone: 'grim',
+        },
+      },
+    ],
+  }),
+beat({
+    // 救助-袭击联动：raid_attempt 即将入队时若存在援助钩子 flag，
+    // director.tryPush 会把袭击替换成本家族的对应变体——之前收留的人替你挡下了破门。
+    // 每个援助来源一个变体（require 对应 flag），多个并存时 pickVariant 同分随机挑一个。
+    // 选项必须 clearFlags 消耗钩子：援助是一次性的，不能让联动永久顶掉袭击。
+    id: 'raid_aided_repel',
+    kind: 'threat',
+    intensity: 4,
+    phase: ['survival'],
+    weight: 0,
+    require: { any: ['flag:shelteredInBlizzard'] },
+    variants: [
+      {
+        id: 'shelter_crowd',
+
+        require: { all: ['flag:shelteredInBlizzard'] },
         choices: [
           {
-            id: 'let_in',
+            id: 'help',
 
             effect: {
-              res: { fuel: -8, water: -10, foodStaple: -5 },
-              stats: { humanity: 14, sanity: 6 },
-              world: { exposure: 18, neighborhood: 20 },
-              survivor: { recruit: 'random' },
-              setFlags: ['flag:openedDoorInBlizzard'],
+              res: { materials: -2 },
+              stats: { stamina: -8, sanity: 6, humanity: 4 },
+              clearFlags: ['flag:shelteredInBlizzard'],
 
               tone: 'good',
             },
           },
           {
-            id: 'let_child',
+            id: 'watch',
 
             effect: {
-              res: { fuel: -3, water: -4, foodStaple: -2 },
-              stats: { humanity: 6, sanity: -6 },
-              world: { exposure: 8 },
+              stats: { stamina: -2, sanity: 3, humanity: 1 },
+              clearFlags: ['flag:shelteredInBlizzard'],
 
               tone: 'neutral',
-            },
-          },
-          {
-            id: 'closed',
-
-            effect: {
-              stats: { humanity: -12, sanity: -8 },
-              world: { neighborhood: -10 },
-              setFlags: ['flag:closedDoorInBlizzard'],
-              schedule: [{ familyId: 'story_frozen_morning', inDays: 1 }],
-
-              tone: 'grim',
             },
           },
         ],

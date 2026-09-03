@@ -12,7 +12,7 @@ import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ResourceId, RunState } from '../types';
 import { hypoStageOf } from './climate';
-import { effectiveModule } from './tags';
+import { deriveFacts, effectiveModule, matchQuery } from './tags';
 import { computePower, loadOnline } from './power';
 
 export { TIER_NAMES, TIER_DESC };
@@ -95,6 +95,7 @@ export function applyDailyExposure(run: RunState): ExposureBreakdown {
 /**
  * 按暴露度档位决定今天该由谁来找你。
  * 返回事件家族 id，由导演系统去选合适的变体（洪水局是划艇来的，核战局是巡逻队）。
+ * tier4 的破门袭击在寒冷夜里分流成 frozen_crowd：被盯上的那晚恰好冻着一大群人。
  */
 export function pickPressureFamily(run: RunState, rng: Rng): string | null {
   const tier = exposureTier(run.world.exposure);
@@ -112,8 +113,13 @@ export function pickPressureFamily(run: RunState, rng: Rng): string | null {
     case 3:
       return 'pressure_tribute';
     default:
-      return 'raid_attempt';
+      return isColdNight(run) ? 'frozen_crowd' : 'raid_attempt';
   }
+}
+
+/** 寒冷夜判定：与 frozen_crowd 家族 require 用同一组标签，语义由 tags.ts 统一管 */
+function isColdNight(run: RunState): boolean {
+  return matchQuery({ any: ['weather:blizzard', 'temp:freezing', 'temp:extreme'] }, deriveFacts(run));
 }
 
 // ============================================================
@@ -178,7 +184,8 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1, fired = f
     if (run.res[t] <= 0) continue;
     const take = run.res[t] * ratio * rng.float(0.7, 1.3);
     if (take < 0.1) continue;
-    run.res[t] = Math.max(0, run.res[t] - take);
+    // 百分比掠夺必须当场取一位小数，否则浮点垃圾会在多次袭击后滚出十几位小数
+    run.res[t] = Math.max(0, Math.round((run.res[t] - take) * 10) / 10);
     lost[t] = Math.round(take * 10) / 10;
   }
 

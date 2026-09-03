@@ -143,7 +143,8 @@ function checkSkipStaminaGift(where: string, choiceId: string, log: string, stam
 }
 
 const scheduledFamilies = new Set<string>();
-const PRESSURE_FAMILIES = ['pressure_passerby', 'pressure_scout', 'pressure_tribute', 'raid_attempt'];
+// pickPressureFamily 暴露度阶梯 + 寒冷夜 tier4 分流（frozen_crowd）
+const PRESSURE_FAMILIES = ['pressure_passerby', 'pressure_scout', 'pressure_tribute', 'raid_attempt', 'frozen_crowd'];
 
 for (const f of ALL_FAMILIES) {
   const base = `事件家族 ${f.id}`;
@@ -233,6 +234,8 @@ for (const f of ALL_FAMILIES) {
   if (f.baseWeight > 0) continue;
   if (scheduledFamilies.has(f.id)) continue;
   if (PRESSURE_FAMILIES.includes(f.id)) continue;
+  // 救助-袭击联动替换件：无钩子时不入队（袭击照常），不适用"每组合必须有变体"检查
+  if (f.id === 'raid_aided_repel') continue;
   if (f.id === 'daily_recruit' || f.id === 'daily_crew_friction') continue;
   if (f.id.startsWith('stat_arc_')) continue;
   // collectThresholdForced 插入的阈值事件，不进随机池
@@ -244,7 +247,9 @@ for (const f of ALL_FAMILIES) {
     f.id === 'env_woke_cold' ||
     f.id === 'env_co_alarm' ||
     f.id === 'env_co_vent' ||
-    f.id === 'env_co_drowning'
+    f.id === 'env_co_drowning' ||
+    f.id === 'nw_winter_arrives' ||
+    f.id === 'nw_winter_reward'
   ) {
     continue;
   }
@@ -564,6 +569,52 @@ for (const [sig, ids] of bodyDup) {
     if (/\bconst SKILL_NAME\b/.test(text) || (/\bexport const SKILL_NAME\b/.test(text) && !file.includes('copy'))) {
       err(`${file}：技能名表重复，只允许 src/game/copy/names.ts`);
     }
+  }
+}
+
+{
+  const { HOOK_NAME } = await import('../src/game/copy/names');
+  const hooks: import('../src/game/types').ActionHook[] = [
+    'endDay',
+    'collapse',
+    'threatUp',
+    'scavenge',
+    'scavengeDay',
+    'scavengeNight',
+    'takeHaul',
+    'visitShop',
+    'buy',
+    'rest',
+    'build',
+    'work',
+    'cancelProject',
+    'salvage',
+    'maintain',
+    'treat',
+    'verifyIntel',
+    'setRation',
+    'setWaterUse',
+    'setPowerMode',
+    'setPowerPriority',
+    'setHeatMode',
+    'raid',
+    'raidRepelled',
+    'raidFailed',
+    'choice',
+    'foodLow',
+    'waterLow',
+    'hpLow',
+    'sanityLow',
+    'staminaLow',
+    'humanityLow',
+    'repLow',
+    'lightsOff',
+    'filterExpired',
+    'exposureUp',
+  ];
+  for (const h of hooks) {
+    const name = HOOK_NAME[h];
+    if (!name || name === h) err(`HOOK_NAME 缺少玩家可见中文：${h}`);
   }
 }
 

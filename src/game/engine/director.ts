@@ -15,6 +15,7 @@ import { DIRECTOR } from '../balance';
 import { KIND_NAME } from '../copy/names';
 import { t } from '../copy/t';
 import { FAMILY_BY_ID, ALL_FAMILIES } from '../content/events';
+import { AID_HOOK_FLAGS } from '../content/events/queries';
 import type { Rng } from '../rng';
 import type { EventFamily, EventKind, EventVariant, Facts, RunState } from '../types';
 import { addLog } from './effects';
@@ -156,19 +157,26 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
   const used = new Set<string>();
 
   const tryPush = (familyId: string, tags?: string[]): boolean => {
-    if (used.has(familyId)) return false;
-    const f = FAMILY_BY_ID[familyId];
+    // 袭击-援助联动：破门袭击入队前查援助钩子 flag，命中则替换为联动剧情。
+    // 联动家族没有 eligible 变体（钩子已被消耗）时回退原袭击，不占用 pending 重试计数。
+    let pushId = familyId;
+    if (familyId === 'raid_attempt' && matchQuery({ any: AID_HOOK_FLAGS }, facts)) {
+      pushId = 'raid_aided_repel';
+    }
+    if (used.has(pushId)) return false;
+    const f = FAMILY_BY_ID[pushId];
     if (!f) {
-      rejected.push({ familyId, reason: '家族不存在' });
+      rejected.push({ familyId: pushId, reason: '家族不存在' });
       return false;
     }
     const variant = pickVariant(f, facts, rng);
     if (!variant) {
-      rejected.push({ familyId, reason: '没有合适的变体' });
+      rejected.push({ familyId: pushId, reason: '没有合适的变体' });
+      if (pushId !== familyId) return tryPush(familyId, tags);
       return false;
     }
-    picks.push({ familyId, variantId: variant.id, tags });
-    used.add(familyId);
+    picks.push({ familyId: pushId, variantId: variant.id, tags });
+    used.add(pushId);
     return true;
   };
 

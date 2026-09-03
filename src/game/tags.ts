@@ -219,6 +219,7 @@ const CONDITIONS: ConditionId[] = [
   'jaundice',
   'flu',
   'pneumonia',
+  'wound',
   'woundInfection',
   'sepsis',
   'fracture',

@@ -165,7 +165,15 @@ function DayHeader({ run }: { run: RunState }) {
           <div className="h-6 w-px bg-line" />
 
           <div className="flex flex-wrap gap-1.5">
-            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('shelter')}>
+            <button
+              className={`btn btn-ghost px-2 py-1 text-[11px]${
+                run.projects.length > 0 ||
+                (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0))
+                  ? ' heat-module-warn'
+                  : ''
+              }`}
+              onClick={() => setOverlay('shelter')}
+            >
               {t('ui.game.shelter')}
             </button>
             <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('power')}>
@@ -511,6 +519,9 @@ function RationPanel({ run }: { run: RunState }) {
 function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
   const { setOverlay, rest } = useGame();
   const noAp = run.ap <= 0;
+  const shelterNeedsAttention =
+    run.projects.length > 0 ||
+    (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0));
 
   const actions = [
     {
@@ -526,6 +537,7 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
       desc: t('ui.game.buildDesc'),
       ap: 1,
       onClick: () => setOverlay('shelter'),
+      pulse: shelterNeedsAttention,
     },
     {
       id: 'intel',
@@ -549,7 +561,7 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
         {actions.map((a) => (
           <button
             key={a.id}
-            className="choice"
+            className={`choice${'pulse' in a && a.pulse ? ' heat-module-warn' : ''}`}
             disabled={a.ap > 0 && noAp}
             onClick={a.onClick}
           >
