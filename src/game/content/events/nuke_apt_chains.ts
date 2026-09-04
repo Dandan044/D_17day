@@ -61,32 +61,86 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 0,
-    require: {
-      any: ['flag:gaveCoughMeds', 'flag:gaveCoughWater', 'flag:ignoredCough'],
-    },
+    // 第一拍给过什么/给没给，决定纸条内容：三变体按 flag 互斥分流
+    variants: [
+      {
+        id: 'meds',
+        require: { all: ['flag:gaveCoughMeds'] },
+        choices: [
+          ch('reply', {
+            stats: { sanity: 3, reputation: 2 },
+            world: { neighborhood: 3 },
+            setFlags: ['flag:coughReplied'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', waitFor: 'endDay' }],
 
+            tone: 'good',
+          }),
+          ch('keep_quiet', {
+            stats: { sanity: 1 },
+            setFlags: ['flag:coughNoteKept'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 3 }],
 
-    choices: [
-      ch('reply', {
-        stats: { sanity: 3, reputation: 2 },
-        world: { neighborhood: 3 },
-        setFlags: ['flag:coughReplied'],
-        schedule: [{ familyId: 'nuke_chain_cough_3', waitFor: 'endDay' }],
+            tone: 'neutral',
+          }),
+          skip({
+            stats: { humanity: -2 },
+            setFlags: ['flag:coughNoteTorn'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 2 }],
+          }),
+        ],
+      },
+      {
+        id: 'water',
+        require: { all: ['flag:gaveCoughWater'] },
+        choices: [
+          ch('reply', {
+            stats: { sanity: 3, reputation: 2 },
+            world: { neighborhood: 3 },
+            setFlags: ['flag:coughReplied'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', waitFor: 'endDay' }],
 
-        tone: 'good',
-      }),
-      ch('keep_quiet', {
-        stats: { sanity: 1 },
-        setFlags: ['flag:coughNoteKept'],
-        schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 3 }],
+            tone: 'good',
+          }),
+          ch('keep_quiet', {
+            stats: { sanity: 1 },
+            setFlags: ['flag:coughNoteKept'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 3 }],
 
-        tone: 'neutral',
-      }),
-      skip({
-        stats: { humanity: -2 },
-        setFlags: ['flag:coughNoteTorn'],
-        schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 2 }],
-      }),
+            tone: 'neutral',
+          }),
+          skip({
+            stats: { humanity: -2 },
+            setFlags: ['flag:coughNoteTorn'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 2 }],
+          }),
+        ],
+      },
+      {
+        id: 'ignored',
+        require: { all: ['flag:ignoredCough'] },
+        choices: [
+          ch('reply', {
+            stats: { sanity: 3, reputation: 2 },
+            world: { neighborhood: 3 },
+            setFlags: ['flag:coughReplied'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', waitFor: 'endDay' }],
+
+            tone: 'good',
+          }),
+          ch('keep_quiet', {
+            stats: { sanity: 1 },
+            setFlags: ['flag:coughNoteKept'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 3 }],
+
+            tone: 'neutral',
+          }),
+          skip({
+            stats: { humanity: -2 },
+            setFlags: ['flag:coughNoteTorn'],
+            schedule: [{ familyId: 'nuke_chain_cough_3', inDays: 2 }],
+          }),
+        ],
+      },
     ],
   }),
   beat({

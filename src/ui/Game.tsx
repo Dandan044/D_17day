@@ -735,7 +735,7 @@ function ShelterSummary({ run }: { run: RunState }) {
 
       {run.wear.filterLife <= 5 && (run.modules.filter > 0 || run.modules.airFilter > 0) && (
         <div className="mt-2 border-t border-line pt-2 text-[11.5px] text-alarmhi">
-          {t('ui.game.filterWarn', { n: Math.max(0, run.wear.filterLife) })}
+          {t('ui.game.filterWarn', { n: Math.max(0, Math.floor(run.wear.filterLife)) })}
         </div>
       )}
     </Panel>

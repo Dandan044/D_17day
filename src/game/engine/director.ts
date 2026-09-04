@@ -157,6 +157,8 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
   const used = new Set<string>();
 
   const tryPush = (familyId: string, tags?: string[]): boolean => {
+    // 单日队列上限：链条再急也不挤爆当天（调用方各自处理顺延/放弃）
+    if (picks.length >= DIRECTOR.MAX_QUEUE_PER_DAY) return false;
     // 袭击-援助联动：破门袭击入队前查援助钩子 flag，命中则替换为联动剧情。
     // 联动家族没有 eligible 变体（钩子已被消耗）时回退原袭击，不占用 pending 重试计数。
     let pushId = familyId;
@@ -181,6 +183,9 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
   };
 
   // ---------- 1. 到期的因果链 ----------
+  // 链条会互相滚动堆积（理智越低事件越多，schedule 出的待办越多），
+  // 每天最多兑现 MAX_PENDING_PER_DAY 条，其余顺延一天，不消耗重试计数。
+  let pendingInserted = 0;
   const stillPending: typeof run.pending = [];
   for (const p of run.pending) {
     const hasWait = p.waitFor !== undefined;
@@ -192,6 +197,10 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
       stillPending.push(p);
       continue;
     }
+    if (pendingInserted >= DIRECTOR.MAX_PENDING_PER_DAY) {
+      stillPending.push({ ...p, dueDay: run.day + 1 });
+      continue;
+    }
     if (p.unless && matchQuery(p.unless, facts)) continue;
     if (p.require && !matchQuery(p.require, facts)) {
       const retries = (p.retries ?? 0) + 1;
@@ -200,7 +209,9 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
       else addLog(run, t('ledger.run.missed'), 'neutral');
       continue;
     }
-    if (!tryPush(p.familyId, p.tags)) {
+    if (tryPush(p.familyId, p.tags)) {
+      pendingInserted += 1;
+    } else {
       const retries = (p.retries ?? 0) + 1;
       if (retries < 5) stillPending.push({ ...p, dueDay: run.day + 1, retries });
       else if (hasWait) stillPending.push({ ...p, dueDay: undefined, retries });
@@ -236,7 +247,7 @@ export function selectEvents(run: RunState, rng: Rng, count: number, forcedFamil
     return true;
   });
 
-  while (picks.length < count && pool.length > 0) {
+  while (picks.length < count && picks.length < DIRECTOR.MAX_QUEUE_PER_DAY && pool.length > 0) {
     const chosen = rng.weighted(pool, (f) => f.baseWeight * pacingMultiplier(f, run));
     if (!chosen) break;
     pool.splice(pool.indexOf(chosen), 1);

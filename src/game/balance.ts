@@ -430,6 +430,12 @@ export const DIRECTOR = {
   /** 每天呈现的事件数量区间 */
   EVENTS_PER_DAY: [1, 2] as const,
   PREP_EVENTS_PER_DAY: [1, 1] as const,
+  /** 每天最多兑现几条到期的因果链（链条会互相滚动堆积，超出的顺延一天） */
+  MAX_PENDING_PER_DAY: 2,
+  /** 阈值强制事件（stat_arc / env 首拍）每天最多插入几个，寒临/奖励等日定事件不占额 */
+  MAX_THRESHOLD_FORCED_PER_DAY: 2,
+  /** 单日事件队列总量上限（因果链 + 阈值强制 + 随机补足都受此约束） */
+  MAX_QUEUE_PER_DAY: 4,
   /** 同一家族的默认冷却 */
   DEFAULT_COOLDOWN: 14,
   /** 节奏控制：观察最近几天 */

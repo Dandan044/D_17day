@@ -183,6 +183,8 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 6,
+    // 只在真实接近见底时出现：food:low = 总食物 < 人口 × 2 份
+    require: { all: ['food:low'] },
     minThreat: 2,
     maxThreat: 6,
 

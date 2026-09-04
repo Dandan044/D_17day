@@ -3,7 +3,7 @@
  * pending.waitFor 命中则把后续事件推进当天队列。
  */
 
-import { HEALTH, NUCLEAR_WINTER, TIME } from '../balance';
+import { DIRECTOR, HEALTH, NUCLEAR_WINTER, TIME } from '../balance';
 import { FAMILY_BY_ID } from '../content/events';
 import type { Rng } from '../rng';
 import type { ActionHook, PendingEvent, RunState } from '../types';
@@ -67,22 +67,27 @@ export function collectThresholdForced(run: RunState): string[] {
   if (!run.thresholdFired) run.thresholdFired = {};
   const cd = HEALTH.THRESHOLD_COOLDOWN;
   const out: string[] = [];
-  const fire = (key: string, familyId: string, cond: boolean) => {
+  // 多项状态同时崩时，阈值弧一天最多插 2 条，其余顺延到条件仍满足的日子再试
+  let arcFired = 0;
+  const fire = (key: string, familyId: string, cond: boolean, limited = true) => {
     if (!cond) return;
     if (run.eventHistory[familyId] !== undefined) return;
     const last = run.thresholdFired[key];
     if (last !== undefined && run.day - last < cd) return;
     if (!FAMILY_BY_ID[familyId]) return;
+    if (limited && arcFired >= DIRECTOR.MAX_THRESHOLD_FORCED_PER_DAY) return;
     out.push(familyId);
     run.thresholdFired[key] = run.day;
+    if (limited) arcFired += 1;
   };
   // 核冬天首日：室温跌破舒适线走「寒冬来临」，守住舒适线走奖励分支，
   // 当日不重复触发通用冷醒事件（两个分支已各自完整叙事）
+  // 这两条是日定事件（错过当天即失效），不占阈值弧的每日配额
   const nwMorning =
     run.world.disaster === 'nuclear' &&
     run.day === TIME.COLLAPSE_DAY + (NUCLEAR_WINTER.THREAT_PHASE - 1) * TIME.WEEK;
-  fire('nwCold', 'nw_winter_arrives', nwMorning && currentIndoor(run) < comfortTemp(run));
-  fire('nwWarm', 'nw_winter_reward', nwMorning && currentIndoor(run) >= comfortTemp(run));
+  fire('nwCold', 'nw_winter_arrives', nwMorning && currentIndoor(run) < comfortTemp(run), false);
+  fire('nwWarm', 'nw_winter_reward', nwMorning && currentIndoor(run) >= comfortTemp(run), false);
   fire('sanity35', 'stat_arc_sanity_1', run.stats.sanity < HEALTH.SANITY_UNRELIABLE && run.stats.sanity >= HEALTH.SANITY_BREAK);
   fire('sanity15', 'stat_arc_sanity_break', run.stats.sanity < HEALTH.SANITY_BREAK);
   fire('hp40', 'stat_arc_hp_1', run.stats.hp < HEALTH.HP_WARN && run.stats.hp >= HEALTH.HP_CRIT);
