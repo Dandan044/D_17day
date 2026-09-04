@@ -2,7 +2,7 @@ import type { EventFamily } from '../../types';
 import { beat, ch, skip } from './factory';
 import { URBAN_OR_HIGH } from './queries';
 
-const COLD = { any: ['weather:blizzard', 'temp:freezing', 'temp:extreme'] };
+const COLD = { any: ['weather:blizzard', 'temp:cold', 'temp:freezing', 'temp:extreme'] };
 
 /**
  * 目击式高强度黑暗事件（threat 3-6，每档 6 个）。
@@ -135,7 +135,7 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     minThreat: 4,
-    maxThreat: 4,
+    maxThreat: 6,
     require: COLD,
 
     choices: [
@@ -152,7 +152,7 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
     once: true,
     weight: 5,
     minThreat: 4,
-    maxThreat: 4,
+    maxThreat: 6,
     require: COLD,
 
     choices: [
@@ -169,7 +169,7 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
     once: true,
     weight: 5,
     minThreat: 4,
-    maxThreat: 4,
+    maxThreat: 6,
     require: COLD,
 
     choices: [
@@ -186,7 +186,7 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
     weight: 5,
     cooldown: 20,
     minThreat: 4,
-    maxThreat: 4,
+    maxThreat: 6,
     require: COLD,
 
     choices: [
@@ -219,7 +219,7 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
     weight: 5,
     cooldown: 18,
     minThreat: 4,
-    maxThreat: 4,
+    maxThreat: 6,
     require: COLD,
 
     choices: [
