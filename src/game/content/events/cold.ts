@@ -37,6 +37,8 @@ export const COLD_EVENTS: EventFamily[] = [
     intensity: 3,
     phase: ['survival'],
     weight: 7,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 12,
     require: { all: ['indoor:freeze', 'streak:belowSurvival>=3'] },
     choices: [
@@ -135,6 +137,8 @@ export const COLD_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     weight: 7,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 14,
     require: { all: ['heat:electric'] },
     choices: [
@@ -153,6 +157,8 @@ export const COLD_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     weight: 7,
+    minThreat: 4,
+    maxThreat: 6,
     cooldown: 12,
     require: { any: ['crew:some', 'crew:full'] },
     forbid: { all: ['indoor:warm'] },
@@ -184,6 +190,8 @@ export const COLD_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     weight: 7,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 12,
     require: { all: ['indoor:temperature<0'] },
     choices: [
@@ -192,6 +200,8 @@ export const COLD_EVENTS: EventFamily[] = [
       skip({ res: { water: -2 }, stats: { stamina: -3 } }),
     ],
   }),
+  // 与 surv_beat_count_stock 题材重复，注释保留（2026-09 阶段化整理）
+  /*
   beat({
     id: 'env_cold_ledger',
     kind: 'opportunity',
@@ -206,6 +216,7 @@ export const COLD_EVENTS: EventFamily[] = [
       ch('letter', { stats: { sanity: 4, stamina: -2 }, tone: 'neutral' }),
     ],
   }),
+  */
   beat({
     id: 'env_woke_cold',
     kind: 'weather',

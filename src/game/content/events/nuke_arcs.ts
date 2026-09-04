@@ -12,6 +12,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 10,
     require: NUC,
+    minThreat: 1,
+    maxThreat: 2,
 
 
     choices: [
@@ -59,6 +61,7 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     minThreat: 2,
+    maxThreat: 3,
     require: APT,
 
 
@@ -92,6 +95,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
+    minThreat: 3,
+    maxThreat: 6,
 
 
     choices: [
@@ -123,6 +128,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [
@@ -154,6 +161,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: HIGH,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [
@@ -185,6 +194,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: NUC,
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -216,6 +227,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: { all: ['disaster:nuclear', 'mod:radio>=1'] },
+    minThreat: 1,
+    maxThreat: 4,
 
 
     choices: [
@@ -278,6 +291,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: HIGH,
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -294,6 +309,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: HIGH,
+    minThreat: 2,
+    maxThreat: 4,
 
 
     choices: [
@@ -309,6 +326,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     weight: 7,
     cooldown: 14,
     require: NUC,
+    minThreat: 3,
+    maxThreat: 6,
 
 
     choices: [
@@ -324,6 +343,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: NUC,
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -339,6 +360,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: NUC,
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -354,6 +377,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     require: APT,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [
@@ -370,6 +395,8 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: APT,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [

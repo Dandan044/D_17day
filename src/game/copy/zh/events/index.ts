@@ -3,6 +3,8 @@ import './daily';
 import './echo_flags';
 import './filter_beats';
 import './hook_arcs';
+import './late_nuclear';
+import './late_stage';
 import './med_progress';
 import './nuke_apt_chains';
 import './nuke_arcs';

@@ -18,6 +18,7 @@ import { CLASSES, SUPPLY_PACKS } from '../src/game/content/classes';
 import { DISASTERS } from '../src/game/content/disasters';
 import { ENDINGS } from '../src/game/content/endings';
 import { ALL_FAMILIES, FAMILY_BY_ID } from '../src/game/content/events';
+import { ECHO_SLICE_FLAGS } from '../src/game/content/events/echo_flags';
 import { UNLOCK_COST, UNLOCK_NAMES } from '../src/game/content/perks';
 import { SITES, SITE_BY_ID } from '../src/game/content/sites';
 import { isEligible } from '../src/game/engine/director';
@@ -257,6 +258,24 @@ for (const f of ALL_FAMILIES) {
 }
 
 // ============================================================
+// 2.5 各末世等级档位的事件池下限（防某档被抽空导致重复感）
+// ============================================================
+
+const isNukeBound = (f: EventFamily): boolean => JSON.stringify(f.require ?? {}).includes('disaster:nuclear');
+const inThreatBand = (f: EventFamily, th: number): boolean =>
+  (f.minThreat ?? 1) <= th && th <= (f.maxThreat ?? 6);
+
+for (let th = 1; th <= 6; th++) {
+  const pool = ALL_FAMILIES.filter(
+    (f) => f.baseWeight > 0 && f.phase.includes('survival') && inThreatBand(f, th),
+  );
+  const generic = pool.filter((f) => !isNukeBound(f)).length;
+  const nuke = pool.filter(isNukeBound).length;
+  if (generic < 25) err(`threat ${th}（通用灾难）可随机事件池仅 ${generic} 个，低于下限 25`);
+  if (nuke < 15) err(`threat ${th}（核战专属）可随机事件池仅 ${nuke} 个，低于下限 15`);
+}
+
+// ============================================================
 // 3. 解锁与结局
 // ============================================================
 
@@ -388,6 +407,8 @@ const ENGINE_FLAGS = new Set([
 
 for (const f of writtenFlags) {
   if (ENGINE_FLAGS.has(f)) continue;
+  // 切片回响事件已注释保留，其旗标仍会被写入并由存档保存；簇数据在 echo_flags.ts 中登记
+  if (ECHO_SLICE_FLAGS.includes(f)) continue;
   if (f.startsWith('flag:class')) continue;
   if (!readFlags.has(f)) {
     err(`叙事标签 ${f} 只被写入，从未被事件 require/unless/forbid 读取——玩家会感觉「选了就没了」`);

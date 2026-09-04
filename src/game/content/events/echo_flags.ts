@@ -1,8 +1,13 @@
-import type { EventFamily, EventVariant } from '../../types';
-import { skip } from './factory';
+import type { EventFamily } from '../../types';
+// import type { EventVariant } from '../../types'; // 随事件一并注释（2026-09 阶段化整理）
+// import { skip } from './factory'; // 随事件一并注释（2026-09 阶段化整理）
 
-/** 旗标按主题分簇，避免上百条共用同一篇「洗手想起一件事」 */
-const ECHO_CLUSTERS = {
+/**
+ * 切片回响旗标簇：prep/切片事件的抉择旗标 → 心理回响主题。
+ * 消费事件 hook_echo_sliceflags 已注释保留（与 hook_echo_oldflags 同构）；
+ * 旗标数据保留导出，供 lint 的「只写不读」检查认账，未来重启回响事件时直接复用。
+ */
+export const ECHO_CLUSTERS = {
   water: [
     'flag:gaveWaterOnce',
     'flag:liedNoWater',
@@ -132,32 +137,11 @@ const ECHO_CLUSTERS = {
   ],
 } as const;
 
-type EchoCluster = keyof typeof ECHO_CLUSTERS;
-
-const FLAG_TO_CLUSTER = new Map<string, EchoCluster>();
-for (const [cluster, flags] of Object.entries(ECHO_CLUSTERS) as Array<[EchoCluster, readonly string[]]>) {
-  for (const f of flags) FLAG_TO_CLUSTER.set(f, cluster);
-}
-
-const ALL_ECHO_FLAGS = Object.values(ECHO_CLUSTERS).flat();
-
-function echoVariant(flag: string): EventVariant {
-  const cluster = FLAG_TO_CLUSTER.get(flag) ?? 'list';
-  return {
-    id: flag.replace(/^flag:/, ''),
-    copyKey: cluster,
-    require: { all: [flag] },
-    choices: [
-      {
-        id: 'ack',
-        effect: { stats: { sanity: 2 }, tone: 'good' },
-      },
-      skip(),
-    ],
-  };
-}
+export const ECHO_SLICE_FLAGS: string[] = Object.values(ECHO_CLUSTERS).flat();
 
 export const ECHO_SLICE_EVENTS: EventFamily[] = [
+  // 与 hook_echo_oldflags 同构，注释保留（2026-09 阶段化整理）
+  /*
   {
     id: 'hook_echo_sliceflags',
     kind: 'story',
@@ -167,4 +151,5 @@ export const ECHO_SLICE_EVENTS: EventFamily[] = [
     cooldown: 14,
     variants: ALL_ECHO_FLAGS.map(echoVariant),
   },
+  */
 ];

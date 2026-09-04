@@ -37,6 +37,8 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 7,
+    minThreat: 2,
+    maxThreat: 4,
 
 
     choices: [
@@ -67,6 +69,7 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     once: true,
     weight: 6,
     minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -180,6 +183,8 @@ export const HOOK_ARC_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 6,
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [

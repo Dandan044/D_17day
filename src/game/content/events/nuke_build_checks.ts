@@ -17,6 +17,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
     weight: 9,
     require: APT,
     minThreat: 2,
+    maxThreat: 4,
 
 
     choices: [
@@ -172,6 +173,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
     weight: 8,
     require: HIGH,
     minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -285,6 +287,8 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
     once: true,
     weight: 9,
     require: NUC,
+    minThreat: 2,
+    maxThreat: 5,
 
 
     choices: [
@@ -486,6 +490,8 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -526,6 +532,8 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: APT,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [

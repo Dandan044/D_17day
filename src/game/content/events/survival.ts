@@ -808,6 +808,8 @@ beat({
     intensity: 3,
     phase: ['survival'],
     weight: 8,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 14,
     require: { all: ['weather:ashfall'] },
     variants: [
@@ -859,6 +861,8 @@ beat({
     intensity: 4,
     phase: ['survival'],
     weight: 9,
+    minThreat: 2,
+    maxThreat: 6,
     cooldown: 14,
     require: { any: ['weather:flooding', 'water:flooded'] },
     variants: [
@@ -964,6 +968,8 @@ beat({
     intensity: 3,
     phase: ['survival'],
     weight: 8,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 14,
     require: { any: ['temp:freezing', 'temp:extreme', 'weather:blizzard'] },
     variants: [
@@ -1022,6 +1028,8 @@ beat({
     intensity: 3,
     phase: ['survival'],
     weight: 8,
+    minThreat: 1,
+    maxThreat: 3,
     cooldown: 14,
     require: { any: ['contagion:high', 'contagion:low'] },
     forbid: { all: ['site:isolated'] },
@@ -1142,6 +1150,8 @@ beat({
     intensity: 1,
     phase: ['survival'],
     weight: 9,
+    minThreat: 1,
+    maxThreat: 3,
     cooldown: 14,
     require: { any: ['faction:trader:active', 'faction:trader:dormant'] },
     variants: [
@@ -1258,6 +1268,8 @@ beat({
     intensity: 2,
     phase: ['survival'],
     weight: 6,
+    minThreat: 1,
+    maxThreat: 3,
     cooldown: 14,
     require: { any: ['faction:gov:active', 'faction:rescue:active'] },
     variants: [

@@ -13,6 +13,8 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 11,
+    minThreat: 1,
+    maxThreat: 3,
     require: { all: ['water:recycling'], none: ['weather:precip'] },
 
 
@@ -75,6 +77,8 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     weight: 9,
+    minThreat: 1,
+    maxThreat: 4,
     cooldown: 10,
     require: { all: ['weather:precip', 'mod:filter=1'] },
 
@@ -146,6 +150,8 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     weight: 10,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 10,
     require: { all: ['weather:blackRain', 'mod:filter>=1'] },
 
@@ -318,6 +324,8 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
     intensity: 2,
     phase: ['survival'],
     weight: 8,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 12,
     require: { all: ['site:urban'], none: ['weather:precip', 'mod:filter>=1'] },
 

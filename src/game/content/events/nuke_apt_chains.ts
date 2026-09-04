@@ -1,6 +1,6 @@
 import type { EventFamily } from '../../types';
 import { beat, ch, skip } from './factory';
-import { APT, HIGH, HIGHFLOOR, NUC } from './queries';
+import { APT, HIGH, NUC } from './queries';
 
 /**
  * 核战 × 公寓（六楼城区）追加事件链。
@@ -16,6 +16,8 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 9,
     require: HIGH,
+    minThreat: 1,
+    maxThreat: 2,
 
 
     choices: [
@@ -129,6 +131,8 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: HIGH,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [
@@ -228,7 +232,9 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     phase: ['survival'],
     once: true,
     weight: 9,
-    require: HIGHFLOOR,
+    require: HIGH,
+    minThreat: 1,
+    maxThreat: 2,
 
 
     choices: [
@@ -335,6 +341,8 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: APT,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [
@@ -440,6 +448,7 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     weight: 8,
     require: APT,
     minThreat: 2,
+    maxThreat: 4,
 
 
     choices: [
@@ -544,6 +553,8 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 8,
     require: NUC,
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [
@@ -651,6 +662,8 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
     once: true,
     weight: 7,
     require: { all: ['disaster:nuclear', 'mod:radio>=1'] },
+    minThreat: 1,
+    maxThreat: 3,
 
 
     choices: [

@@ -6,6 +6,8 @@ import { DAILY_EVENTS } from './daily';
 import { ECHO_SLICE_EVENTS } from './echo_flags';
 import { FILTER_BEAT_EVENTS } from './filter_beats';
 import { HOOK_ARC_EVENTS } from './hook_arcs';
+import { LATE_NUCLEAR_EVENTS } from './late_nuclear';
+import { LATE_STAGE_EVENTS } from './late_stage';
 import { MED_PROGRESS_EVENTS } from './med_progress';
 import { NUKE_APT_CHAIN_EVENTS } from './nuke_apt_chains';
 import { NUKE_ARC_EVENTS } from './nuke_arcs';
@@ -30,6 +32,8 @@ export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
   ...NUKE_BUILD_CHECK_EVENTS,
   ...NUCLEAR_WINTER_EVENTS,
   ...HOOK_ARC_EVENTS,
+  ...LATE_NUCLEAR_EVENTS,
+  ...LATE_STAGE_EVENTS,
   ...ECHO_SLICE_EVENTS,
   ...DAILY_EVENTS,
   ...STAT_ARC_EVENTS,
@@ -42,6 +46,8 @@ export {
   DAILY_EVENTS,
   FILTER_BEAT_EVENTS,
   HOOK_ARC_EVENTS,
+  LATE_NUCLEAR_EVENTS,
+  LATE_STAGE_EVENTS,
   MED_PROGRESS_EVENTS,
   NUKE_APT_CHAIN_EVENTS,
   NUKE_ARC_EVENTS,

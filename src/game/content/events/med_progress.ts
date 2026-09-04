@@ -14,6 +14,7 @@ export const MED_PROGRESS_EVENTS: EventFamily[] = [
     weight: 8,
     cooldown: 16,
     minThreat: 2,
+    maxThreat: 6,
     require: { all: ['cond:flu'] },
 
 
@@ -49,6 +50,7 @@ export const MED_PROGRESS_EVENTS: EventFamily[] = [
     weight: 7,
     cooldown: 18,
     minThreat: 2,
+    maxThreat: 6,
     require: { all: ['cond:woundInfection'] },
 
 
@@ -86,6 +88,7 @@ export const MED_PROGRESS_EVENTS: EventFamily[] = [
     weight: 7,
     cooldown: 14,
     minThreat: 3,
+    maxThreat: 6,
     require: { all: ['water:recycling'] },
 
 
@@ -120,6 +123,7 @@ export const MED_PROGRESS_EVENTS: EventFamily[] = [
     weight: 7,
     cooldown: 16,
     minThreat: 3,
+    maxThreat: 6,
     require: { any: ['cond:jaundice', 'cond:dysentery', 'cond:giardia'] },
 
 

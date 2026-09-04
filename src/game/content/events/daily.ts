@@ -15,6 +15,8 @@ beat({
     intensity: 2,
     phase: ['survival'],
     weight: 10,
+    minThreat: 1,
+    maxThreat: 3,
     cooldown: 14,
     forbid: { all: ['site:isolated'] },
     variants: [
@@ -412,6 +414,8 @@ beat({
     intensity: 1,
     phase: ['survival'],
     weight: 9,
+    minThreat: 1,
+    maxThreat: 4,
     cooldown: 14,
     variants: [
       {
@@ -697,6 +701,8 @@ beat({
     intensity: 1,
     phase: ['survival'],
     weight: 8,
+    minThreat: 1,
+    maxThreat: 4,
     cooldown: 14,
     variants: [
       {
@@ -805,6 +811,8 @@ beat({
     intensity: 1,
     phase: ['survival'],
     weight: 8,
+    minThreat: 1,
+    maxThreat: 4,
     cooldown: 14,
     require: { all: ['mod:radio>=1'] },
     variants: [
@@ -922,6 +930,8 @@ beat({
     intensity: 2,
     phase: ['survival'],
     weight: 8,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 14,
     require: { any: ['temp:cold', 'temp:freezing', 'temp:extreme'] },
     variants: [
@@ -971,6 +981,8 @@ beat({
     intensity: 2,
     phase: ['survival'],
     weight: 8,
+    minThreat: 3,
+    maxThreat: 6,
     cooldown: 14,
     require: { any: ['order:failing', 'order:collapsed', 'order:strained'] },
     variants: [

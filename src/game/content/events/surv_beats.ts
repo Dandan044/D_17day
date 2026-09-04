@@ -28,6 +28,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { stamina: -8, sanity: -5 } }),
     ],
   }),
+  // 与 daily_quiet_day 题材重复，注释保留（2026-09 阶段化整理）
+  /*
   beat({
     id: 'surv_beat_quiet_day',
     kind: 'dream',
@@ -41,10 +43,13 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { sanity: -2 } }),
     ],
   }),
+  */
   beat({
     id: 'surv_beat_knock_water_a',
     kind: 'social',
     phase: ['survival'],
+    minThreat: 1,
+    maxThreat: 2,
     forbid: { all: ['site:isolated'] },
 
 
@@ -58,6 +63,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_knock_water_b',
     kind: 'social',
     phase: ['survival'],
+    minThreat: 2,
+    maxThreat: 4,
     forbid: { all: ['site:isolated'] },
 
 
@@ -71,6 +78,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_toilet_bucket',
     kind: 'medical',
     phase: ['survival'],
+    minThreat: 1,
+    maxThreat: 4,
 
 
     choices: [
@@ -96,6 +105,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_radio_static',
     kind: 'opportunity',
     phase: ['survival'],
+    minThreat: 2,
+    maxThreat: 6,
 
 
     choices: [
@@ -108,6 +119,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_tape_peel',
     kind: 'weather',
     phase: ['survival'],
+    minThreat: 2,
+    maxThreat: 6,
     require: { any: ['flag:windowTaped', 'site:highFloor'] },
 
 
@@ -122,6 +135,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'threat',
     intensity: 2,
     phase: ['survival'],
+    minThreat: 2,
+    maxThreat: 6,
     require: HIGHFLOOR,
 
 
@@ -185,6 +200,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_neighbor_silence',
     kind: 'social',
     phase: ['survival'],
+    minThreat: 2,
+    maxThreat: 5,
     require: URBAN,
 
 
@@ -199,6 +216,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'medical',
     intensity: 3,
     phase: ['survival'],
+    minThreat: 3,
+    maxThreat: 6,
     require: URBAN,
 
 
@@ -212,6 +231,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_gen_hum',
     kind: 'opportunity',
     phase: ['survival'],
+    minThreat: 2,
+    maxThreat: 5,
 
 
     choices: [
@@ -251,6 +272,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'threat',
     intensity: 2,
     phase: ['survival'],
+    minThreat: 1,
+    maxThreat: 3,
     require: URBAN,
 
 
@@ -264,6 +287,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_faucet_brown',
     kind: 'weather',
     phase: ['survival'],
+    minThreat: 1,
+    maxThreat: 4,
 
 
     choices: [
@@ -313,6 +338,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     id: 'surv_beat_blanket_night',
     kind: 'weather',
     phase: ['survival'],
+    minThreat: 3,
+    maxThreat: 6,
     require: { any: ['temp:cold', 'temp:freezing', 'temp:extreme'] },
 
 
@@ -334,6 +361,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { sanity: -2 } }),
     ],
   }),
+  /*
   beat({
     id: 'surv_beat_window_condense',
     kind: 'weather',
@@ -346,6 +374,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { sanity: -2 } }),
     ],
   }),
+  */
+  /*
   beat({
     id: 'surv_beat_spoon_count',
     kind: 'social',
@@ -358,6 +388,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { sanity: -1 } }),
     ],
   }),
+  */
   beat({
     id: 'surv_beat_clock_battery',
     kind: 'opportunity',
@@ -382,6 +413,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { sanity: -2 } }),
     ],
   }),
+  /*
   beat({
     id: 'surv_beat_chair_creak',
     kind: 'opportunity',
@@ -394,6 +426,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
       skip({ stats: { sanity: -1 } }),
     ],
   }),
+  */
   beat({
     id: 'surv_beat_dust_sun',
     kind: 'weather',
@@ -435,6 +468,8 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
     kind: 'social',
     intensity: 1,
     phase: ['survival'],
+    minThreat: 1,
+    maxThreat: 4,
     require: URBAN,
 
 
