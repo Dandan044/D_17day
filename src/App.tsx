@@ -10,6 +10,10 @@ import { CodexPanel, MetaPanel } from './ui/Meta';
 import SiteSelect from './ui/SiteSelect';
 import Setup from './ui/Setup';
 import Summary from './ui/Summary';
+import ArtMainMenu from './ui/art/ArtMainMenu';
+import ArtSetup from './ui/art/ArtSetup';
+import ArtSiteSelect from './ui/art/ArtSiteSelect';
+import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
 import { PowerPanel } from './ui/PowerPanel';
@@ -83,12 +87,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [overlay, screen, run, nightReport, lastChoice, haul, openShop, setOverlay, endDay]);
 
+  const art = isArtSkin();
   const body = () => {
-    if (screen === 'menu') return <MainMenu />;
-    if (screen === 'setup') return <Setup />;
+    if (screen === 'menu') return art ? <ArtMainMenu /> : <MainMenu />;
+    if (screen === 'setup') return art ? <ArtSetup /> : <Setup />;
     if (screen === 'summary' && settlement) return <Summary />;
-    if (!run) return <MainMenu />;
-    if (run.phase === 'siteSelect') return <SiteSelect />;
+    if (!run) return art ? <ArtMainMenu /> : <MainMenu />;
+    if (run.phase === 'siteSelect') return art ? <ArtSiteSelect /> : <SiteSelect />;
     if (run.phase === 'collapse') return <CollapseScreen run={run} />;
     if (run.phase === 'ended' && settlement) return <Summary />;
     return <Game />;

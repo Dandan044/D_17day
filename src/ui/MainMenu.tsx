@@ -105,6 +105,12 @@ export default function MainMenu() {
           </Panel>
         </div>
 
+        <div className="mt-6 text-center">
+          <a className="text-[11px] text-faint underline decoration-dotted hover:text-dim" href="./art.html">
+            档案试验版
+          </a>
+        </div>
+
         {run && run.phase !== 'ended' && (
           <div className="mt-4 text-center text-[11px] text-faint">
             {t('ui.menu.seed')} <span className="num text-amberdim">{formatSeed(run.seed)}</span>

@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -12,4 +13,12 @@ export default defineConfig({
     },
   },
   server: { port: 5180, open: false },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        art: resolve(__dirname, 'art.html'),
+      },
+    },
+  },
 });

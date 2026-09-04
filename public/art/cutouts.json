@@ -1,0 +1,158 @@
+{
+  "cut-table": {
+    "src": "scene-room.jpg",
+    "file": "cut-table.png",
+    "left": 0.0,
+    "top": 0.08,
+    "width": 0.36,
+    "height": 0.9,
+    "px": [
+      599,
+      835
+    ],
+    "cover": 0.258
+  },
+  "cut-shelves": {
+    "src": "scene-room.jpg",
+    "file": "cut-shelves.png",
+    "left": 0.38,
+    "top": 0.12,
+    "width": 0.31999999999999995,
+    "height": 0.78,
+    "px": [
+      532,
+      724
+    ],
+    "cover": 0.653
+  },
+  "cut-vending": {
+    "src": "scene-room.jpg",
+    "file": "cut-vending.png",
+    "left": 0.7,
+    "top": 0.08,
+    "width": 0.30000000000000004,
+    "height": 0.91,
+    "px": [
+      500,
+      844
+    ],
+    "cover": 0.586
+  },
+  "cut-notebook": {
+    "src": "scene-desk.jpg",
+    "file": "cut-notebook.png",
+    "left": 0.04,
+    "top": 0.32,
+    "width": 0.28,
+    "height": 0.42,
+    "px": [
+      466,
+      390
+    ],
+    "cover": 0.545
+  },
+  "cut-journal": {
+    "src": "scene-desk.jpg",
+    "file": "cut-journal.png",
+    "left": 0.34,
+    "top": 0.3,
+    "width": 0.32,
+    "height": 0.46,
+    "px": [
+      533,
+      427
+    ],
+    "cover": 0.667
+  },
+  "cut-stamp": {
+    "src": "scene-desk.jpg",
+    "file": "cut-stamp.png",
+    "left": 0.7,
+    "top": 0.26,
+    "width": 0.26,
+    "height": 0.48,
+    "px": [
+      433,
+      445
+    ],
+    "cover": 0.139
+  },
+  "cut-model-apartment": {
+    "src": "model-apartment.jpg",
+    "file": "cut-model-apartment.png",
+    "left": 0,
+    "top": 0,
+    "width": 1,
+    "height": 1,
+    "px": [
+      1024,
+      1024
+    ],
+    "cover": 0.394
+  },
+  "cut-model-bungalow": {
+    "src": "model-bungalow.jpg",
+    "file": "cut-model-bungalow.png",
+    "left": 0,
+    "top": 0,
+    "width": 1,
+    "height": 1,
+    "px": [
+      1024,
+      1024
+    ],
+    "cover": 0.33
+  },
+  "cut-model-bunker": {
+    "src": "model-bunker.jpg",
+    "file": "cut-model-bunker.png",
+    "left": 0,
+    "top": 0,
+    "width": 1,
+    "height": 1,
+    "px": [
+      1024,
+      1024
+    ],
+    "cover": 0.306
+  },
+  "cut-model-farmhouse": {
+    "src": "model-farmhouse.jpg",
+    "file": "cut-model-farmhouse.png",
+    "left": 0,
+    "top": 0,
+    "width": 1,
+    "height": 1,
+    "px": [
+      1024,
+      1024
+    ],
+    "cover": 0.288
+  },
+  "cut-model-garage": {
+    "src": "model-garage.jpg",
+    "file": "cut-model-garage.png",
+    "left": 0,
+    "top": 0,
+    "width": 1,
+    "height": 1,
+    "px": [
+      1024,
+      1024
+    ],
+    "cover": 0.322
+  },
+  "cut-model-watertower": {
+    "src": "model-watertower.jpg",
+    "file": "cut-model-watertower.png",
+    "left": 0,
+    "top": 0,
+    "width": 1,
+    "height": 1,
+    "px": [
+      1024,
+      1024
+    ],
+    "cover": 0.312
+  }
+}
