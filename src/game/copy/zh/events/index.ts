@@ -5,6 +5,7 @@ import './filter_beats';
 import './hook_arcs';
 import './late_nuclear';
 import './late_stage';
+import './dark_witness';
 import './med_progress';
 import './nuke_apt_chains';
 import './nuke_arcs';
