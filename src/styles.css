@@ -406,34 +406,44 @@
   transition: background-color 200ms ease;
 }
 
-.heat-module-warn {
-  animation: heat-pulse-amber 1.7s ease-in-out infinite;
-}
-
+/* 警告脉冲：发光层由 ::before 伪元素承载，keyframe 只插值 opacity（合成器路径，
+   不再每帧触发宿主 background/box-shadow 重绘）。峰值样式静态写在伪元素上，
+   由 opacity 淡入淡出呈现呼吸节奏（1.7s warn / 1.25s danger 与原版一致）。 */
+.heat-module-warn,
 .heat-module-danger {
-  animation: heat-pulse-red 1.25s ease-in-out infinite;
+  position: relative;
+  isolation: isolate; /* 建立层叠上下文：z-index:-1 的伪元素只在本元素内层叠，不会漏到父级背景后 */
 }
 
-@keyframes heat-pulse-amber {
-  0%,
-  100% {
-    background-color: transparent;
-    box-shadow: inset 0 0 0 1px transparent;
-  }
-  50% {
-    background-color: rgba(224, 161, 18, 0.12);
-    box-shadow: inset 0 0 0 1px rgba(224, 161, 18, 0.7), 0 0 14px 1px rgba(224, 161, 18, 0.28);
-  }
+.heat-module-warn::before,
+.heat-module-danger::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* 绘制顺序：宿主背景 → 负 z-index 子层 → 内容，即背景之上、文字之下 */
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  animation: heat-glow 1.7s ease-in-out infinite;
 }
 
-@keyframes heat-pulse-red {
+.heat-module-warn::before {
+  background-color: rgba(224, 161, 18, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(224, 161, 18, 0.7), 0 0 14px 1px rgba(224, 161, 18, 0.28);
+}
+
+.heat-module-danger::before {
+  background-color: rgba(222, 74, 63, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(222, 74, 63, 0.8), 0 0 16px 2px rgba(222, 74, 63, 0.35);
+  animation-duration: 1.25s;
+}
+
+@keyframes heat-glow {
   0%,
   100% {
-    background-color: transparent;
-    box-shadow: inset 0 0 0 1px transparent;
+    opacity: 0;
   }
   50% {
-    background-color: rgba(222, 74, 63, 0.14);
-    box-shadow: inset 0 0 0 1px rgba(222, 74, 63, 0.8), 0 0 16px 2px rgba(222, 74, 63, 0.35);
+    opacity: 1;
   }
 }

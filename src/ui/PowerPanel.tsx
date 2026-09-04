@@ -6,7 +6,6 @@ import { WEATHER_NAME } from '../game/engine/world';
 import { canElectricHeat } from '../game/engine/climate';
 import {
   LOAD_NAME,
-  computePower,
   heaterDrawKwh,
   loadWanted,
   mergedPriority,
@@ -14,6 +13,7 @@ import {
 } from '../game/engine/power';
 import { useGame } from '../game/store';
 import type { DisasterId, ModuleId, PowerLoadId, RunState, WeatherId } from '../game/types';
+import { cachedPower } from './derived';
 import { Chip, Modal, SectionLabel } from './kit';
 
 function disasterFactorLabel(id: DisasterId): string | null {
@@ -107,8 +107,10 @@ function GeneratorGauge({
 }
 
 export function PowerPanel({ run }: { run: RunState }) {
-  const { setOverlay, setPowerPriority, togglePowerLoad } = useGame();
-  const power = computePower(run);
+  const setOverlay = useGame((s) => s.setOverlay);
+  const setPowerPriority = useGame((s) => s.setPowerPriority);
+  const togglePowerLoad = useGame((s) => s.togglePowerLoad);
+  const power = cachedPower(run);
   const order = mergedPriority(run).filter((id) => {
     if (id === 'lights' || id === 'fridge') return true;
     if (id === 'heater') return canElectricHeat(run);

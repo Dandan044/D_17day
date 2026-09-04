@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
 
 import './copy';
 import { t } from './copy/t';
@@ -88,6 +88,65 @@ const EMPTY_META: MetaState = {
   lastClassId: 'clerk',
   difficulty: 'normal',
 };
+
+// ============================================================
+// 存档节流：把「每次 set 都同步 JSON.stringify 整个 run 写 localStorage」
+// 合并为 400ms 窗口最多一次（首写起算），页面隐藏/关闭时同步 flush 不丢档。
+// 高频 set（toast 进出、取暖滑块拖动）不再每次都阻塞主线程序列化大 JSON。
+// ============================================================
+
+const SAVE_KEY = 'seven-days-save-v1';
+const FLUSH_DELAY = 400;
+
+interface PersistedSlice {
+  run: RunState | null;
+  meta: MetaState;
+  screen: Screen;
+}
+
+function createThrottledStorage(): PersistStorage<PersistedSlice> {
+  let pending: StorageValue<PersistedSlice> | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (!pending) return;
+    const data = pending;
+    pending = null;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    } catch {
+      // 配额满 / 隐私模式：与 zustand 默认行为一致，静默失败
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+  }
+
+  return {
+    // 读路径保持同步：模块加载时 rehydrate 的时序不变
+    getItem: (name) => {
+      const raw = localStorage.getItem(name);
+      return raw ? (JSON.parse(raw) as StorageValue<PersistedSlice>) : null;
+    },
+    setItem: (_name, value) => {
+      pending = value;
+      if (!timer) timer = setTimeout(flush, FLUSH_DELAY); // 首写起算，不重置：最迟 400ms 必落盘
+    },
+    removeItem: (name) => {
+      flush();
+      localStorage.removeItem(name);
+    },
+  };
+}
 
 interface GameState {
   run: RunState | null;
@@ -760,6 +819,7 @@ export const useGame = create<GameState>()(
     {
       name: 'seven-days-save-v1',
       version: 2,
+      storage: createThrottledStorage(),
       migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<GameState>;
         if (p.run) ensureRunDefaults(p.run);

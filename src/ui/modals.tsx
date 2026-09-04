@@ -17,7 +17,7 @@ import { Bar, Chip, Modal, Panel, SectionLabel } from './kit';
 // ============================================================
 
 export function CollapseScreen({ run }: { run: RunState }) {
-  const { acknowledgeCollapse } = useGame();
+  const acknowledgeCollapse = useGame((s) => s.acknowledgeCollapse);
   const def = DISASTER_BY_ID[run.world.disaster];
   const report = run.collapseReport;
   const [step, setStep] = useState(0);
@@ -128,7 +128,8 @@ export function CollapseScreen({ run }: { run: RunState }) {
 // ============================================================
 
 export function NightReportModal({ run }: { run: RunState }) {
-  const { nightReport, dismissNight } = useGame();
+  const nightReport = useGame((s) => s.nightReport);
+  const dismissNight = useGame((s) => s.dismissNight);
   if (!nightReport) return null;
   const r = nightReport;
   const isPrepNight = r.day < TIME.COLLAPSE_DAY;
@@ -267,7 +268,10 @@ export function NightReportModal({ run }: { run: RunState }) {
 // ============================================================
 
 export function HaulModal({ run }: { run: RunState }) {
-  const { haul, takeHaul, discardHaul, toast } = useGame();
+  const haul = useGame((s) => s.haul);
+  const takeHaul = useGame((s) => s.takeHaul);
+  const discardHaul = useGame((s) => s.discardHaul);
+  const toast = useGame((s) => s.toast);
   const cap = carryCap(run);
   const room = waterRoom(run);
 
@@ -426,7 +430,8 @@ export function HaulModal({ run }: { run: RunState }) {
 // ============================================================
 
 export function ChoiceResultModal() {
-  const { lastChoice, dismissChoice } = useGame();
+  const lastChoice = useGame((s) => s.lastChoice);
+  const dismissChoice = useGame((s) => s.dismissChoice);
   if (!lastChoice) return null;
   const { checkRoll, notes, title, raid, died } = lastChoice;
 
@@ -528,7 +533,7 @@ export function ChoiceResultModal() {
 // ============================================================
 
 export function Toasts() {
-  const { toasts } = useGame();
+  const toasts = useGame((s) => s.toasts);
   const list = useMemo(() => toasts.slice(-4), [toasts]);
   if (list.length === 0) return null;
   return (

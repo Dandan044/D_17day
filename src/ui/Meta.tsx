@@ -13,7 +13,10 @@ import type { PerkDef } from '../game/types';
 import { Chip, Empty, Modal, Panel, SectionLabel } from './kit';
 
 export function MetaPanel() {
-  const { meta, setOverlay, buyPerk, buyUnlock } = useGame();
+  const meta = useGame((s) => s.meta);
+  const setOverlay = useGame((s) => s.setOverlay);
+  const buyPerk = useGame((s) => s.buyPerk);
+  const buyUnlock = useGame((s) => s.buyUnlock);
   const [tab, setTab] = useState<'perks' | 'unlocks'>('perks');
 
   const canBuy = (p: PerkDef) =>
@@ -134,7 +137,8 @@ export function MetaPanel() {
 }
 
 export function CodexPanel() {
-  const { meta, setOverlay } = useGame();
+  const meta = useGame((s) => s.meta);
+  const setOverlay = useGame((s) => s.setOverlay);
   const [tab, setTab] = useState<'endings' | 'disasters' | 'events' | 'classes'>('endings');
 
   const tabs = [

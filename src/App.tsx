@@ -20,20 +20,20 @@ import { PowerPanel } from './ui/PowerPanel';
 import { HelpPanel } from './ui/Help';
 
 export default function App() {
-  const {
-    run,
-    meta,
-    screen,
-    overlay,
-    nightReport,
-    lastChoice,
-    haul,
-    openShop,
-    settlement,
-    setOverlay,
-    endDay,
-    pruneQueue,
-  } = useGame();
+  // 逐字段 selector 订阅（zustand v5 下整体订阅 = 任何字段变化都重渲染整棵路由树，
+  // 最典型的是 toast 每 3.6s 进出导致全树重渲染；拆开后 toasts 变化不再传导到 App）
+  const run = useGame((s) => s.run);
+  const meta = useGame((s) => s.meta);
+  const screen = useGame((s) => s.screen);
+  const overlay = useGame((s) => s.overlay);
+  const nightReport = useGame((s) => s.nightReport);
+  const lastChoice = useGame((s) => s.lastChoice);
+  const haul = useGame((s) => s.haul);
+  const openShop = useGame((s) => s.openShop);
+  const settlement = useGame((s) => s.settlement);
+  const setOverlay = useGame((s) => s.setOverlay);
+  const endDay = useGame((s) => s.endDay);
+  const pruneQueue = useGame((s) => s.pruneQueue);
 
   /**
    * 自愈二：队列里留着指向已删除家族/变体的条目时，EventCard 会渲染成 null，

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import { BANK, TIME } from '../game/balance';
 import { DISASTERS, DISASTER_BY_ID } from '../game/content/disasters';
@@ -20,7 +20,7 @@ import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, CO_ALARM_PRICE, iodineBoughtCount, 
 import { effectiveModule, waterCapacity } from '../game/engine/tags';
 import { forecastAccuracy, WEATHER_NAME } from '../game/engine/world';
 import { useGame } from '../game/store';
-import type { DisasterId, ModuleId, ResourceId, RunState } from '../game/types';
+import type { DisasterId, IntelReading, LogEntry, ModuleId, ResourceId, RunState } from '../game/types';
 import { Bar, Chip, Empty, Modal, Panel, SectionLabel, Stat } from './kit';
 
 // ============================================================
@@ -28,7 +28,12 @@ import { Bar, Chip, Empty, Modal, Panel, SectionLabel, Stat } from './kit';
 // ============================================================
 
 export function ShelterPanel({ run }: { run: RunState }) {
-  const { setOverlay, build, work, cancelProject, salvage, maintain } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
+  const build = useGame((s) => s.build);
+  const work = useGame((s) => s.work);
+  const cancelProject = useGame((s) => s.cancelProject);
+  const salvage = useGame((s) => s.salvage);
+  const maintain = useGame((s) => s.maintain);
   const [open, setOpen] = useState<ModuleId | null>(null);
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const isPrep = run.day < TIME.COLLAPSE_DAY;
@@ -249,7 +254,9 @@ export function ShelterPanel({ run }: { run: RunState }) {
 // ============================================================
 
 export function MapPanel({ run }: { run: RunState }) {
-  const { setOverlay, scavenge, visitShop } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
+  const scavenge = useGame((s) => s.scavenge);
+  const visitShop = useGame((s) => s.visitShop);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const [night, setNight] = useState(false);
   const nightowl = run.abilities.includes('perk_nightowl');
@@ -355,27 +362,32 @@ export function MapPanel({ run }: { run: RunState }) {
 // ============================================================
 
 export function IntelPanel({ run }: { run: RunState }) {
-  const { setOverlay, verifyIntel } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
+  const verifyIntel = useGame((s) => s.verifyIntel);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
 
-  const tally = new Map<DisasterId | 'none', { total: number; confirmed: number; denied: number }>();
-  for (const i of run.intel) {
-    const cur = tally.get(i.points) ?? { total: 0, confirmed: 0, denied: 0 };
-    cur.total += 1;
-    if (i.verified) {
-      if (i.truthful) cur.confirmed += 1;
-      else cur.denied += 1;
+  // 统计/分组按 run.intel 引用缓存：面板打开期间的其他 set 不再重建 Map 与重排
+  const { tally, max, days, byDay } = useMemo(() => {
+    const tally = new Map<DisasterId | 'none', { total: number; confirmed: number; denied: number }>();
+    for (const i of run.intel) {
+      const cur = tally.get(i.points) ?? { total: 0, confirmed: 0, denied: 0 };
+      cur.total += 1;
+      if (i.verified) {
+        if (i.truthful) cur.confirmed += 1;
+        else cur.denied += 1;
+      }
+      tally.set(i.points, cur);
     }
-    tally.set(i.points, cur);
-  }
-
-  const byDay = new Map<number, typeof run.intel>();
-  for (const i of run.intel) {
-    const arr = byDay.get(i.day) ?? [];
-    arr.push(i);
-    byDay.set(i.day, arr);
-  }
-  const days = [...byDay.keys()].sort((a, b) => b - a);
+    const byDay = new Map<number, IntelReading[]>();
+    for (const i of run.intel) {
+      const arr = byDay.get(i.day) ?? [];
+      arr.push(i);
+      byDay.set(i.day, arr);
+    }
+    const days = [...byDay.keys()].sort((a, b) => b - a);
+    const max = Math.max(1, ...[...tally.values()].map((x) => x.total));
+    return { tally, max, days, byDay };
+  }, [run.intel]);
 
   return (
     <Modal
@@ -392,7 +404,6 @@ export function IntelPanel({ run }: { run: RunState }) {
           <div className="space-y-2">
             {DISASTERS.map((d) => {
               const row = tally.get(d.id) ?? { total: 0, confirmed: 0, denied: 0 };
-              const max = Math.max(1, ...[...tally.values()].map((x) => x.total));
               return (
                 <div key={d.id}>
                   <div className="flex items-baseline justify-between gap-2">
@@ -427,57 +438,86 @@ export function IntelPanel({ run }: { run: RunState }) {
       <SectionLabel>{t('ui.intel.stream')}</SectionLabel>
       {days.length === 0 && <Empty>{t('ui.intel.empty')}</Empty>}
       {days.map((day) => (
-        <div key={day} className="mb-4">
-          <div className="label mb-1.5">
-            {t('ui.common.dayN', { n: day })}
-            {day === run.day && t('ui.intel.today')}
-          </div>
-          <div className="space-y-1.5">
-            {(byDay.get(day) ?? []).map((i) => (
-              <div
-                key={i.id}
-                className="border-l-2 px-3 py-2"
-                style={{
-                  borderColor: i.verified
-                    ? i.truthful
-                      ? 'var(--color-safe)'
-                      : 'var(--color-alarm)'
-                    : 'var(--color-line2)',
-                  background: i.verified
-                    ? i.truthful
-                      ? 'rgba(63,158,107,0.06)'
-                      : 'rgba(222,74,63,0.06)'
-                    : 'transparent',
-                }}
-              >
-                <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                  <Chip tone={i.source === 'official' ? 'info' : i.source === 'shortwave' ? 'psyche' : 'default'}>
-                    {SOURCE_NAME[i.source]}
-                  </Chip>
-                  {i.verified && (
-                    <Chip tone={i.truthful ? 'good' : 'bad'}>
-                      {i.truthful ? t('ui.intel.verifiedTrue') : t('ui.intel.verifiedFalse')}
-                    </Chip>
-                  )}
-                  {!i.verified && day === run.day && !run.world.revealed && (
-                    <button
-                      className="btn btn-ghost px-1.5 py-0 text-[10px]"
-                      disabled={run.ap < 1}
-                      onClick={() => verifyIntel(i.id)}
-                    >
-                      {t('ui.intel.verify')}
-                    </button>
-                  )}
-                </div>
-                <p className="text-[12.5px] leading-relaxed text-dim">{i.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <IntelDay
+          key={day}
+          day={day}
+          entries={byDay.get(day) ?? []}
+          isToday={day === run.day}
+          canVerify={day === run.day && !run.world.revealed}
+          ap={run.ap}
+          verifyIntel={verifyIntel}
+        />
       ))}
     </Modal>
   );
 }
+
+/** 单日情报块（memo：props 均为原始值/稳定引用，面板内其他 set 引起的重渲染不再逐条 diff） */
+const IntelDay = memo(function IntelDay({
+  day,
+  entries,
+  isToday,
+  canVerify,
+  ap,
+  verifyIntel,
+}: {
+  day: number;
+  entries: IntelReading[];
+  isToday: boolean;
+  canVerify: boolean;
+  ap: number;
+  verifyIntel: (id: string) => void;
+}) {
+  return (
+    <div className="mb-4">
+      <div className="label mb-1.5">
+        {t('ui.common.dayN', { n: day })}
+        {isToday && t('ui.intel.today')}
+      </div>
+      <div className="space-y-1.5">
+        {entries.map((i) => (
+          <div
+            key={i.id}
+            className="border-l-2 px-3 py-2"
+            style={{
+              borderColor: i.verified
+                ? i.truthful
+                  ? 'var(--color-safe)'
+                  : 'var(--color-alarm)'
+                : 'var(--color-line2)',
+              background: i.verified
+                ? i.truthful
+                  ? 'rgba(63,158,107,0.06)'
+                  : 'rgba(222,74,63,0.06)'
+                : 'transparent',
+            }}
+          >
+            <div className="mb-1 flex flex-wrap items-center gap-1.5">
+              <Chip tone={i.source === 'official' ? 'info' : i.source === 'shortwave' ? 'psyche' : 'default'}>
+                {SOURCE_NAME[i.source]}
+              </Chip>
+              {i.verified && (
+                <Chip tone={i.truthful ? 'good' : 'bad'}>
+                  {i.truthful ? t('ui.intel.verifiedTrue') : t('ui.intel.verifiedFalse')}
+                </Chip>
+              )}
+              {!i.verified && canVerify && (
+                <button
+                  className="btn btn-ghost px-1.5 py-0 text-[10px]"
+                  disabled={ap < 1}
+                  onClick={() => verifyIntel(i.id)}
+                >
+                  {t('ui.intel.verify')}
+                </button>
+              )}
+            </div>
+            <p className="text-[12.5px] leading-relaxed text-dim">{i.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
 
 function RevealedIntel({ run }: { run: RunState }) {
   const def = DISASTER_BY_ID[run.world.disaster];
@@ -619,7 +659,8 @@ export function CrewPanel({ run }: { run: RunState }) {
 // ============================================================
 
 export function LogPanel({ run }: { run: RunState }) {
-  const { setOverlay, toast } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
+  const toast = useGame((s) => s.toast);
 
   const exportText = () => {
     const lines = run.log.map((l) => t('ui.log.line', { n: l.day, text: l.text }));
@@ -628,20 +669,16 @@ export function LogPanel({ run }: { run: RunState }) {
     toast(t('ledger.toast.diaryCopied'), 'good');
   };
 
-  const byDay = new Map<number, typeof run.log>();
-  for (const l of run.log) {
-    const arr = byDay.get(l.day) ?? [];
-    arr.push(l);
-    byDay.set(l.day, arr);
-  }
-  const days = [...byDay.keys()].sort((a, b) => b - a);
-
-  const TONE: Record<string, string> = {
-    good: 'var(--color-safe)',
-    bad: 'var(--color-alarm)',
-    grim: 'var(--color-psyche)',
-    neutral: 'var(--color-line2)',
-  };
+  // 分组按 run.log 引用缓存：面板打开期间的其他 set（toast 等）不再重建 Map 与重排
+  const { days, byDay } = useMemo(() => {
+    const byDay = new Map<number, LogEntry[]>();
+    for (const l of run.log) {
+      const arr = byDay.get(l.day) ?? [];
+      arr.push(l);
+      byDay.set(l.day, arr);
+    }
+    return { days: [...byDay.keys()].sort((a, b) => b - a), byDay };
+  }, [run.log]);
 
   return (
     <Modal
@@ -657,34 +694,53 @@ export function LogPanel({ run }: { run: RunState }) {
     >
       {days.length === 0 && <Empty>{t('ui.log.empty')}</Empty>}
       {days.map((day) => (
-        <div key={day} className="mb-4">
-          <div className="label mb-1.5">
-            {t('ui.common.dayN', { n: day })}
-            {day < TIME.COLLAPSE_DAY ? t('ui.log.prep', { n: TIME.PREP_DAYS - day + 1 }) : ''}
-          </div>
-          <div className="space-y-1.5">
-            {(byDay.get(day) ?? []).map((l, i) => (
-              <p
-                key={i}
-                className="border-l-2 px-3 py-1.5 text-[12.5px] leading-relaxed text-dim"
-                style={{ borderColor: TONE[l.tone] }}
-              >
-                {l.text}
-              </p>
-            ))}
-          </div>
-        </div>
+        <LogDay key={day} day={day} entries={byDay.get(day) ?? []} />
       ))}
     </Modal>
   );
 }
+
+/** 日志条目颜色（模块级常量，避免每次渲染重建） */
+const LOG_TONE: Record<string, string> = {
+  good: 'var(--color-safe)',
+  bad: 'var(--color-alarm)',
+  grim: 'var(--color-psyche)',
+  neutral: 'var(--color-line2)',
+};
+
+/** 单日日志块（memo：props 均为原始值/稳定引用，其他 set 引起的重渲染不再逐条 diff） */
+const LogDay = memo(function LogDay({ day, entries }: { day: number; entries: LogEntry[] }) {
+  return (
+    <div className="mb-4">
+      <div className="label mb-1.5">
+        {t('ui.common.dayN', { n: day })}
+        {day < TIME.COLLAPSE_DAY ? t('ui.log.prep', { n: TIME.PREP_DAYS - day + 1 }) : ''}
+      </div>
+      <div className="space-y-1.5">
+        {entries.map((l, i) => (
+          <p
+            key={i}
+            className="border-l-2 px-3 py-1.5 text-[12.5px] leading-relaxed text-dim"
+            style={{ borderColor: LOG_TONE[l.tone] }}
+          >
+            {l.text}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+});
 
 // ============================================================
 // 采购
 // ============================================================
 
 export function ShopModal({ run, locationId }: { run: RunState; locationId: string }) {
-  const { closeShop, buy, buyIodine, buyCoAlarm, withdraw } = useGame();
+  const closeShop = useGame((s) => s.closeShop);
+  const buy = useGame((s) => s.buy);
+  const buyIodine = useGame((s) => s.buyIodine);
+  const buyCoAlarm = useGame((s) => s.buyCoAlarm);
+  const withdraw = useGame((s) => s.withdraw);
   const loc = LOCATIONS.find((l) => l.id === locationId);
   if (!loc) return null;
   const hasClerk = run.abilities.includes('clerk_network');

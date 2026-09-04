@@ -4,7 +4,7 @@ import { useGame } from '../game/store';
 import { Modal, SectionLabel } from './kit';
 
 export function HelpPanel() {
-  const { setOverlay } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
   return (
     <Modal title={t('ui.help.title')} subtitle={t('ui.help.subtitle')} onClose={() => setOverlay(null)} width="max-w-2xl">
       <SectionLabel>{t('ui.help.day')}</SectionLabel>

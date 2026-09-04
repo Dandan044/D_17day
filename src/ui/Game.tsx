@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { COLD, RAD, THREAT_DESC, TIME } from '../game/balance';
 import { CONDITION_BY_ID } from '../game/content/conditions';
 import { DISASTER_BY_ID } from '../game/content/disasters';
@@ -8,13 +10,14 @@ import { SITE_BY_ID } from '../game/content/sites';
 import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, heatSliderMax, survivalTemp } from '../game/engine/climate';
 import { dailyNeeds } from '../game/engine/economy';
 import { dailyExposure, exposureTier, TIER_DESC, TIER_NAMES } from '../game/engine/exposure';
-import { LOAD_NAME, batteryCapacity, heaterHeadroomKwh, tonightHeat } from '../game/engine/power';
-import { computePower, effectiveModule, iodineActive, radiationShield, threatName, waterCapacity } from '../game/engine/tags';
+import { LOAD_NAME, batteryCapacity, heaterHeadroomKwh } from '../game/engine/power';
+import { effectiveModule, iodineActive, radiationShield, threatName, waterCapacity } from '../game/engine/tags';
 import { WEATHER_DESC, WEATHER_NAME } from '../game/engine/world';
 import { formatSeed } from '../game/rng';
 import { useGame } from '../game/store';
 import type { ModuleId, ResourceId, RunState } from '../game/types';
 import EventCard from './EventCard';
+import { cachedPower, cachedTonightHeat } from './derived';
 import { Bar, Chip, Gauge, Panel, SectionLabel, Stat } from './kit';
 
 const RES_ORDER: ResourceId[] = [
@@ -30,7 +33,7 @@ const RES_ORDER: ResourceId[] = [
 ];
 
 export default function Game() {
-  const { run } = useGame();
+  const run = useGame((s) => s.run);
   if (!run) return null;
   const isPrep = run.day < TIME.COLLAPSE_DAY;
 
@@ -68,14 +71,14 @@ export default function Game() {
 // ============================================================
 
 function DayHeader({ run }: { run: RunState }) {
-  const { setOverlay } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const indoorNow = currentIndoor(run);
   const disaster = DISASTER_BY_ID[run.world.disaster];
   const shield = radiationShield(run);
   const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
-  const power = computePower(run);
+  const power = cachedPower(run);
   const airLv = run.modules.airFilter;
   const airEff = effectiveModule(run, 'airFilter', power);
 
@@ -124,11 +127,11 @@ function DayHeader({ run }: { run: RunState }) {
               )}
               {airLv > 0 && airEff === 0 && <Chip tone="bad">{t('ui.game.filterOff')}</Chip>}
               {iodineActive(run) && <Chip tone="good">{t('ui.game.iodine')}</Chip>}
-              {computePower(run).batteryCap > 0 && (
+              {power.batteryCap > 0 && (
                 <Chip tone={run.wear.batteryCharge < 0.5 ? 'warn' : 'info'}>
                   {t('ui.game.battery', {
                     stored: run.wear.batteryCharge.toFixed(1),
-                    cap: computePower(run).batteryCap,
+                    cap: power.batteryCap,
                   })}
                 </Chip>
               )}
@@ -207,7 +210,7 @@ function DayHeader({ run }: { run: RunState }) {
 // ============================================================
 
 function BodyPanel({ run }: { run: RunState }) {
-  const { treat } = useGame();
+  const treat = useGame((s) => s.treat);
   return (
     <Panel title={t('ui.game.body')} mark>
       <div className="space-y-2.5">
@@ -287,9 +290,9 @@ function thermoPct(temp: number): number {
 }
 
 function HeatThermometer({ run }: { run: RunState }) {
-  const { setHeatMix } = useGame();
+  const setHeatMix = useGame((s) => s.setHeatMix);
   const now = currentIndoor(run);
-  const { plan } = tonightHeat(run);
+  const { plan } = cachedTonightHeat(run);
   const comfort = comfortTemp(run);
   const survival = survivalTemp(run);
   const elecOn = canElectricHeat(run);
@@ -304,8 +307,27 @@ function HeatThermometer({ run }: { run: RunState }) {
   const warn =
     plan.indoor < survival ? 'heat-module-danger' : plan.indoor < comfort ? 'heat-module-warn' : '';
 
-  const setElec = (kwh: number) => setHeatMix(kwh, fuelWant);
-  const setFuel = (liters: number) => setHeatMix(elecWant, liters);
+  const elecValue = Math.min(elecWant, Math.max(maxElecKwh, 0));
+  const fuelValue = Math.min(fuelWant, Math.max(maxFuelL, 0));
+
+  // 拖动中仅写本地草稿，松手/失焦/键盘抬起时提交一次 store。
+  // 原实现每步进 0.1 都触发一次全量 structuredClone + persist 序列化 + 整棵树重渲染，
+  // 是游玩界面最主要的卡顿源；提交后 draft 清空，UI 回读 store 真值（applyHeatWants 可能 clamp）。
+  const [elecDraft, setElecDraft] = useState<number | null>(null);
+  const [fuelDraft, setFuelDraft] = useState<number | null>(null);
+  const commit = () => {
+    if (elecDraft === null && fuelDraft === null) return;
+    setHeatMix(elecDraft ?? elecWant, fuelDraft ?? fuelWant);
+    setElecDraft(null);
+    setFuelDraft(null);
+  };
+  // 外部变更（夜间结算、资源变化导致滑块上限变化）后丢弃草稿，回落到 store 值
+  useEffect(() => {
+    setElecDraft(null);
+  }, [elecValue]);
+  useEffect(() => {
+    setFuelDraft(null);
+  }, [fuelValue]);
 
   const elecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? plan.kwh / COLD.ELECTRIC_PER_DEGREE : 0;
   const elecIndoor = plan.leaked + elecDeg;
@@ -383,7 +405,7 @@ function HeatThermometer({ run }: { run: RunState }) {
           <div className="mb-0.5 flex items-baseline justify-between">
             <span className="label">{t('ui.game.heatElecSlider')}</span>
             <span className="num text-[11px] text-dim">
-              {Math.min(elecWant, maxElecKwh).toFixed(1)} / {maxElecKwh.toFixed(1)} kWh
+              {(elecDraft ?? Math.min(elecWant, maxElecKwh)).toFixed(1)} / {maxElecKwh.toFixed(1)} kWh
             </span>
           </div>
           <input
@@ -391,9 +413,12 @@ function HeatThermometer({ run }: { run: RunState }) {
             min={0}
             max={Math.max(0.1, maxElecKwh)}
             step={0.1}
-            value={Math.min(elecWant, Math.max(maxElecKwh, 0))}
+            value={elecDraft ?? elecValue}
             disabled={!canElec}
-            onChange={(e) => setElec(Number(e.target.value))}
+            onChange={(e) => setElecDraft(Number(e.target.value))}
+            onPointerUp={commit}
+            onKeyUp={commit}
+            onBlur={commit}
             className="thermo-range thermo-range-elec w-full"
             aria-label={t('ui.game.heatElecSlider')}
           />
@@ -405,7 +430,7 @@ function HeatThermometer({ run }: { run: RunState }) {
           <div className="mb-0.5 flex items-baseline justify-between">
             <span className="label">{t('ui.game.heatFuelSlider')}</span>
             <span className="num text-[11px] text-dim">
-              {Math.min(fuelWant, maxFuelL).toFixed(1)} / {maxFuelL.toFixed(1)} L
+              {(fuelDraft ?? Math.min(fuelWant, maxFuelL)).toFixed(1)} / {maxFuelL.toFixed(1)} L
             </span>
           </div>
           <input
@@ -413,9 +438,12 @@ function HeatThermometer({ run }: { run: RunState }) {
             min={0}
             max={Math.max(0.1, maxFuelL)}
             step={0.1}
-            value={Math.min(fuelWant, Math.max(maxFuelL, 0))}
+            value={fuelDraft ?? fuelValue}
             disabled={!canFuel}
-            onChange={(e) => setFuel(Number(e.target.value))}
+            onChange={(e) => setFuelDraft(Number(e.target.value))}
+            onPointerUp={commit}
+            onKeyUp={commit}
+            onBlur={commit}
             className="thermo-range thermo-range-fuel w-full"
             aria-label={t('ui.game.heatFuelSlider')}
           />
@@ -430,10 +458,12 @@ function HeatThermometer({ run }: { run: RunState }) {
 // ============================================================
 
 function RationPanel({ run }: { run: RunState }) {
-  const { setRation, setWaterUse, setOverlay } = useGame();
+  const setRation = useGame((s) => s.setRation);
+  const setWaterUse = useGame((s) => s.setWaterUse);
+  const setOverlay = useGame((s) => s.setOverlay);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const needs = dailyNeeds(run, run.difficulty);
-  const power = computePower(run);
+  const power = cachedPower(run);
 
   if (isPrep) {
     return (
@@ -517,7 +547,8 @@ function RationPanel({ run }: { run: RunState }) {
 // ============================================================
 
 function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
-  const { setOverlay, rest } = useGame();
+  const setOverlay = useGame((s) => s.setOverlay);
+  const rest = useGame((s) => s.rest);
   const noAp = run.ap <= 0;
   const shelterNeedsAttention =
     run.projects.length > 0 ||
@@ -662,8 +693,8 @@ function SuppliesPanel({ run }: { run: RunState }) {
 // ============================================================
 
 function ShelterSummary({ run }: { run: RunState }) {
-  const { setOverlay } = useGame();
-  const power = computePower(run);
+  const setOverlay = useGame((s) => s.setOverlay);
+  const power = cachedPower(run);
   return (
     <Panel
       title={t('ui.game.shelter')}
@@ -785,7 +816,9 @@ function ExposurePanel({ run }: { run: RunState }) {
 // ============================================================
 
 function FooterBar({ run }: { run: RunState }) {
-  const { endDay, goMenu, setOverlay } = useGame();
+  const endDay = useGame((s) => s.endDay);
+  const goMenu = useGame((s) => s.goMenu);
+  const setOverlay = useGame((s) => s.setOverlay);
   const blocked = run.queue.length > 0;
   return (
     <div className="shrink-0 border-t border-line bg-panel/90 px-3 py-2 backdrop-blur sm:px-4">

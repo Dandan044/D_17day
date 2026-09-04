@@ -3,9 +3,10 @@ import { RES_NAME, SKILL_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { SITE_BY_ID } from '../game/content/sites';
 import { kindName } from '../game/engine/director';
-import { checkRequirement, deriveFacts } from '../game/engine/tags';
+import { checkRequirement } from '../game/engine/tags';
 import { useGame } from '../game/store';
 import type { Choice, RunState } from '../game/types';
+import { cachedFacts } from './derived';
 import { Chip } from './kit';
 import { scrambleText } from './scramble';
 
@@ -36,7 +37,7 @@ function requirementCost(c: Choice): string {
 }
 
 export default function EventCard({ run }: { run: RunState }) {
-  const { resolveChoice } = useGame();
+  const resolveChoice = useGame((s) => s.resolveChoice);
   const item = run.queue[0];
   if (!item) return null;
 
@@ -44,7 +45,7 @@ export default function EventCard({ run }: { run: RunState }) {
   const variant = family?.variants.find((v) => v.id === item.variantId);
   if (!family || !variant) return null;
 
-  const facts = deriveFacts(run);
+  const facts = cachedFacts(run);
   const unreliable = run.stats.sanity < 35;
   const hideRecruit = (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) <= 0;
   const visibleChoices = variant.choices.filter((c) => {
