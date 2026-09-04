@@ -106,7 +106,7 @@ export default function MainMenu() {
         </div>
 
         <div className="mt-6 text-center">
-          <a className="text-[11px] text-faint underline decoration-dotted hover:text-dim" href="./art.html">
+          <a className="text-[11px] text-faint underline decoration-dotted hover:text-dim" href="./index.html">
             档案试验版
           </a>
         </div>

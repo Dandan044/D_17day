@@ -1,4 +1,4 @@
-/** 由 art.html 的 <body data-skin="art"> 决定。经典入口不带这个标记。 */
+/** 由首页 / art.html 的 <body data-skin="art"> 决定。经典入口 classic.html 不带这个标记。 */
 export function isArtSkin(): boolean {
   return document.body.dataset.skin === 'art';
 }

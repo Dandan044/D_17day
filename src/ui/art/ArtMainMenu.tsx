@@ -69,7 +69,7 @@ export default function ArtMainMenu() {
           <h1 className="art-title mt-2 text-4xl sm:text-5xl">{t('ui.menu.title')}</h1>
           <div className="art-en mt-3">{t('ui.menu.en')}</div>
           <div className="mt-4">
-            <a className="art-link" href="./index.html">
+            <a className="art-link" href="./classic.html">
               返回经典界面
             </a>
           </div>

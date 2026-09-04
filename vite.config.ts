@@ -18,6 +18,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         art: resolve(__dirname, 'art.html'),
+        classic: resolve(__dirname, 'classic.html'),
       },
     },
   },
