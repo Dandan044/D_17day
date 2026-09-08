@@ -13,6 +13,8 @@ import Summary from './ui/Summary';
 import ArtMainMenu from './ui/art/ArtMainMenu';
 import ArtSetup from './ui/art/ArtSetup';
 import ArtSiteSelect from './ui/art/ArtSiteSelect';
+import ArtGame from './ui/art/ArtGame';
+import { ArtBodyPanel, ArtPlanPanel, ArtSuppliesPanel } from './ui/art/ArtPlanPanel';
 import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
@@ -33,6 +35,8 @@ export default function App() {
   const openShop = useGame((s) => s.openShop);
   const settlement = useGame((s) => s.settlement);
   const setOverlay = useGame((s) => s.setOverlay);
+  const gameUi = useGame((s) => s.gameUi);
+  const setGameUi = useGame((s) => s.setGameUi);
   const endDay = useGame((s) => s.endDay);
   const pruneQueue = useGame((s) => s.pruneQueue);
 
@@ -97,8 +101,15 @@ export default function App() {
     if (run.phase === 'siteSelect') return art ? <ArtSiteSelect /> : <SiteSelect />;
     if (run.phase === 'collapse') return <CollapseScreen run={run} />;
     if (run.phase === 'ended' && settlement) return <Summary />;
-    return <Game />;
+    return art && gameUi === 'art' ? <ArtGame /> : <Game />;
   };
+
+  const inRun =
+    !!run &&
+    screen === 'game' &&
+    run.phase !== 'siteSelect' &&
+    run.phase !== 'collapse' &&
+    run.phase !== 'ended';
 
   return (
     <div className="relative z-10 h-full">
@@ -114,6 +125,9 @@ export default function App() {
       )}
       {run && overlay === 'log' && <LogPanel run={run} />}
       {run && overlay === 'items' && <ItemsPanel run={run} />}
+      {run && overlay === 'plan' && <ArtPlanPanel run={run} />}
+      {run && overlay === 'body' && <ArtBodyPanel run={run} />}
+      {run && overlay === 'supplies' && <ArtSuppliesPanel run={run} />}
       {overlay === 'meta' && <MetaPanel />}
       {overlay === 'codex' && <CodexPanel />}
       {overlay === 'help' && <HelpPanel />}
@@ -125,6 +139,16 @@ export default function App() {
       <ChoiceResultModal />
 
       <Toasts />
+
+      {art && inRun && (
+        <button
+          type="button"
+          className="btn btn-ghost fixed right-3 top-3 z-50 px-2 py-1 text-[11px]"
+          onClick={() => setGameUi(gameUi === 'art' ? 'classic' : 'art')}
+        >
+          {gameUi === 'art' ? t('ui.game.uiClassic') : t('ui.game.uiScene')}
+        </button>
+      )}
     </div>
   );
 }

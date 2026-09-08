@@ -106,7 +106,7 @@ function GeneratorGauge({
   );
 }
 
-export function PowerPanel({ run }: { run: RunState }) {
+export function PowerPanel({ run, embedded }: { run: RunState; embedded?: boolean }) {
   const setOverlay = useGame((s) => s.setOverlay);
   const setPowerPriority = useGame((s) => s.setPowerPriority);
   const togglePowerLoad = useGame((s) => s.togglePowerLoad);
@@ -137,17 +137,8 @@ export function PowerPanel({ run }: { run: RunState }) {
     setPowerPriority(next);
   };
 
-  return (
-    <Modal
-      title={t('ui.power.title')}
-      titleRight={
-        <HelpHint>
-          <span className="block">{t('ui.power.subtitle')}</span>
-        </HelpHint>
-      }
-      onClose={() => setOverlay(null)}
-      width="max-w-2xl"
-    >
+  const inner = (
+    <>
       <div className="mb-3 border-l-2 border-line2 bg-ink px-3 py-2 text-[12px] leading-relaxed text-dim">
         {isPrep && <div className="mb-2 text-safehi">{t('ui.power.gridOk')}</div>}
         <GeneratorGauge
@@ -240,6 +231,22 @@ export function PowerPanel({ run }: { run: RunState }) {
           );
         })}
       </div>
+    </>
+  );
+
+  if (embedded) return inner;
+  return (
+    <Modal
+      title={t('ui.power.title')}
+      titleRight={
+        <HelpHint>
+          <span className="block">{t('ui.power.subtitle')}</span>
+        </HelpHint>
+      }
+      onClose={() => setOverlay(null)}
+      width="max-w-2xl"
+    >
+      {inner}
     </Modal>
   );
 }

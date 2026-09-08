@@ -66,8 +66,23 @@ import type {
   WaterLevel,
 } from './types';
 
-export type Overlay = null | 'shelter' | 'crew' | 'log' | 'intel' | 'map' | 'power' | 'items' | 'codex' | 'meta' | 'help';
+export type Overlay =
+  | null
+  | 'shelter'
+  | 'crew'
+  | 'log'
+  | 'intel'
+  | 'map'
+  | 'power'
+  | 'items'
+  | 'codex'
+  | 'meta'
+  | 'help'
+  | 'plan'
+  | 'body'
+  | 'supplies';
 export type Screen = 'menu' | 'setup' | 'game' | 'summary';
+export type GameUi = 'art' | 'classic';
 
 export interface Toast {
   id: number;
@@ -153,6 +168,7 @@ interface GameState {
   meta: MetaState;
   screen: Screen;
   overlay: Overlay;
+  gameUi: GameUi;
   nightReport: NightReport | null;
   lastChoice: (ResolveChoiceResult & { title: string }) | null;
   haul: Haul | null;
@@ -217,6 +233,7 @@ interface GameState {
 
   // --- UI ---
   setOverlay: (o: Overlay) => void;
+  setGameUi: (ui: GameUi) => void;
   toast: (text: string, tone?: Toast['tone']) => void;
   dropToast: (id: number) => void;
 }
@@ -252,6 +269,7 @@ export const useGame = create<GameState>()(
         meta: EMPTY_META,
         screen: 'menu',
         overlay: null,
+        gameUi: 'art',
         nightReport: null,
         lastChoice: null,
         haul: null,
@@ -541,6 +559,7 @@ export const useGame = create<GameState>()(
 
         // ============================================================
         setOverlay: (overlay) => set({ overlay }),
+        setGameUi: (gameUi) => set({ gameUi }),
         toast: (text, tone = 'neutral') => pushToast(text, tone),
         dropToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
       };
@@ -568,11 +587,12 @@ export const useGame = create<GameState>()(
         }
         return p as GameState;
       },
-      partialize: (s) => ({ run: s.run, meta: s.meta, screen: s.screen }),
+      partialize: (s) => ({ run: s.run, meta: s.meta, screen: s.screen, gameUi: s.gameUi }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<GameState>;
         if (p.run) ensureRunDefaults(p.run);
-        return { ...current, ...p };
+        const gameUi: GameUi = p.gameUi === 'classic' ? 'classic' : 'art';
+        return { ...current, ...p, gameUi };
       },
     },
   ),

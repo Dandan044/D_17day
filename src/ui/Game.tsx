@@ -187,7 +187,7 @@ function cureTierOf(p: number): { key: string; cls: string } {
   return { key: 'ui.game.cureT5', cls: 'text-safehi' };
 }
 
-function BodyPanel({ run }: { run: RunState }) {
+export function BodyPanel({ run }: { run: RunState }) {
   const medicate = useGame((s) => s.medicate);
   const nurse = run.abilities.includes('nurse_care');
   const medCost = (n: number) => (nurse ? Math.max(1, Math.round(n * 0.6)) : n);
@@ -503,7 +503,7 @@ function HeatThermometer({ run }: { run: RunState }) {
 // 配给
 // ============================================================
 
-function RationPanel({ run }: { run: RunState }) {
+export function RationPanel({ run }: { run: RunState }) {
   const setRation = useGame((s) => s.setRation);
   const setWaterUse = useGame((s) => s.setWaterUse);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
@@ -648,7 +648,7 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
 // 物资
 // ============================================================
 
-function SuppliesPanel({ run }: { run: RunState }) {
+export function SuppliesPanel({ run }: { run: RunState }) {
   const setOverlay = useGame((s) => s.setOverlay);
   const waterCap = waterCapacity(run);
   const needs = dailyNeeds(run, run.difficulty);
@@ -852,7 +852,7 @@ function ShelterSummary({ run }: { run: RunState }) {
 // 暴露度
 // ============================================================
 
-function ExposurePanel({ run }: { run: RunState }) {
+export function ExposurePanel({ run }: { run: RunState }) {
   const tier = exposureTier(run.world.exposure);
   const breakdown = dailyExposure(run);
   const tones = ['good', 'info', 'warn', 'bad', 'bad'] as const;

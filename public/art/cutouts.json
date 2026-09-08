@@ -154,5 +154,135 @@
       1024
     ],
     "cover": 0.312
+  },
+  "cut-h-window": {
+    "src": "scene-home-desk.jpg",
+    "file": "cut-h-window.png",
+    "left": 0.3,
+    "top": 0.12,
+    "width": 0.39999999999999997,
+    "height": 0.34,
+    "px": [
+      665,
+      315
+    ],
+    "cover": 0.505
+  },
+  "cut-h-blueprint": {
+    "src": "scene-home-desk.jpg",
+    "file": "cut-h-blueprint.png",
+    "left": 0.02,
+    "top": 0.1,
+    "width": 0.24000000000000002,
+    "height": 0.4,
+    "px": [
+      399,
+      372
+    ],
+    "cover": 0.509
+  },
+  "cut-h-notebook": {
+    "src": "scene-home-desk.jpg",
+    "file": "cut-h-notebook.png",
+    "left": 0.16,
+    "top": 0.58,
+    "width": 0.17,
+    "height": 0.26,
+    "px": [
+      283,
+      241
+    ],
+    "cover": 0.133
+  },
+  "cut-h-plan": {
+    "src": "scene-home-desk.jpg",
+    "file": "cut-h-plan.png",
+    "left": 0.33,
+    "top": 0.6,
+    "width": 0.16999999999999998,
+    "height": 0.28,
+    "px": [
+      283,
+      260
+    ],
+    "cover": 0.245
+  },
+  "cut-h-clock": {
+    "src": "scene-home-desk.jpg",
+    "file": "cut-h-clock.png",
+    "left": 0.5,
+    "top": 0.48,
+    "width": 0.14,
+    "height": 0.28,
+    "px": [
+      232,
+      260
+    ],
+    "cover": 0.247
+  },
+  "cut-h-radio": {
+    "src": "scene-home-desk.jpg",
+    "file": "cut-h-radio.png",
+    "left": 0.64,
+    "top": 0.5,
+    "width": 0.24,
+    "height": 0.33999999999999997,
+    "px": [
+      400,
+      315
+    ],
+    "cover": 0.259
+  },
+  "cut-h-bed": {
+    "src": "scene-home-side.jpg",
+    "file": "cut-h-bed.png",
+    "left": 0.0,
+    "top": 0.22,
+    "width": 0.32,
+    "height": 0.76,
+    "px": [
+      532,
+      705
+    ],
+    "cover": 0.142
+  },
+  "cut-h-medkit": {
+    "src": "scene-home-side.jpg",
+    "file": "cut-h-medkit.png",
+    "left": 0.32,
+    "top": 0.5,
+    "width": 0.14,
+    "height": 0.31999999999999995,
+    "px": [
+      233,
+      296
+    ],
+    "cover": 0.669
+  },
+  "cut-h-door": {
+    "src": "scene-home-side.jpg",
+    "file": "cut-h-door.png",
+    "left": 0.5,
+    "top": 0.08,
+    "width": 0.19999999999999996,
+    "height": 0.88,
+    "px": [
+      332,
+      816
+    ],
+    "cover": 0.795
+  },
+  "cut-h-shelf": {
+    "src": "scene-home-side.jpg",
+    "file": "cut-h-shelf.png",
+    "left": 0.72,
+    "top": 0.1,
+    "width": 0.27,
+    "height": 0.84,
+    "px": [
+      449,
+      780
+    ],
+    "cover": 0.47
   }
 }

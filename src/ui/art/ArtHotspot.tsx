@@ -13,6 +13,8 @@ export function ArtCutout({
   sub,
   onClick,
   hidden,
+  pulse,
+  locked,
 }: {
   left: string;
   top: string;
@@ -23,10 +25,17 @@ export function ArtCutout({
   sub?: string;
   onClick?: () => void;
   hidden?: boolean;
+  pulse?: boolean;
+  locked?: boolean;
 }) {
   if (hidden) return null;
   return (
-    <button type="button" className="art-cut" style={{ left, top, width, height }} onClick={onClick}>
+    <button
+      type="button"
+      className={`art-cut${pulse ? ' is-pulse' : ''}${locked ? ' is-off' : ''}`}
+      style={{ left, top, width, height }}
+      onClick={onClick}
+    >
       <svg className="art-cut-svg" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden>
         <image href={src} width="1" height="1" preserveAspectRatio="none" pointerEvents="visiblePainted" />
       </svg>
