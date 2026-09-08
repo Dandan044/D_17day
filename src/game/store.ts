@@ -4,52 +4,52 @@ import { persist, type PersistStorage, type StorageValue } from 'zustand/middlew
 import './copy';
 import { t } from './copy/t';
 
-import { HEALTH, STAMINA, TIME } from './balance';
+import { TIME } from './balance';
 import { CLASS_BY_ID } from './content/classes';
 import { ENDING_BY_ID } from './content/endings';
 import { FAMILY_BY_ID } from './content/events';
-import { LOCATION_BY_ID } from './content/locations';
 import { PERK_BY_ID, UNLOCK_COST } from './content/perks';
-import {
-  completeReadyProjects,
-  cancelProject as engineCancelProject,
-  doMaintenance,
-  doSalvage,
-  investLabor as engineInvestLabor,
-  startProject,
-  type MaintenanceKind,
-} from './engine/construction';
-import { addLog, clampResources } from './engine/effects';
-import {
-  carryCapacity,
-  commitHaul,
-  drainLocation,
-  purchase as enginePurchase,
-  rollHaul,
-  travelCost,
-  buyIodine as engineBuyIodine,
-  buyCoAlarm as engineBuyCoAlarm,
-  withdrawCash as engineWithdrawCash,
-  type Haul,
-  type HaulItem,
-} from './engine/economy';
+import { addLog } from './engine/effects';
+import { carryCapacity, type Haul, type HaulItem } from './engine/economy';
 import { settle, resolveEnding, type Settlement } from './engine/endings';
-import { applyScavengeDanger } from './engine/exposure';
-import { treatCondition } from './engine/health';
-import { emitHook } from './engine/hooks';
-import { applyHeatWants } from './engine/climate';
-import { ensureRunDefaults, heaterHeadroomKwh } from './engine/power';
+import { ensureRunDefaults } from './engine/power';
+import { createRun, type NightReport, type ResolveChoiceResult } from './engine/run';
+import { randomSeed } from './rng';
 import {
-  acknowledgeCollapse as engineAckCollapse,
-  chooseSite as engineChooseSite,
-  createRun,
-  endDay as engineEndDay,
-  resolveChoice as engineResolveChoice,
-  verifyIntel as engineVerifyIntel,
-  type NightReport,
-  type ResolveChoiceResult,
-} from './engine/run';
-import { makeRng, randomSeed } from './rng';
+  acknowledgeCollapse as sessionAckCollapse,
+  build as sessionBuild,
+  buy as sessionBuy,
+  buyCartridge as sessionBuyCartridge,
+  buyCoAlarm as sessionBuyCoAlarm,
+  buyIodine as sessionBuyIodine,
+  cancelProject as sessionCancelProject,
+  chooseSite as sessionChooseSite,
+  closeShop as sessionCloseShop,
+  createSession,
+  discardHaul as sessionDiscardHaul,
+  endDay as sessionEndDay,
+  maintain as sessionMaintain,
+  rest as sessionRest,
+  resolveChoice as sessionResolveChoice,
+  salvage as sessionSalvage,
+  scavenge as sessionScavenge,
+  setHeatMix as sessionSetHeatMix,
+  setHeatMode as sessionSetHeatMode,
+  setHeatTarget as sessionSetHeatTarget,
+  setPowerMode as sessionSetPowerMode,
+  setPowerPriority as sessionSetPowerPriority,
+  setRation as sessionSetRation,
+  setWaterUse as sessionSetWaterUse,
+  takeHaul as sessionTakeHaul,
+  togglePowerLoad as sessionTogglePowerLoad,
+  medicate as sessionMedicate,
+  useItem as sessionUseItem,
+  verifyIntel as sessionVerifyIntel,
+  visitShop as sessionVisitShop,
+  withdraw as sessionWithdraw,
+  work as sessionWork,
+  type MaintenanceKind,
+} from './session';
 import type {
   BuildPath,
   ConditionId,
@@ -66,7 +66,7 @@ import type {
   WaterLevel,
 } from './types';
 
-export type Overlay = null | 'shelter' | 'crew' | 'log' | 'intel' | 'map' | 'power' | 'codex' | 'meta' | 'help';
+export type Overlay = null | 'shelter' | 'crew' | 'log' | 'intel' | 'map' | 'power' | 'items' | 'codex' | 'meta' | 'help';
 export type Screen = 'menu' | 'setup' | 'game' | 'summary';
 
 export interface Toast {
@@ -186,6 +186,9 @@ interface GameState {
   buy: (locationId: string, res: ResourceId, qty: number) => void;
   buyIodine: (locationId: string) => void;
   buyCoAlarm: (locationId: string) => void;
+  buyCartridge: (locationId: string) => void;
+  /** 使用物品：filter=更换滤芯，iodine=服用碘片开启保护窗 */
+  useItem: (id: 'filter' | 'iodine') => void;
   withdraw: (locationId: string, amount: number) => void;
   rest: () => void;
   build: (moduleId: ModuleId, path: BuildPath) => void;
@@ -193,7 +196,7 @@ interface GameState {
   cancelProject: (moduleId: ModuleId) => void;
   salvage: (targetId: string) => void;
   maintain: (kind: MaintenanceKind) => void;
-  treat: (conditionId: ConditionId) => void;
+  medicate: (conditionId: ConditionId) => void;
   verifyIntel: (intelId: string) => void;
 
   // --- 设置 ---
@@ -223,19 +226,25 @@ let toastSeq = 1;
 export const useGame = create<GameState>()(
   persist(
     (set, get) => {
-      /** 就地修改 run 后触发一次渲染 */
-      const mutate = (fn: (run: RunState) => void) => {
-        const run = get().run;
-        if (!run) return;
-        const next = structuredClone(run) as RunState;
-        fn(next);
-        set({ run: next });
-      };
-
       const pushToast = (text: string, tone: Toast['tone'] = 'neutral') => {
         const t: Toast = { id: toastSeq++, text, tone };
         set({ toasts: [...get().toasts, t] });
         setTimeout(() => get().dropToast(t.id), 3600);
+      };
+
+      const withSession = <T,>(fn: (s: ReturnType<typeof createSession>) => { ok: boolean; reason?: string; notes: Array<{ text: string; tone: Toast['tone'] }>; value?: T }) => {
+        const run = get().run;
+        if (!run) return undefined;
+        const next = structuredClone(run) as RunState;
+        const s = createSession(next, get().haul, get().openShop);
+        const r = fn(s);
+        if (!r.ok) {
+          if (r.reason) pushToast(r.reason, 'bad');
+          return r;
+        }
+        set({ run: s.run, haul: s.haul, openShop: s.openShop });
+        for (const n of r.notes) pushToast(n.text, n.tone);
+        return r;
       };
 
       return {
@@ -277,15 +286,7 @@ export const useGame = create<GameState>()(
         },
 
         chooseSite: (siteId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = engineChooseSite(next, siteId);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noSite'), 'bad');
-            return;
-          }
-          set({ run: next });
+          withSession((s) => sessionChooseSite(s, siteId));
         },
 
         abandonRun: () => {
@@ -304,18 +305,20 @@ export const useGame = create<GameState>()(
         endDay: () => {
           const run = get().run;
           if (!run) return;
-          if (run.queue.length > 0) {
-            pushToast(t('ledger.toast.queue'), 'bad');
+          const next = structuredClone(run) as RunState;
+          const s = createSession(next, get().haul, get().openShop);
+          const r = sessionEndDay(s);
+          if (!r.ok) {
+            if (r.reason) pushToast(r.reason, 'bad');
             return;
           }
-          const next = structuredClone(run) as RunState;
-          const report = engineEndDay(next);
-          if (next.phase === 'ended') {
-            const ending = resolveEnding(next, report.cause);
-            next.endingId = ending.id;
-            set({ run: next, nightReport: report, settlement: settle(next, ending, get().meta) });
+          const report = r.value!;
+          if (s.run.phase === 'ended') {
+            const ending = resolveEnding(s.run, report.cause);
+            s.run.endingId = ending.id;
+            set({ run: s.run, nightReport: report, settlement: settle(s.run, ending, get().meta) });
           } else {
-            set({ run: next, nightReport: report });
+            set({ run: s.run, nightReport: report });
           }
         },
 
@@ -341,7 +344,7 @@ export const useGame = create<GameState>()(
         },
 
         acknowledgeCollapse: () => {
-          mutate((r) => engineAckCollapse(r));
+          withSession((s) => sessionAckCollapse(s));
         },
 
         claimSettlement: () => {
@@ -368,12 +371,15 @@ export const useGame = create<GameState>()(
           const run = get().run;
           if (!run) return;
           const next = structuredClone(run) as RunState;
-          const result = engineResolveChoice(next, familyId, variantId, choiceId);
-          const last = next.log[next.log.length - 1];
+          const s = createSession(next, get().haul, get().openShop);
+          const r = sessionResolveChoice(s, familyId, variantId, choiceId);
+          if (!r.ok || !r.value) return;
+          const result = r.value;
+          const last = s.run.log[s.run.log.length - 1];
           const meta = get().meta;
           const seenKey = `${familyId}/${variantId}`;
           const patch: Partial<GameState> = {
-            run: next,
+            run: s.run,
             lastChoice: { ...result, title: last?.text ?? '' },
             meta: {
               ...meta,
@@ -385,10 +391,9 @@ export const useGame = create<GameState>()(
                 : [...meta.seenVariants, seenKey],
             },
           };
-          // 破门是唯一能当场致死的事件，所以这里也要能收尾
-          if (next.phase === 'ended') {
-            const ending = next.endingId ? ENDING_BY_ID[next.endingId] : undefined;
-            if (ending) patch.settlement = settle(next, ending, get().meta);
+          if (s.run.phase === 'ended') {
+            const ending = s.run.endingId ? ENDING_BY_ID[s.run.endingId] : undefined;
+            if (ending) patch.settlement = settle(s.run, ending, get().meta);
           }
           set(patch);
         },
@@ -401,382 +406,106 @@ export const useGame = create<GameState>()(
 
         // ============================================================
         scavenge: (locationId, night) => {
-          const run = get().run;
-          if (!run) return;
-          if (run.day < TIME.COLLAPSE_DAY) {
-            pushToast(t('ledger.toast.shopOpen'), 'bad');
-            return;
-          }
-          const loc = LOCATION_BY_ID[locationId];
-          if (!loc) return;
-          if (run.ap < 1) {
-            pushToast(t('ledger.toast.noAp'), 'bad');
-            return;
-          }
-          if (loc.needsVehicle && !run.hasVehicle) {
-            pushToast(t('ledger.toast.needCar'), 'bad');
-            return;
-          }
-          const shelf = run.locations.find((l) => l.id === locationId)?.stock ?? loc.stock;
-          if (shelf <= 0) {
-            pushToast(t('ledger.toast.empty'), 'bad');
-            return;
-          }
-          const cost = travelCost(run, loc);
-          if (cost.fuel > 0 && run.res.fuel < cost.fuel) {
-            pushToast(t('ledger.toast.needFuel', { fuel: cost.fuel }), 'bad');
-            return;
-          }
-          if (run.stats.stamina < Math.min(12, cost.stamina * 0.5)) {
-            pushToast(t('ledger.toast.tired'), 'bad');
-            return;
-          }
-          const next = structuredClone(run) as RunState;
-          const rng = makeRng(next.seed, next.rngCursor);
-          next.ap -= 1;
-          next.stats.stamina = Math.max(0, next.stats.stamina - cost.stamina);
-          next.res.fuel = Math.max(0, next.res.fuel - cost.fuel);
-          const haul = rollHaul(next, locationId, night, rng, next.difficulty);
-          const risk = applyScavengeDanger(next, haul, rng);
-          drainLocation(next, locationId);
-          next.stats_meta.scavengeRuns += 1;
-          if (!next.visitedToday.includes(locationId)) next.visitedToday.push(locationId);
-          emitHook(next, 'scavenge', rng);
-          emitHook(next, night ? 'scavengeNight' : 'scavengeDay', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next, haul });
-          if (risk.exposure > 0) pushToast(t('ledger.toast.exposure', { n: risk.exposure }), risk.exposure >= 6 ? 'bad' : 'neutral');
-          if (risk.hpLost > 0) pushToast(t('ledger.toast.hurt', { n: risk.hpLost }), 'bad');
-          if (risk.lostRes && risk.lostAmt) pushToast(t('ledger.toast.droppedLoot'), 'bad');
-          if (risk.scheduledRaid) pushToast(t('ledger.toast.followed'), 'bad');
+          withSession((s) => sessionScavenge(s, locationId, night));
         },
 
         takeHaul: (picked) => {
-          const run = get().run;
-          const haul = get().haul;
-          if (!run || !haul) return;
-          const next = structuredClone(run) as RunState;
-          const haulNotes = commitHaul(next, picked);
-          clampResources(next);
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'takeHaul', rng);
-          next.rngCursor = rng.cursor();
-          const total = picked.reduce((s, p) => s + p.amount, 0);
-          if (total > 0) {
-            addLog(
-              next,
-              t('ledger.toast.haul', { name: LOCATION_BY_ID[haul.locationId]?.name ?? t('ledger.toast.haulOutside') }),
-              'good',
-            );
-          }
-          set({ run: next, haul: null });
-          for (const n of haulNotes.notes) pushToast(n, 'bad');
+          withSession((s) => sessionTakeHaul(s, picked));
         },
 
-        discardHaul: () => set({ haul: null }),
+        discardHaul: () => {
+          withSession((s) => sessionDiscardHaul(s));
+        },
 
         visitShop: (locationId) => {
-          const run = get().run;
-          if (!run) return;
-          if (run.visitedToday.includes(locationId)) {
-            if (locationId === 'pharmacy' && !run.flags.includes('flag:sawIodineOffer')) {
-              mutate((r) => {
-                if (!r.flags.includes('flag:sawIodineOffer')) r.flags.push('flag:sawIodineOffer');
-              });
-            }
-            set({ openShop: locationId });
-            return;
-          }
-          if (run.ap < 1) {
-            pushToast(t('ledger.toast.noAp'), 'bad');
-            return;
-          }
-          const next = structuredClone(run) as RunState;
-          next.ap -= 1;
-          next.stats.stamina = Math.max(0, next.stats.stamina - STAMINA.CHORE);
-          next.visitedToday.push(locationId);
-          if (locationId === 'pharmacy' && !next.flags.includes('flag:sawIodineOffer')) {
-            next.flags.push('flag:sawIodineOffer');
-          }
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'visitShop', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next, openShop: locationId });
+          withSession((s) => sessionVisitShop(s, locationId));
         },
 
-        closeShop: () => set({ openShop: null }),
+        closeShop: () => {
+          withSession((s) => sessionCloseShop(s));
+        },
 
         buy: (locationId, res, qty) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const hasClerk = next.abilities.includes('clerk_network');
-          const r = enginePurchase(next, locationId, res, qty, hasClerk);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.buyFail'), 'bad');
-            return;
-          }
-          clampResources(next);
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'buy', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          if (r.capped && res === 'water') {
-            pushToast(t('ledger.toast.buyPartial', { got: r.got, spent: r.spent }), 'neutral');
-          } else {
-            pushToast(t('ledger.toast.buyOk', { got: r.got, spent: r.spent }), 'good');
-          }
+          withSession((s) => sessionBuy(s, locationId, res, qty));
         },
 
         buyIodine: (locationId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = engineBuyIodine(next, locationId);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.iodineFail'), 'bad');
-            return;
-          }
-          clampResources(next);
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'buy', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          pushToast(t('ledger.toast.iodineOk', { spent: r.spent }), 'good');
+          withSession((s) => sessionBuyIodine(s, locationId));
         },
 
         withdraw: (locationId, amount) => {
-          const run = get().run;
-          if (!run || locationId !== 'bank') return;
-          const next = structuredClone(run) as RunState;
-          const r = engineWithdrawCash(next, amount);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.atm.limit'), 'bad');
-            return;
-          }
-          clampResources(next);
-          set({ run: next });
-          pushToast(t('ledger.atm.ok', { got: r.got, left: next.savings }), 'good');
+          withSession((s) => sessionWithdraw(s, locationId, amount));
         },
 
         buyCoAlarm: (locationId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = engineBuyCoAlarm(next, locationId);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.coAlarmFail'), 'bad');
-            return;
-          }
-          clampResources(next);
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'buy', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          pushToast(t('ledger.toast.coAlarmOk', { spent: r.spent }), 'good');
+          withSession((s) => sessionBuyCoAlarm(s, locationId));
+        },
+
+        buyCartridge: (locationId) => {
+          withSession((s) => sessionBuyCartridge(s, locationId));
+        },
+
+        useItem: (id) => {
+          withSession((s) => sessionUseItem(s, id));
         },
 
         rest: () => {
-          const run = get().run;
-          if (!run || run.ap < 1) {
-            pushToast(t('ledger.toast.noAp'), 'bad');
-            return;
-          }
-          mutate((r) => {
-            r.ap -= 1;
-            const medbay = r.modules.medbay ?? 0;
-            const stamBonus = HEALTH.MEDBAY_REST_STAMINA[medbay] ?? 0;
-            const sanBonus = HEALTH.MEDBAY_REST_SANITY[medbay] ?? 0;
-            const hpBonus = HEALTH.MEDBAY_REST_HP[medbay] ?? 0;
-            r.stats.stamina = Math.min(100, r.stats.stamina + STAMINA.REST_ACTION + stamBonus);
-            r.stats.sanity = Math.min(100, r.stats.sanity + 4 + sanBonus);
-            if (hpBonus > 0) r.stats.hp = Math.min(100, r.stats.hp + hpBonus);
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'rest', rng);
-            r.rngCursor = rng.cursor();
-          });
-          const medbay = run.modules.medbay ?? 0;
-          const hpBonus = HEALTH.MEDBAY_REST_HP[medbay] ?? 0;
-          pushToast(
-            hpBonus > 0 ? t('ledger.toast.restHeal') : t('ledger.toast.rest'),
-            'good',
-          );
+          withSession((s) => sessionRest(s));
         },
 
         build: (moduleId, path) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = startProject(next, moduleId, path);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noBuild'), 'bad');
-            return;
-          }
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'build', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
+          withSession((s) => sessionBuild(s, moduleId, path));
         },
 
         work: (moduleId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const rng = makeRng(next.seed, next.rngCursor);
-          const r = engineInvestLabor(next, moduleId, rng);
-          next.rngCursor = rng.cursor();
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noWork'), 'bad');
-            return;
-          }
-          // 立刻检查是否完工
-          const done = completeReadyProjects(next, rng);
-          emitHook(next, 'work', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          if (r.note) {
-            const bad =
-              r.note.includes('浪费') ||
-              r.note.includes('划伤') ||
-              r.note.includes('伤口') ||
-              r.note.includes('做坏');
-            pushToast(r.note, bad ? 'bad' : 'neutral');
-          }
-          for (const d of done) pushToast(d, 'good');
+          withSession((s) => sessionWork(s, moduleId));
         },
 
         cancelProject: (moduleId) => {
-          mutate((r) => {
-            engineCancelProject(r, moduleId);
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'cancelProject', rng);
-            r.rngCursor = rng.cursor();
-          });
+          withSession((s) => sessionCancelProject(s, moduleId));
         },
 
         salvage: (targetId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const rng = makeRng(next.seed, next.rngCursor);
-          const r = doSalvage(next, targetId, rng);
-          next.rngCursor = rng.cursor();
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noSalvage'), 'bad');
-            return;
-          }
-          emitHook(next, 'salvage', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          if (r.note) pushToast(r.note, 'neutral');
+          withSession((s) => sessionSalvage(s, targetId));
         },
 
         maintain: (kind) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = doMaintenance(next, kind);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noMaint'), 'bad');
-            return;
-          }
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'maintain', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          if (r.note) pushToast(r.note, 'good');
+          withSession((s) => sessionMaintain(s, kind));
         },
 
-        treat: (conditionId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = treatCondition(next, conditionId);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noTreat'), 'bad');
-            return;
-          }
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'treat', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
-          pushToast(t('ledger.toast.treated'), 'good');
+        medicate: (conditionId) => {
+          withSession((s) => sessionMedicate(s, conditionId));
         },
 
         verifyIntel: (intelId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const r = engineVerifyIntel(next, intelId);
-          if (!r.ok) {
-            pushToast(r.reason ?? t('ledger.toast.noIntel'), 'bad');
-            return;
-          }
-          const rng = makeRng(next.seed, next.rngCursor);
-          emitHook(next, 'verifyIntel', rng);
-          next.rngCursor = rng.cursor();
-          set({ run: next });
+          withSession((s) => sessionVerifyIntel(s, intelId));
         },
 
         // ============================================================
-        setRation: (ration) =>
-          mutate((r) => {
-            r.ration = ration;
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'setRation', rng);
-            r.rngCursor = rng.cursor();
-          }),
-        setWaterUse: (waterUse) =>
-          mutate((r) => {
-            r.waterUse = waterUse;
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'setWaterUse', rng);
-            r.rngCursor = rng.cursor();
-          }),
-        setPowerMode: (powerMode) =>
-          mutate((r) => {
-            r.powerMode = powerMode;
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'setPowerMode', rng);
-            emitHook(r, 'setPowerPriority', rng);
-            r.rngCursor = rng.cursor();
-          }),
-        setHeatMode: (heatMode) =>
-          mutate((r) => {
-            r.heatMode = heatMode;
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'setHeatMode', rng);
-            r.rngCursor = rng.cursor();
-          }),
-        setHeatTarget: (heatTarget) =>
-          mutate((r) => {
-            r.heatTarget = heatTarget;
-          }),
-        setHeatMix: (elecKwh, fuelL) =>
-          mutate((r) => {
-            applyHeatWants(r, elecKwh, fuelL, heaterHeadroomKwh(r));
-            if ((r.heatElecWant ?? 0) > 0) {
-              if (!r.powerEnabled) r.powerEnabled = {};
-              r.powerEnabled.heater = true;
-            }
-          }),
-        setPowerPriority: (order) =>
-          mutate((r) => {
-            r.powerPriority = order;
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'setPowerPriority', rng);
-            emitHook(r, 'setPowerMode', rng);
-            r.rngCursor = rng.cursor();
-          }),
-        togglePowerLoad: (id, on) =>
-          mutate((r) => {
-            if (!r.powerEnabled) r.powerEnabled = {};
-            r.powerEnabled[id] = on;
-            const rng = makeRng(r.seed, r.rngCursor);
-            emitHook(r, 'setPowerPriority', rng);
-            emitHook(r, 'setPowerMode', rng);
-            r.rngCursor = rng.cursor();
-          }),
+        setRation: (ration) => {
+          withSession((s) => sessionSetRation(s, ration));
+        },
+        setWaterUse: (waterUse) => {
+          withSession((s) => sessionSetWaterUse(s, waterUse));
+        },
+        setPowerMode: (powerMode) => {
+          withSession((s) => sessionSetPowerMode(s, powerMode));
+        },
+        setHeatMode: (heatMode) => {
+          withSession((s) => sessionSetHeatMode(s, heatMode));
+        },
+        setHeatTarget: (heatTarget) => {
+          withSession((s) => sessionSetHeatTarget(s, heatTarget));
+        },
+        setHeatMix: (elecKwh, fuelL) => {
+          withSession((s) => sessionSetHeatMix(s, elecKwh, fuelL));
+        },
+        setPowerPriority: (order) => {
+          withSession((s) => sessionSetPowerPriority(s, order));
+        },
+        togglePowerLoad: (id, on) => {
+          withSession((s) => sessionTogglePowerLoad(s, id, on));
+        },
         setDifficulty: (difficulty) => set({ meta: { ...get().meta, difficulty } }),
 
         // ============================================================
@@ -818,11 +547,19 @@ export const useGame = create<GameState>()(
     },
     {
       name: 'seven-days-save-v1',
-      version: 2,
+      version: 4,
       storage: createThrottledStorage(),
       migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<GameState>;
-        if (p.run) ensureRunDefaults(p.run);
+        if (p.run) {
+          // v3：新增特殊物品容器；滤芯总耐久 32→30，旧档超出截断
+          p.run.items = p.run.items ?? { filter: 0 };
+          if (p.run.wear && p.run.wear.filterLife > 30) p.run.wear.filterLife = 30;
+          // v4：疾病系统重做——旧「脱水」→轻度脱水；新增用药标记与免疫记录
+          p.run.medicated = p.run.medicated ?? [];
+          p.run.immunity = p.run.immunity ?? {};
+          ensureRunDefaults(p.run);
+        }
         if (p.meta) {
           p.meta.seenVariants = p.meta.seenVariants ?? [];
           p.meta.seenFamilies = p.meta.seenFamilies ?? [];

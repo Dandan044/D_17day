@@ -76,7 +76,7 @@ export function ArtFile({
       disabled={disabled}
       onClick={onClick}
     >
-      <img src={src} alt="" onError={hideBrokenImg} />
+      <img src={src} alt="" loading="lazy" decoding="async" onError={hideBrokenImg} />
       <span className="art-spot-tip">
         {label}
         {sub ? <em>{sub}</em> : null}
@@ -89,7 +89,7 @@ export function ArtSceneFrame({ src, children }: { src: string; children: ReactN
   return (
     <div className="art-frame">
       <div className="art-frame-box">
-        <img className="art-frame-photo" src={src} alt="" />
+        <img className="art-frame-photo" src={src} alt="" decoding="async" />
         {children}
       </div>
     </div>

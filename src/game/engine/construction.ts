@@ -377,7 +377,8 @@ export function completeReadyProjects(run: RunState, rng: Rng): string[] {
     notes.push(t('ledger.build.done', { name, lvl: p.toLevel }));
     addLog(run, t('ledger.build.doneLog', { name, desc: spec?.desc ?? '' }), 'good');
     if (p.moduleId === 'filter' || p.moduleId === 'airFilter') {
-      run.wear.filterLife = Math.max(run.wear.filterLife, WEAR.FILTER_RESTORE);
+      // 新装的净水/空气过滤设备自带一只满芯
+      run.wear.filterLife = Math.max(run.wear.filterLife, WEAR.FILTER_LIFE);
     }
     if (p.moduleId === 'power' && p.toLevel >= 3) {
       run.wear.generatorOil = Math.max(run.wear.generatorOil, WEAR.GENERATOR_OIL);
@@ -472,7 +473,8 @@ export const SALVAGE_TARGETS: SalvageTarget[] = [
 // 维护：让"建完就躺"不成立
 // ============================================================
 
-export type MaintenanceKind = 'filter' | 'oil';
+/** 滤芯不再走零件维修：耗尽后到物品栏整芯替换（filter 分支已随物品系统移除） */
+export type MaintenanceKind = 'oil';
 
 export interface MaintenanceInfo {
   kind: MaintenanceKind;
@@ -487,25 +489,6 @@ export interface MaintenanceInfo {
 
 export function maintenanceOptions(run: RunState): MaintenanceInfo[] {
   const out: MaintenanceInfo[] = [];
-
-  const hasFilters = run.modules.filter > 0 || run.modules.airFilter > 0;
-  let filterParts: number = WEAR.FILTER_PARTS;
-  if (run.abilities.includes('chemist_consumables')) filterParts = Math.max(2, filterParts - 1);
-  out.push({
-    kind: 'filter',
-    name: t('ledger.build.maintFilter'),
-    desc: t('ledger.build.maintFilterDesc'),
-    parts: filterParts,
-    available: hasFilters && run.res.parts >= filterParts && run.ap >= 1,
-    reason: !hasFilters
-      ? t('ledger.build.maintNoFilter')
-      : run.res.parts < filterParts
-        ? t('ledger.build.lackParts', { n: Math.ceil(filterParts - run.res.parts) })
-        : run.ap < 1
-          ? t('ledger.build.needAp')
-          : undefined,
-    remaining: Math.max(0, Math.round(run.wear.filterLife)),
-  });
 
   const hasGen = run.modules.power >= 3;
   out.push({
@@ -535,12 +518,6 @@ export function doMaintenance(run: RunState, kind: MaintenanceKind): { ok: boole
   run.res.parts -= opt.parts;
   run.stats.stamina = Math.max(0, run.stats.stamina - STAMINA.CHORE);
 
-  if (kind === 'filter') {
-    let restore: number = WEAR.FILTER_RESTORE;
-    if (run.abilities.includes('perk_maintainer')) restore = Math.round(restore * 1.5);
-    run.wear.filterLife += restore;
-    return { ok: true, note: t('ledger.build.filterDone', { days: Math.round(run.wear.filterLife) }) };
-  }
   run.wear.generatorOil += WEAR.GENERATOR_OIL;
   return { ok: true, note: t('ledger.build.oilDone') };
 }

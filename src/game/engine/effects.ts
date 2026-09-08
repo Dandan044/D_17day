@@ -3,7 +3,7 @@
  * 事件、建造、结算都复用它，所以数值边界只需要在一个地方守住。
  */
 
-import { EXPOSURE, HEALTH } from '../balance';
+import { EXPOSURE, HEALTH, LOG, WEAR } from '../balance';
 import { HOOK_NAME, RES_NAME, STAT_NAME } from '../copy/names';
 import { t } from '../copy/t';
 import { CONDITION_BY_ID } from '../content/conditions';
@@ -53,6 +53,8 @@ export function sequelWaitLabel(hooks: ActionHook | ActionHook[] | undefined): s
 
 export function addLog(run: RunState, text: string, tone: 'good' | 'bad' | 'neutral' | 'grim' = 'neutral'): void {
   run.log.push({ day: run.day, text, tone });
+  // 保险丝：只保留最近 LOG.CAP 条，最早条目从日记面板消失，无任何逻辑依赖它们
+  if (run.log.length > LOG.CAP) run.log.splice(0, run.log.length - LOG.CAP);
 }
 
 export function addCondition(run: RunState, id: ConditionId): boolean {
@@ -161,13 +163,28 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   }
 
   if (eff.wear) {
-    if (eff.wear.filterLife) run.wear.filterLife = Math.max(0, run.wear.filterLife + eff.wear.filterLife);
+    if (eff.wear.filterLife) {
+      // 单芯总耐久 30 封顶；负增量合法（额外磨损），正增量只允许补到满芯
+      run.wear.filterLife = Math.min(
+        WEAR.FILTER_LIFE,
+        Math.max(0, Math.round((run.wear.filterLife + eff.wear.filterLife) * 10) / 10),
+      );
+    }
     if (eff.wear.generatorOil) run.wear.generatorOil = Math.max(0, run.wear.generatorOil + eff.wear.generatorOil);
     if (eff.wear.batteryCharge) {
       run.wear.batteryCharge = Math.max(0, (run.wear.batteryCharge ?? 0) + eff.wear.batteryCharge);
       clampBattery(run);
       const shown = Math.round(eff.wear.batteryCharge * 10) / 10;
       notes.push(t('ledger.effect.battery', { shown: `${shown > 0 ? '+' : ''}${shown}`, stored: run.wear.batteryCharge.toFixed(1), cap: batteryCapacity(run) }));
+    }
+  }
+
+  if (eff.items) {
+    if (!run.items) run.items = { filter: 0 };
+    const d = eff.items.filter ?? 0;
+    if (d) {
+      run.items.filter = Math.max(0, run.items.filter + d);
+      notes.push(t('ledger.effect.cartridge', { n: run.items.filter }));
     }
   }
 

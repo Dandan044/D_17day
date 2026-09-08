@@ -63,6 +63,8 @@ export const LOCATIONS: Location[] = [
       { res: 'materials', min: 3, max: 10, chance: 0.9, weight: RES_WEIGHT.materials },
       { res: 'parts', min: 2, max: 8, chance: 0.85, weight: RES_WEIGHT.parts },
       { res: 'fuel', min: 0, max: 4, chance: 0.3, weight: RES_WEIGHT.fuel },
+      // 备用滤芯：整局限一次（准备期已买或已搜到则不再刷新），命中多扣约两份建材的门店库存
+      { item: 'filter', min: 1, max: 1, chance: 0.3, weight: 0 },
     ],
     prices: { materials: 1, parts: 1 },
   },

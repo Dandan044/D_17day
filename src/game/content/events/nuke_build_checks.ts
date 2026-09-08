@@ -361,15 +361,15 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ch(
         'replace_core',
         {
-          res: { parts: -1 },
-          wear: { filterLife: 14 },
+          items: { filter: -1 },
+          wear: { filterLife: 30 },
           stats: { stamina: -8 },
           setFlags: ['flag:murkyReplacedCore'],
           schedule: [{ familyId: 'nuke_build_murky_3', inDays: 3 }],
 
           tone: 'good',
         },
-        { requires: { res: { parts: 1 } } },
+        { requires: { tags: { all: ['item:filter>=1'] }, reason: '需要一只备用滤芯' } },
       ),
       ch(
         'keep_boil',
@@ -445,13 +445,13 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ch(
         'swap_now',
         {
-          res: { parts: -2, materials: -1 },
-          wear: { filterLife: 16 },
+          items: { filter: -1 },
+          wear: { filterLife: 30 },
           stats: { stamina: -12, sanity: 3 },
 
           tone: 'good',
         },
-        { requires: { res: { parts: 2, materials: 1 } } },
+        { requires: { tags: { all: ['item:filter>=1'] }, reason: '需要一只备用滤芯' } },
       ),
       ch(
         'downgrade',

@@ -16,8 +16,13 @@ export function isPrecipWeather(weather: WeatherId): boolean {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-/** 电优先，油补缺口，总升温不超过 MAX_INDOOR */
-function fitHeat(leaked: number, elecDeg: number, fuelDeg: number) {
+/** 0 级保温没有热缓冲，炉子烧的是整间屋子：油/电每度资源消耗按此倍率放大 */
+export function heatCostMult(run: RunState): number {
+  return insulateLevel(run) === 0 ? COLD.UNINSULATED_MULT : 1;
+}
+
+/** 电优先，油补缺口，总升温不超过 MAX_INDOOR。mult = 每度资源消耗倍率 */
+function fitHeat(leaked: number, elecDeg: number, fuelDeg: number, mult: number) {
   const maxDeg = Math.max(0, COLD.MAX_INDOOR - leaked);
   const e = Math.min(Math.max(0, elecDeg), maxDeg);
   const f = Math.min(Math.max(0, fuelDeg), Math.max(0, maxDeg - e));
@@ -26,8 +31,8 @@ function fitHeat(leaked: number, elecDeg: number, fuelDeg: number) {
     fuelDeg: f,
     heatDegrees: e + f,
     indoor: round1(leaked + e + f),
-    kwh: round1(e * COLD.ELECTRIC_PER_DEGREE),
-    fuelCost: round1(f * COLD.FUEL_PER_DEGREE),
+    kwh: round1(e * COLD.ELECTRIC_PER_DEGREE * mult),
+    fuelCost: round1(f * COLD.FUEL_PER_DEGREE * mult),
   };
 }
 
@@ -35,9 +40,10 @@ function fitHeat(leaked: number, elecDeg: number, fuelDeg: number) {
 export function heatSliderMax(run: RunState, outdoor?: number): { elecKwh: number; fuelL: number } {
   const { leaked } = leakedTonight(run, outdoor ?? run.world.temperature);
   const gap = Math.max(0, COLD.MAX_INDOOR - leaked);
+  const mult = heatCostMult(run);
   return {
-    elecKwh: canElectricHeat(run) ? round1(gap * COLD.ELECTRIC_PER_DEGREE) : 0,
-    fuelL: canFuelHeat(run) ? round1(gap * COLD.FUEL_PER_DEGREE) : 0,
+    elecKwh: canElectricHeat(run) ? round1(gap * COLD.ELECTRIC_PER_DEGREE * mult) : 0,
+    fuelL: canFuelHeat(run) ? round1(gap * COLD.FUEL_PER_DEGREE * mult) : 0,
   };
 }
 
@@ -101,6 +107,8 @@ export interface HeatPlan {
   indoor: number;
   fuelCost: number;
   kwh: number;
+  /** 该计划采用的每度资源消耗倍率（0 级保温为 2） */
+  costMult: number;
   mode: HeatMode;
 }
 
@@ -111,7 +119,7 @@ export function heatWantKwh(run: RunState, outdoor?: number): number {
   const leaked = leakIndoor(currentIndoor(run), thermalSink(run, out), leakRate(run), occupancyHeat(run));
   const gap = Math.max(0, Math.min(COLD.MAX_INDOOR, run.heatTarget ?? comfortTemp(run)) - leaked);
   if (gap <= 0) return 0;
-  return round1(gap * COLD.ELECTRIC_PER_DEGREE);
+  return round1(gap * COLD.ELECTRIC_PER_DEGREE * heatCostMult(run));
 }
 
 function leakedTonight(run: RunState, outdoor: number): { sink: number; leaked: number } {
@@ -127,15 +135,17 @@ export function applyHeatWants(run: RunState, elecKwh: number, fuelL: number, ma
   const fuel = canFuelHeat(run) ? Math.max(0, Math.min(fuelL, run.res.fuel)) : 0;
   run.heatElecWant = round1(elec);
   run.heatFuelWant = round1(fuel);
+  const mult = heatCostMult(run);
   const { leaked } = leakedTonight(run, run.world.temperature);
-  const elecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? run.heatElecWant / COLD.ELECTRIC_PER_DEGREE : 0;
-  const fuelDeg = COLD.FUEL_PER_DEGREE > 0 ? run.heatFuelWant / COLD.FUEL_PER_DEGREE : 0;
-  const fitted = fitHeat(leaked, elecDeg, fuelDeg);
+  const elecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? run.heatElecWant / (COLD.ELECTRIC_PER_DEGREE * mult) : 0;
+  const fuelDeg = COLD.FUEL_PER_DEGREE > 0 ? run.heatFuelWant / (COLD.FUEL_PER_DEGREE * mult) : 0;
+  const fitted = fitHeat(leaked, elecDeg, fuelDeg, mult);
   run.heatTarget = fitted.indoor;
 }
 
 function planFromWants(run: RunState, outdoor: number, elecGrantedKwh: number): HeatPlan {
   const { sink, leaked } = leakedTonight(run, outdoor);
+  const mult = heatCostMult(run);
   let heatDegrees = 0;
   let fuelCost = 0;
   let kwh = 0;
@@ -143,7 +153,7 @@ function planFromWants(run: RunState, outdoor: number, elecGrantedKwh: number): 
   if (canElectricHeat(run) && elecGrantedKwh > 0 && COLD.ELECTRIC_PER_DEGREE > 0) {
     const want = Math.max(0, run.heatElecWant ?? 0);
     const elecKwh = Math.min(want, elecGrantedKwh);
-    const elecDeg = elecKwh / COLD.ELECTRIC_PER_DEGREE;
+    const elecDeg = elecKwh / (COLD.ELECTRIC_PER_DEGREE * mult);
     heatDegrees += elecDeg;
     kwh = round1(elecKwh);
   }
@@ -151,12 +161,17 @@ function planFromWants(run: RunState, outdoor: number, elecGrantedKwh: number): 
   if (canFuelHeat(run) && COLD.FUEL_PER_DEGREE > 0) {
     const want = Math.max(0, run.heatFuelWant ?? 0);
     const fuel = Math.min(want, run.res.fuel);
-    const fuelDeg = fuel / COLD.FUEL_PER_DEGREE;
+    const fuelDeg = fuel / (COLD.FUEL_PER_DEGREE * mult);
     heatDegrees += fuelDeg;
     fuelCost = round1(fuel);
   }
 
-  const fitted = fitHeat(leaked, kwh > 0 && COLD.ELECTRIC_PER_DEGREE > 0 ? kwh / COLD.ELECTRIC_PER_DEGREE : 0, fuelCost > 0 && COLD.FUEL_PER_DEGREE > 0 ? fuelCost / COLD.FUEL_PER_DEGREE : 0);
+  const fitted = fitHeat(
+    leaked,
+    kwh > 0 && COLD.ELECTRIC_PER_DEGREE > 0 ? kwh / (COLD.ELECTRIC_PER_DEGREE * mult) : 0,
+    fuelCost > 0 && COLD.FUEL_PER_DEGREE > 0 ? fuelCost / (COLD.FUEL_PER_DEGREE * mult) : 0,
+    mult,
+  );
   const mode: HeatMode = fitted.kwh > 0 ? 'electric' : fitted.fuelCost > 0 ? 'fuel' : 'off';
   return {
     sink,
@@ -166,6 +181,7 @@ function planFromWants(run: RunState, outdoor: number, elecGrantedKwh: number): 
     indoor: fitted.indoor,
     fuelCost: fitted.fuelCost,
     kwh: fitted.kwh,
+    costMult: mult,
     mode,
   };
 }
@@ -180,6 +196,7 @@ export function heatPlan(run: RunState, outdoor: number, elecGrantedKwh = 0): He
   }
 
   const { sink, leaked } = leakedTonight(run, outdoor);
+  const mult = heatCostMult(run);
   const target = Math.min(COLD.MAX_INDOOR, run.heatTarget ?? comfortTemp(run));
   const gap = Math.max(0, target - leaked);
   let heatDegrees = 0;
@@ -187,17 +204,17 @@ export function heatPlan(run: RunState, outdoor: number, elecGrantedKwh = 0): He
   let kwh = 0;
 
   if (canElectricHeat(run) && elecGrantedKwh > 0 && gap > 0 && COLD.ELECTRIC_PER_DEGREE > 0) {
-    const elecDeg = Math.min(gap, elecGrantedKwh / COLD.ELECTRIC_PER_DEGREE);
+    const elecDeg = Math.min(gap, elecGrantedKwh / (COLD.ELECTRIC_PER_DEGREE * mult));
     heatDegrees += elecDeg;
-    kwh = round1(elecDeg * COLD.ELECTRIC_PER_DEGREE);
+    kwh = round1(elecDeg * COLD.ELECTRIC_PER_DEGREE * mult);
   }
 
   const remain = Math.max(0, gap - heatDegrees);
   if (canFuelHeat(run) && remain > 0 && COLD.FUEL_PER_DEGREE > 0) {
-    const maxDeg = run.res.fuel / COLD.FUEL_PER_DEGREE;
+    const maxDeg = run.res.fuel / (COLD.FUEL_PER_DEGREE * mult);
     const fuelDeg = Math.min(remain, maxDeg);
     heatDegrees += fuelDeg;
-    fuelCost = round1(fuelDeg * COLD.FUEL_PER_DEGREE);
+    fuelCost = round1(fuelDeg * COLD.FUEL_PER_DEGREE * mult);
   }
 
   const mode: HeatMode = kwh > 0 ? 'electric' : fuelCost > 0 ? 'fuel' : 'off';
@@ -209,6 +226,7 @@ export function heatPlan(run: RunState, outdoor: number, elecGrantedKwh = 0): He
     indoor: round1(Math.min(COLD.MAX_INDOOR, leaked + heatDegrees)),
     fuelCost,
     kwh,
+    costMult: mult,
     mode,
   };
 }
@@ -221,13 +239,14 @@ export function previewNight(run: RunState, elecGrantedKwh = 0): HeatPlan {
 /** 结算：电优先花预算，再花油；升温不超过预算能买到的度数 */
 export function capHeat(budget: HeatPlan, actual: HeatPlan): HeatPlan {
   const gap = Math.max(0, actual.target - actual.leaked);
-  const elecDegCap = COLD.ELECTRIC_PER_DEGREE > 0 ? budget.kwh / COLD.ELECTRIC_PER_DEGREE : 0;
-  const fuelDegCap = COLD.FUEL_PER_DEGREE > 0 ? budget.fuelCost / COLD.FUEL_PER_DEGREE : 0;
+  const mult = actual.costMult ?? 1;
+  const elecDegCap = COLD.ELECTRIC_PER_DEGREE > 0 ? budget.kwh / (COLD.ELECTRIC_PER_DEGREE * mult) : 0;
+  const fuelDegCap = COLD.FUEL_PER_DEGREE > 0 ? budget.fuelCost / (COLD.FUEL_PER_DEGREE * mult) : 0;
   const elecDeg = Math.min(gap, elecDegCap);
   const fuelDeg = Math.min(Math.max(0, gap - elecDeg), fuelDegCap);
   const heatDegrees = elecDeg + fuelDeg;
-  const kwh = round1(elecDeg * COLD.ELECTRIC_PER_DEGREE);
-  const fuelCost = round1(fuelDeg * COLD.FUEL_PER_DEGREE);
+  const kwh = round1(elecDeg * COLD.ELECTRIC_PER_DEGREE * mult);
+  const fuelCost = round1(fuelDeg * COLD.FUEL_PER_DEGREE * mult);
   const mode: HeatMode = kwh > 0 ? 'electric' : fuelCost > 0 ? 'fuel' : 'off';
   return {
     ...actual,
@@ -261,12 +280,17 @@ export function electricHeatKwh(run: RunState): number {
   return heatWantKwh(run);
 }
 
-export function canFuelHeat(run: RunState): boolean {
-  return insulateLevel(run) >= 1;
+/**
+ * 燃油取暖：任何保温等级都可以点炉子，但 0 级保温没有热缓冲，
+ * 烧出的热量大部分直接漏掉——消耗按 heatCostMult 加倍。
+ */
+export function canFuelHeat(_run: RunState): boolean {
+  return true;
 }
 
+/** 电热取暖：只要家里有电（power ≥ 1）就能插电热片，0 级保温同样加倍耗电 */
 export function canElectricHeat(run: RunState): boolean {
-  return insulateLevel(run) >= 2 && run.modules.power >= 1;
+  return run.modules.power >= 1;
 }
 
 export const HYPO_IDS = ['hypothermiaMild', 'hypothermiaMod', 'hypothermiaSevere'] as const;

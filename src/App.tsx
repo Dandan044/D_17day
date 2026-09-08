@@ -18,6 +18,7 @@ import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts 
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
 import { PowerPanel } from './ui/PowerPanel';
 import { HelpPanel } from './ui/Help';
+import { ItemsPanel } from './ui/ItemsPanel';
 
 export default function App() {
   // 逐字段 selector 订阅（zustand v5 下整体订阅 = 任何字段变化都重渲染整棵路由树，
@@ -112,6 +113,7 @@ export default function App() {
         <CrewPanel run={run} />
       )}
       {run && overlay === 'log' && <LogPanel run={run} />}
+      {run && overlay === 'items' && <ItemsPanel run={run} />}
       {overlay === 'meta' && <MetaPanel />}
       {overlay === 'codex' && <CodexPanel />}
       {overlay === 'help' && <HelpPanel />}

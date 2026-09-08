@@ -5,6 +5,7 @@ import { COLD_EVENTS } from './cold';
 import { DAILY_EVENTS } from './daily';
 import { ECHO_SLICE_EVENTS } from './echo_flags';
 import { FILTER_BEAT_EVENTS } from './filter_beats';
+import { FILTER_CARTRIDGE_EVENTS } from './filter_cartridge';
 import { HOOK_ARC_EVENTS } from './hook_arcs';
 import { LATE_NUCLEAR_EVENTS } from './late_nuclear';
 import { LATE_STAGE_EVENTS } from './late_stage';
@@ -27,6 +28,7 @@ export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
   ...SURV_BEAT_EVENTS,
   ...COLD_EVENTS,
   ...FILTER_BEAT_EVENTS,
+  ...FILTER_CARTRIDGE_EVENTS,
   ...MED_PROGRESS_EVENTS,
   ...NUKE_ARC_EVENTS,
   ...NUKE_APT_CHAIN_EVENTS,
@@ -47,6 +49,7 @@ export {
   COLD_EVENTS,
   DAILY_EVENTS,
   FILTER_BEAT_EVENTS,
+  FILTER_CARTRIDGE_EVENTS,
   HOOK_ARC_EVENTS,
   LATE_NUCLEAR_EVENTS,
   LATE_STAGE_EVENTS,

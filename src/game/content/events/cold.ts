@@ -132,6 +132,29 @@ export const COLD_EVENTS: EventFamily[] = [
     ],
   }),
   beat({
+    id: 'env_cold_snap_nudge',
+    kind: 'weather',
+    intensity: 2,
+    phase: ['survival'],
+    weight: 0,
+    once: true,
+    require: { all: ['temp:cool'] },
+    choices: [
+      ch(
+        'stash_fuel',
+        { res: { fuel: 2 }, stats: { stamina: -4 }, tone: 'good' },
+      ),
+      ch(
+        'board_up',
+        { res: { materials: 2, parts: 1 }, stats: { stamina: -8 }, tone: 'good' },
+      ),
+      ch(
+        'stove_side',
+        { stats: { sanity: -2 }, tone: 'neutral' },
+      ),
+    ],
+  }),
+  beat({
     id: 'env_heater_fault',
     kind: 'weather',
     intensity: 2,

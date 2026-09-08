@@ -211,7 +211,10 @@ const FACTIONS: FactionId[] = [
   'trader',
 ];
 const CONDITIONS: ConditionId[] = [
-  'dehydrated',
+  'thirst',
+  'dehydrationMild',
+  'dehydrationMod',
+  'dehydrationSevere',
   'starving',
   'malnourished',
   'dysentery',
@@ -252,6 +255,7 @@ export const NUM_FACT_KEYS: string[] = [
   'wear:filterLife',
   'wear:generatorOil',
   'wear:batteryCharge',
+  'item:filter',
   ...RESOURCES.map((r) => `res:${r}`),
   ...STATS.map((s) => `stat:${s}`),
   ...SKILLS.map((s) => `skill:${s}`),

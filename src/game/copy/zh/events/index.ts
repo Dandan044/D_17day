@@ -2,6 +2,7 @@ import './cold';
 import './daily';
 import './echo_flags';
 import './filter_beats';
+import './filter_cartridge';
 import './hook_arcs';
 import './late_nuclear';
 import './late_stage';

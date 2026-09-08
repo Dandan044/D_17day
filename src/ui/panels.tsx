@@ -1,10 +1,10 @@
 import { memo, useMemo, useState } from 'react';
 
-import { BANK, TIME } from '../game/balance';
+import { BANK, PRICE, TIME } from '../game/balance';
 import { DISASTERS, DISASTER_BY_ID } from '../game/content/disasters';
 import { SOURCE_NAME } from '../game/content/intel';
 import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locations';
-import { BUILD_PATH_NAME, FACTION_NAME, SKILL_NAME } from '../game/copy/names';
+import { BUILD_PATH_NAME, FACTION_NAME, ITEM_NAME, SKILL_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES, moduleHardEffect, moduleSpec } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
@@ -326,7 +326,7 @@ export function MapPanel({ run }: { run: RunState }) {
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {loc.loot.map((l) => (
-                  <Chip key={l.res}>{RES_NAME[l.res]}</Chip>
+                  <Chip key={l.item ?? l.res}>{l.item ? ITEM_NAME[l.item] : RES_NAME[l.res!]}</Chip>
                 ))}
               </div>
               <div className="mt-2.5 flex flex-wrap gap-2">
@@ -469,7 +469,7 @@ const IntelDay = memo(function IntelDay({
   verifyIntel: (id: string) => void;
 }) {
   return (
-    <div className="mb-4">
+    <div className="cv-intel mb-4">
       <div className="label mb-1.5">
         {t('ui.common.dayN', { n: day })}
         {isToday && t('ui.intel.today')}
@@ -591,7 +591,8 @@ function RevealedIntel({ run }: { run: RunState }) {
 // ============================================================
 
 export function CrewPanel({ run }: { run: RunState }) {
-  const { setOverlay } = useGame();
+  // 单字段 selector：面板打开期间 toast 等无关 set 不再重渲染本面板
+  const setOverlay = useGame((s) => s.setOverlay);
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
 
   return (
@@ -711,7 +712,7 @@ const LOG_TONE: Record<string, string> = {
 /** 单日日志块（memo：props 均为原始值/稳定引用，其他 set 引起的重渲染不再逐条 diff） */
 const LogDay = memo(function LogDay({ day, entries }: { day: number; entries: LogEntry[] }) {
   return (
-    <div className="mb-4">
+    <div className="cv-log mb-4">
       <div className="label mb-1.5">
         {t('ui.common.dayN', { n: day })}
         {day < TIME.COLLAPSE_DAY ? t('ui.log.prep', { n: TIME.PREP_DAYS - day + 1 }) : ''}
@@ -740,6 +741,7 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
   const buy = useGame((s) => s.buy);
   const buyIodine = useGame((s) => s.buyIodine);
   const buyCoAlarm = useGame((s) => s.buyCoAlarm);
+  const buyCartridge = useGame((s) => s.buyCartridge);
   const withdraw = useGame((s) => s.withdraw);
   const loc = LOCATIONS.find((l) => l.id === locationId);
   if (!loc) return null;
@@ -750,6 +752,8 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
   const iodinePrice = Math.max(1, Math.round(IODINE_BOX_PRICE * run.world.priceIndex));
   const hasCoAlarm = run.flags.includes('flag:coAlarm');
   const coAlarmPrice = Math.max(1, Math.round(CO_ALARM_PRICE * run.world.priceIndex));
+  const hasCartridge = run.flags.includes('flag:filterBought') || (run.items?.filter ?? 0) > 0;
+  const cartridgePrice = Math.max(1, Math.round(PRICE.FILTER * run.world.priceIndex));
 
   return (
     <Modal
@@ -793,6 +797,30 @@ export function ShopModal({ run, locationId }: { run: RunState; locationId: stri
         </div>
       )}
       <div className="space-y-2">
+        {locationId === 'hardware' && (
+          <div className="panel flex flex-wrap items-center gap-3 p-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[13px] text-paper">{t('ui.shop.cartridge')}</span>
+                <span className="num text-[11.5px] text-amberdim">{t('ui.shop.coAlarmUnit', { n: cartridgePrice })}</span>
+              </div>
+              <div className="text-[11px] leading-snug text-faint">{t('ui.shop.cartridgeHint')}</div>
+            </div>
+            <div>
+              {hasCartridge ? (
+                <span className="text-[11px] text-faint">{t('ui.shop.bought')}</span>
+              ) : (
+                <button
+                  className="btn px-2 py-1 text-[11px]"
+                  disabled={run.res.cash < cartridgePrice}
+                  onClick={() => buyCartridge(locationId)}
+                >
+                  {t('ui.shop.buyOne')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {locationId === 'hardware' && (
           <div className="panel flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">

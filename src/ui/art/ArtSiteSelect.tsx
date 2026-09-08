@@ -83,6 +83,8 @@ export default function ArtSiteSelect() {
               <img
                 src={ART.modelCut(s.id)}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 onError={(e) => {
                   const img = e.currentTarget;
                   if (img.dataset.fallback) {

@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState, type CSSProperties } from 'react';
 
-import { COLD, RAD, THREAT_DESC, TIME } from '../game/balance';
+import { COLD, CURE, RAD, TIME } from '../game/balance';
 import { CONDITION_BY_ID } from '../game/content/conditions';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { RES_NAME, RES_UNIT } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
-import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, heatSliderMax, survivalTemp } from '../game/engine/climate';
+import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, heatCostMult, heatSliderMax, survivalTemp } from '../game/engine/climate';
 import { dailyNeeds } from '../game/engine/economy';
 import { dailyExposure, exposureTier, TIER_DESC, TIER_NAMES } from '../game/engine/exposure';
+import { cureChanceOf, isImmuneNow } from '../game/engine/health';
 import { LOAD_NAME, batteryCapacity, heaterHeadroomKwh } from '../game/engine/power';
 import { effectiveModule, iodineActive, radiationShield, threatName, waterCapacity } from '../game/engine/tags';
 import { WEATHER_DESC, WEATHER_NAME } from '../game/engine/world';
@@ -18,7 +19,7 @@ import { useGame } from '../game/store';
 import type { ModuleId, ResourceId, RunState } from '../game/types';
 import EventCard from './EventCard';
 import { cachedPower, cachedTonightHeat } from './derived';
-import { Bar, Chip, Gauge, Panel, SectionLabel, Stat } from './kit';
+import { Bar, Chip, Gauge, HelpHint, Panel, SectionLabel, Stat } from './kit';
 
 const RES_ORDER: ResourceId[] = [
   'water',
@@ -32,7 +33,9 @@ const RES_ORDER: ResourceId[] = [
   'cash',
 ];
 
-export default function Game() {
+// memo：Game 无 props、自订阅 run。App 因 overlay/openShop/toasts 等变化重渲染时
+// 整树不再跟着重渲染（含所有引擎派生调用）；run 变化照常经 selector 触发更新。
+export default memo(function Game() {
   const run = useGame((s) => s.run);
   if (!run) return null;
   const isPrep = run.day < TIME.COLLAPSE_DAY;
@@ -48,11 +51,6 @@ export default function Game() {
           </div>
           <div className="space-y-3 xl:order-2">
             {run.queue.length > 0 ? <EventCard run={run} /> : <ActionsPanel run={run} isPrep={isPrep} />}
-            {run.queue.length > 0 && (
-              <div className="panel p-3 text-[12px] leading-snug text-faint">
-                {t('ui.game.queueHint')}
-              </div>
-            )}
           </div>
           <div className="space-y-3 xl:order-3">
             <SuppliesPanel run={run} />
@@ -64,14 +62,13 @@ export default function Game() {
       <FooterBar run={run} />
     </div>
   );
-}
+});
 
 // ============================================================
 // 顶栏
 // ============================================================
 
 function DayHeader({ run }: { run: RunState }) {
-  const setOverlay = useGame((s) => s.setOverlay);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const site = SITE_BY_ID[run.siteId ?? 'apartment'];
   const indoorNow = currentIndoor(run);
@@ -83,7 +80,7 @@ function DayHeader({ run }: { run: RunState }) {
   const airEff = effectiveModule(run, 'airFilter', power);
 
   return (
-    <div className="shrink-0 border-b border-line bg-panel/90 backdrop-blur">
+    <div className="shrink-0 border-b border-line bg-panel">
       <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2 sm:px-4">
         {/* 天数 */}
         <div className="flex items-baseline gap-2">
@@ -164,41 +161,11 @@ function DayHeader({ run }: { run: RunState }) {
               ))}
             </div>
           </div>
-
-          <div className="h-6 w-px bg-line" />
-
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              className={`btn btn-ghost px-2 py-1 text-[11px]${
-                run.projects.length > 0 ||
-                (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0))
-                  ? ' heat-module-warn'
-                  : ''
-              }`}
-              onClick={() => setOverlay('shelter')}
-            >
-              {t('ui.game.shelter')}
-            </button>
-            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('power')}>
-              {t('ui.game.power')}
-            </button>
-            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('map')}>
-              {isPrep ? t('ui.game.shop') : t('ui.game.out')}
-            </button>
-            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('intel')}>
-              {t('ui.game.intel')}
-            </button>
-            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('log')}>
-              {t('ui.game.log')}
-            </button>
-          </div>
         </div>
       </div>
 
       <div className="mx-auto flex max-w-[1500px] items-center gap-2 px-3 pb-1.5 text-[11px] text-faint sm:px-4">
-        <span className="truncate">
-          {site.name} · {isPrep ? t('ui.game.tapOn') : THREAT_DESC[run.threat]}
-        </span>
+        <span className="truncate">{site.name}</span>
         <span className="ml-auto num shrink-0 text-amberdim/70">{formatSeed(run.seed)}</span>
       </div>
     </div>
@@ -209,8 +176,21 @@ function DayHeader({ run }: { run: RunState }) {
 // 身体状况
 // ============================================================
 
+/** 治愈率 → 显示档位（不给数值，只给等级与颜色） */
+function cureTierOf(p: number): { key: string; cls: string } {
+  const T = CURE.TIERS;
+  if (p < T[0]) return { key: 'ui.game.cureNone', cls: 'text-alarmhi' };
+  if (p < T[1]) return { key: 'ui.game.cureT1', cls: 'text-alarmhi' };
+  if (p < T[2]) return { key: 'ui.game.cureT2', cls: 'text-amberhi' };
+  if (p < T[3]) return { key: 'ui.game.cureT3', cls: 'text-paper' };
+  if (p < T[4]) return { key: 'ui.game.cureT4', cls: 'text-safehi' };
+  return { key: 'ui.game.cureT5', cls: 'text-safehi' };
+}
+
 function BodyPanel({ run }: { run: RunState }) {
-  const treat = useGame((s) => s.treat);
+  const medicate = useGame((s) => s.medicate);
+  const nurse = run.abilities.includes('nurse_care');
+  const medCost = (n: number) => (nurse ? Math.max(1, Math.round(n * 0.6)) : n);
   return (
     <Panel title={t('ui.game.body')} mark>
       <div className="space-y-2.5">
@@ -225,11 +205,29 @@ function BodyPanel({ run }: { run: RunState }) {
 
       {run.conditions.length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <SectionLabel>{t('ui.game.treat')}</SectionLabel>
+          <div className="flex items-center gap-1.5">
+            <SectionLabel>{t('ui.game.treat')}</SectionLabel>
+            <HelpHint>
+              <span className="block">{t('ui.game.cureHint')}</span>
+              <span className="mt-1 block text-faint">{t('ui.game.treatRule')}</span>
+              {effectiveModule(run, 'medbay') > 0 && (
+                <span className="mt-1 block text-faint">
+                  {t('ui.game.medbay')}
+                  {run.modules.medbay >= 3 ? t('ui.game.medbay3') : t('ui.game.medbaySleep')}
+                </span>
+              )}
+            </HelpHint>
+          </div>
           <div className="space-y-1.5">
             {run.conditions.map((c) => {
               const def = CONDITION_BY_ID[c];
-              const canTreat = !!def.medsCure;
+              const immune = isImmuneNow(run, c);
+              const chance = cureChanceOf(run, c); // null = 条件型
+              const medicated = run.medicated?.includes(c) ?? false;
+              const gateOk = !def.needsMedbay || run.modules.medbay >= def.needsMedbay;
+              const cost = def.medsCure ? medCost(def.medsCure) : 0;
+              const afford = run.res.meds >= cost;
+              const canMedicate = def.kind === 'pathogenic' && !!def.medsCure;
               const age = run.conditionAge?.[c] ?? 0;
               const worsenAt = def.worsen?.afterDays;
               const worsenHint =
@@ -241,38 +239,66 @@ function BodyPanel({ run }: { run: RunState }) {
                       })
                     : t('ui.game.worsenLater', { age, left: worsenAt - age })
                   : '';
+              const debuffParts: string[] = [];
+              if (def.daily.hp) debuffParts.push(`生命 ${def.daily.hp}`);
+              if (def.daily.stamina) debuffParts.push(`体力 ${def.daily.stamina}`);
+              if (def.daily.sanity) debuffParts.push(`理智 ${def.daily.sanity}`);
+              const tier = chance === null ? null : cureTierOf(chance);
               return (
-                <div key={c} className="border-l-2 border-alarmdim bg-alarm/5 px-2 py-1.5">
+                <div key={c} className="group/cond relative border-l-2 border-alarmdim bg-alarm/5 px-2 py-1.5">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[12.5px] text-alarmhi">{def.name}</span>
-                    {canTreat && (
+                    <span className="text-[12.5px] text-alarmhi">
+                      {def.name}
+                      {immune && <span className="text-faint">（{t('ui.game.immuneTag')}）</span>}
+                    </span>
+                    {canMedicate && (
                       <button
-                        className="btn btn-ghost px-1.5 py-0 text-[10px]"
-                        onClick={() => treat(c)}
-                        title={`${t('ui.game.treatTitle', { n: def.medsCure ?? 0 })}${def.needsMedbay ? t('ui.game.treatMedbay', { n: def.needsMedbay }) : ''}`}
+                        className="btn btn-ghost shrink-0 px-1.5 py-0 text-[10px]"
+                        disabled={medicated || !gateOk || !afford}
+                        title={
+                          !gateOk
+                            ? t('ui.game.medicateMedbayGate', { n: def.needsMedbay ?? 0 })
+                            : t('ui.game.medicateTitle', { n: cost })
+                        }
+                        onClick={() => medicate(c)}
                       >
-                        {t('ui.game.treatBtn', { n: def.medsCure ?? 0 })}
-                        {def.needsMedbay ? t('ui.game.treatMed', { n: def.needsMedbay }) : ''}
+                        {medicated ? t('ui.game.medicated') : t('ui.game.medicateBtn', { n: cost })}
+                        {def.needsMedbay ? t('ui.game.medicateMed', { n: def.needsMedbay }) : ''}
                       </button>
                     )}
                   </div>
                   <div className="mt-0.5 text-[11px] leading-snug text-faint">
                     {def.desc}
                     {worsenHint ? ` ${worsenHint}` : ''}
-                    {canTreat ? t('ui.game.treatNote') : ''}
+                  </div>
+                  {/* 悬停：治愈判定档位 + 每晚损耗详情（不显示具体概率） */}
+                  <div className="pointer-events-none absolute right-2 top-[calc(100%-4px)] z-30 hidden w-56 rounded-sm bg-ink p-2.5 text-[11px] leading-relaxed shadow-lg ring-1 ring-line2 group-hover/cond:block">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-dim">{t('ui.game.cureTitle')}</span>
+                      {tier ? (
+                        <span className={tier.cls}>{t(tier.key)}</span>
+                      ) : (
+                        <span className="text-infohi">{t('ui.game.cureConditional')}</span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex items-start justify-between gap-2 border-t border-line pt-1.5">
+                      <span className="shrink-0 text-dim">{t('ui.game.debuffTitle')}</span>
+                      <span className="text-right text-paper/80">
+                        {debuffParts.length > 0 ? debuffParts.join(' · ') : t('ui.game.debuffNone')}
+                      </span>
+                    </div>
+                    {def.conditionHint && (
+                      <div className="mt-1.5 border-t border-line pt-1.5 text-faint">
+                        <span className="text-dim">{t('ui.game.conditionCure')}：</span>
+                        {def.conditionHint}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-      )}
-      {effectiveModule(run, 'medbay') > 0 && (
-        <p className="mt-3 border-t border-line pt-2 text-[11.5px] leading-snug text-faint">
-          {t('ui.game.medbay')}
-          {run.modules.medbay >= 3 ? t('ui.game.medbay3') : t('ui.game.medbaySleep')}
-          {t('ui.game.treatRule')}
-        </p>
       )}
     </Panel>
   );
@@ -310,6 +336,13 @@ function HeatThermometer({ run }: { run: RunState }) {
   const elecValue = Math.min(elecWant, Math.max(maxElecKwh, 0));
   const fuelValue = Math.min(fuelWant, Math.max(maxFuelL, 0));
 
+  // 轨道已填充比例（0-100%），内联成 --fill 交给 CSS 画进度色。
+  // 分母与 input 的 max 保持一致（Math.max(0.1, max)），否则 0 值时除零。
+  const rangePct = (v: number, max: number) => {
+    const m = Math.max(0.1, max);
+    return Math.max(0, Math.min(100, (Math.max(0, Math.min(v, m)) / m) * 100));
+  };
+
   // 拖动中仅写本地草稿，松手/失焦/键盘抬起时提交一次 store。
   // 原实现每步进 0.1 都触发一次全量 structuredClone + persist 序列化 + 整棵树重渲染，
   // 是游玩界面最主要的卡顿源；提交后 draft 清空，UI 回读 store 真值（applyHeatWants 可能 clamp）。
@@ -329,7 +362,8 @@ function HeatThermometer({ run }: { run: RunState }) {
     setFuelDraft(null);
   }, [fuelValue]);
 
-  const elecDeg = COLD.ELECTRIC_PER_DEGREE > 0 ? plan.kwh / COLD.ELECTRIC_PER_DEGREE : 0;
+  const elecDeg =
+    COLD.ELECTRIC_PER_DEGREE > 0 ? plan.kwh / (COLD.ELECTRIC_PER_DEGREE * (plan.costMult ?? heatCostMult(run))) : 0;
   const elecIndoor = plan.leaked + elecDeg;
   const mixElecLeft = thermoPct(plan.leaked);
   const mixElecWidth = Math.max(0, thermoPct(elecIndoor) - mixElecLeft);
@@ -408,20 +442,26 @@ function HeatThermometer({ run }: { run: RunState }) {
               {(elecDraft ?? Math.min(elecWant, maxElecKwh)).toFixed(1)} / {maxElecKwh.toFixed(1)} kWh
             </span>
           </div>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0.1, maxElecKwh)}
-            step={0.1}
-            value={elecDraft ?? elecValue}
-            disabled={!canElec}
-            onChange={(e) => setElecDraft(Number(e.target.value))}
-            onPointerUp={commit}
-            onKeyUp={commit}
-            onBlur={commit}
-            className="thermo-range thermo-range-elec w-full"
-            aria-label={t('ui.game.heatElecSlider')}
-          />
+          <span
+            className={`thermo-rail thermo-rail-elec${canElec ? '' : ' thermo-rail-off'}`}
+            style={{ '--fill': `${rangePct(elecDraft ?? elecValue, maxElecKwh)}%` } as CSSProperties}
+          >
+            <span className="thermo-rail-fill" />
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0.1, maxElecKwh)}
+              step={0.1}
+              value={elecDraft ?? elecValue}
+              disabled={!canElec}
+              onChange={(e) => setElecDraft(Number(e.target.value))}
+              onPointerUp={commit}
+              onKeyUp={commit}
+              onBlur={commit}
+              className="thermo-range thermo-range-elec"
+              aria-label={t('ui.game.heatElecSlider')}
+            />
+          </span>
         </div>
       )}
 
@@ -433,20 +473,26 @@ function HeatThermometer({ run }: { run: RunState }) {
               {(fuelDraft ?? Math.min(fuelWant, maxFuelL)).toFixed(1)} / {maxFuelL.toFixed(1)} L
             </span>
           </div>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0.1, maxFuelL)}
-            step={0.1}
-            value={fuelDraft ?? fuelValue}
-            disabled={!canFuel}
-            onChange={(e) => setFuelDraft(Number(e.target.value))}
-            onPointerUp={commit}
-            onKeyUp={commit}
-            onBlur={commit}
-            className="thermo-range thermo-range-fuel w-full"
-            aria-label={t('ui.game.heatFuelSlider')}
-          />
+          <span
+            className={`thermo-rail thermo-rail-fuel${canFuel ? '' : ' thermo-rail-off'}`}
+            style={{ '--fill': `${rangePct(fuelDraft ?? fuelValue, maxFuelL)}%` } as CSSProperties}
+          >
+            <span className="thermo-rail-fill" />
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0.1, maxFuelL)}
+              step={0.1}
+              value={fuelDraft ?? fuelValue}
+              disabled={!canFuel}
+              onChange={(e) => setFuelDraft(Number(e.target.value))}
+              onPointerUp={commit}
+              onKeyUp={commit}
+              onBlur={commit}
+              className="thermo-range thermo-range-fuel"
+              aria-label={t('ui.game.heatFuelSlider')}
+            />
+          </span>
         </div>
       )}
     </div>
@@ -460,10 +506,8 @@ function HeatThermometer({ run }: { run: RunState }) {
 function RationPanel({ run }: { run: RunState }) {
   const setRation = useGame((s) => s.setRation);
   const setWaterUse = useGame((s) => s.setWaterUse);
-  const setOverlay = useGame((s) => s.setOverlay);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const needs = dailyNeeds(run, run.difficulty);
-  const power = cachedPower(run);
 
   if (isPrep) {
     return (
@@ -500,7 +544,14 @@ function RationPanel({ run }: { run: RunState }) {
 
         <div>
           <div className="mb-1 flex items-baseline justify-between">
-            <span className="label">{t('ui.game.water')}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="label">{t('ui.game.water')}</span>
+              {!isPrep && (
+                <HelpHint>
+                  <span className="block">{t('ui.game.waterHint')}</span>
+                </HelpHint>
+              )}
+            </span>
             <span className="num text-[11.5px] text-dim">{t('ui.game.waterNeed', { n: needs.water })}</span>
           </div>
           <div className="grid grid-cols-3 gap-1">
@@ -517,26 +568,6 @@ function RationPanel({ run }: { run: RunState }) {
         </div>
 
         <HeatThermometer run={run} />
-
-        <div>
-          <div className="mb-1 flex items-baseline justify-between">
-            <span className="label">{t('ui.game.powerLabel')}</span>
-            <span className="num text-[11.5px] text-dim">
-              {power.output.toFixed(1)} / {power.demand.toFixed(1)} kWh
-            </span>
-          </div>
-          <button className="btn btn-ghost w-full py-1.5 text-[11.5px]" onClick={() => setOverlay('power')}>
-            {t('ui.game.powerBtn')}
-          </button>
-          <p className="mt-1.5 text-[11px] leading-snug text-faint">
-            {t('ui.game.solarEst', { n: power.solar.toFixed(1) })}
-          </p>
-          {power.offline.length > 0 && (
-            <div className="mt-1.5 text-[11px] leading-snug text-alarmhi">
-              {t('ui.game.powerOff', { list: power.offline.map((m) => LOAD_NAME[m] ?? m).join('、') })}
-            </div>
-          )}
-        </div>
       </div>
     </Panel>
   );
@@ -618,6 +649,7 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
 // ============================================================
 
 function SuppliesPanel({ run }: { run: RunState }) {
+  const setOverlay = useGame((s) => s.setOverlay);
   const waterCap = waterCapacity(run);
   const needs = dailyNeeds(run, run.difficulty);
   const daysOfWater = needs.water > 0 ? run.res.water / needs.water : 99;
@@ -645,7 +677,14 @@ function SuppliesPanel({ run }: { run: RunState }) {
           return (
             <div key={r}>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="label">{RES_NAME[r]}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="label">{RES_NAME[r]}</span>
+                  {r === 'foodFresh' && !isPrep && (
+                    <HelpHint>
+                      <span className="block">{t('ui.game.spoil')}</span>
+                    </HelpHint>
+                  )}
+                </span>
                 <span className={`num text-[12.5px] ${low ? 'text-alarmhi' : 'text-paper'}`}>
                   {r === 'cash' ? Math.round(v) : Math.round(v * 10) / 10}
                   <span className="ml-0.5 text-[10px] text-faint">{RES_UNIT[r]}</span>
@@ -680,9 +719,20 @@ function SuppliesPanel({ run }: { run: RunState }) {
           );
         })()}
       </div>
-      <div className="mt-2 border-t border-line pt-2 text-[11px] leading-snug text-faint">
-        {t('ui.game.cistern', { n: waterCap })}
-        {run.res.foodFresh > 0 && t('ui.game.spoil')}
+
+      {/* 特殊物品入口：原在顶栏按钮组，随该组一并下放到物资卡底部，
+          宽度/样式与「供电优先级」一致（btn-ghost + w-full）。滤芯耗尽时脉冲提示保留。 */}
+      <div className="mt-3 border-t border-line pt-3">
+        <button
+          className={`btn btn-ghost w-full py-1.5 text-[11.5px]${
+            run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0)
+              ? ' heat-module-warn'
+              : ''
+          }`}
+          onClick={() => setOverlay('items')}
+        >
+          {t('ui.game.itemsSpecial')}
+        </button>
       </div>
     </Panel>
   );
@@ -695,6 +745,7 @@ function SuppliesPanel({ run }: { run: RunState }) {
 function ShelterSummary({ run }: { run: RunState }) {
   const setOverlay = useGame((s) => s.setOverlay);
   const power = cachedPower(run);
+  const isPrep = run.day < TIME.COLLAPSE_DAY;
   return (
     <Panel
       title={t('ui.game.shelter')}
@@ -769,6 +820,30 @@ function ShelterSummary({ run }: { run: RunState }) {
           {t('ui.game.filterWarn', { n: Math.max(0, Math.floor(run.wear.filterLife)) })}
         </div>
       )}
+
+      {/* 供电：先独立成卡，用户反馈两张卡接在一起分不开，改为避难所卡内的分区。
+          电力本就属于避难所的一部分，且右列短一截。仅灾后出现（与独立成卡时一致）。 */}
+      {!isPrep && (
+        <div className="mt-3 border-t border-line pt-3">
+          <div className="mb-1 flex items-baseline justify-between gap-2">
+            <SectionLabel>{t('ui.game.powerLabel')}</SectionLabel>
+            <span className="num text-[11.5px] text-dim">
+              {power.output.toFixed(1)} / {power.demand.toFixed(1)} kWh
+            </span>
+          </div>
+          <button className="btn btn-ghost w-full py-1.5 text-[11.5px]" onClick={() => setOverlay('power')}>
+            {t('ui.game.powerBtn')}
+          </button>
+          <p className="mt-1.5 text-[11px] leading-snug text-faint">
+            {t('ui.game.solarEst', { n: power.solar.toFixed(1) })}
+          </p>
+          {power.offline.length > 0 && (
+            <div className="mt-1.5 text-[11px] leading-snug text-alarmhi">
+              {t('ui.game.powerOff', { list: power.offline.map((m) => LOAD_NAME[m] ?? m).join('、') })}
+            </div>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }
@@ -821,13 +896,17 @@ function FooterBar({ run }: { run: RunState }) {
   const setOverlay = useGame((s) => s.setOverlay);
   const blocked = run.queue.length > 0;
   return (
-    <div className="shrink-0 border-t border-line bg-panel/90 px-3 py-2 backdrop-blur sm:px-4">
+    <div className="shrink-0 border-t border-line bg-panel px-3 py-2 sm:px-4">
       <div className="mx-auto flex max-w-[1500px] items-center gap-3">
         <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={goMenu}>
           {t('ui.game.menu')}
         </button>
         <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('help')}>
           {t('ui.game.rules')}
+        </button>
+        {/* 日记：原顶栏按钮组移除后，全项目仅此一处入口（setOverlay('log') 唯一调用点） */}
+        <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setOverlay('log')}>
+          {t('ui.game.log')}
         </button>
         <div className="flex-1 truncate text-[11.5px] text-faint">
           {blocked

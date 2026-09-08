@@ -11,6 +11,7 @@ import { t } from '../copy/t';
 import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ResourceId, RunState } from '../types';
+import type { HaulItem } from './economy';
 import { hypoStageOf } from './climate';
 import { deriveFacts, effectiveModule, matchQuery } from './tags';
 import { computePower, loadOnline } from './power';
@@ -218,7 +219,7 @@ export function resolveRaid(run: RunState, rng: Rng, strengthMult = 1, fired = f
 /** 搜刮途中的真实风险：暴露、受伤、可能丢掉战利品、被人盯上 */
 export function applyScavengeDanger(
   run: RunState,
-  haul: { items: Array<{ res: ResourceId; amount: number; weight: number }>; danger: number },
+  haul: { items: HaulItem[]; danger: number },
   rng: Rng,
 ): { exposure: number; hpLost: number; scheduledRaid: boolean; lostRes?: ResourceId; lostAmt?: number } {
   const danger = haul.danger;
@@ -234,9 +235,11 @@ export function applyScavengeDanger(
 
   let lostRes: ResourceId | undefined;
   let lostAmt: number | undefined;
-  if (danger >= 40 && haul.items.length > 0 && rng.chance(0.1 + danger / 600)) {
-    const idx = rng.int(0, haul.items.length - 1);
-    const it = haul.items[idx]!;
+  // 特殊物品（滤芯）不可被抢：丢的只会是常规物资
+  if (danger >= 40 && haul.items.some((it) => it.res) && rng.chance(0.1 + danger / 600)) {
+    const droppable = haul.items.filter((it) => it.res);
+    const idx = rng.int(0, droppable.length - 1);
+    const it = droppable[idx]!;
     lostRes = it.res;
     lostAmt = Math.min(it.amount, Math.round(rng.float(0.5, Math.max(0.5, it.amount * 0.4)) * 10) / 10);
     it.amount -= lostAmt;

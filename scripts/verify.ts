@@ -23,7 +23,10 @@ import { resolveHealth } from '../src/game/engine/health';
 import { assessCollapse } from '../src/game/engine/collapse';
 import { isEligible, pickVariant, selectEvents } from '../src/game/engine/director';
 import { applyOnset } from '../src/game/engine/world';
+import { createSession, scavenge as sessionScavenge, work as sessionWork } from '../src/game/session';
 import { pruneOrphanQueue, rebuildSettlement } from '../src/game/store';
+import { pickOracle, pickSighted, scoreIgnoresRecruit } from './sim/preview';
+import { attach, emptyCounters, PERSONA_BY_ID, planBuildOrder, planHeat, playDay } from './sim/policy';
 import { makeRng, type Rng } from '../src/game/rng';
 import type { MetaState, ModuleId, RunState, SiteId } from '../src/game/types';
 import { HOOK_NAME } from '../src/game/copy/names';
@@ -61,9 +64,16 @@ console.log('\n  P0-1  结算自愈：ended 存档没有 settlement 时能按 en
       const fam = FAMILY_BY_ID[q.familyId];
       const v = fam?.variants.find((x) => x.id === q.variantId);
       if (!v) { run.queue.shift(); continue; }
-      const last = v.choices[v.choices.length - 1]!;
-      resolveChoice(run, q.familyId, q.variantId, last.id);
+      // 优先选最后一个选项（原语义）；被 requires 拒绝时逐个往前回退，
+      // 全部被拒就丢弃该事件——resolveChoice 拒绝时不会出队，盲选会死循环
+      const before = run.queue.length;
+      for (let ci = v.choices.length - 1; ci >= 0; ci--) {
+        resolveChoice(run, q.familyId, q.variantId, v.choices[ci]!.id);
+        if (run.phase === 'ended') break;
+        if (run.queue.length < before) break;
+      }
       if (run.phase === 'ended') break;
+      if (run.queue.length >= before) run.queue.shift();
     }
     if (run.phase === 'ended') break;
     run.ap = 0;
@@ -326,6 +336,65 @@ console.log('\n  审计修复  蓄电消耗 / 饥饿双扣 / 没下雨去重 / �
     const fullHits = health.hpParts.filter((p) => p.label === '充足口粮');
     check('饥饿当晚只扣一次', starveHits.length <= 1, JSON.stringify(starveHits));
     check('断粮时不会出现「充足口粮」', fullHits.length === 0, JSON.stringify(health.hpParts));
+  }
+
+  {
+    // 水阶梯：断水逐夜加重，标准级饮水一晚连退两档
+    const run = mk();
+    run.waterUse = 'normal';
+    run.res.water = 0;
+    run.res.foodStaple = 40;
+    let consume = consumeDaily(run, makeRng(9, 0), 'story');
+    resolveHealth(run, consume, makeRng(9, 1));
+    check('断水第一夜进入轻度脱水', run.conditions.includes('dehydrationMild'), run.conditions.join(','));
+    consume = consumeDaily(run, makeRng(9, 2), 'story');
+    resolveHealth(run, consume, makeRng(9, 3));
+    check('断水第二夜加重为中度脱水', run.conditions.includes('dehydrationMod') && !run.conditions.includes('dehydrationMild'), run.conditions.join(','));
+    run.res.water = 40;
+    consume = consumeDaily(run, makeRng(9, 4), 'story');
+    resolveHealth(run, consume, makeRng(9, 5));
+    check('标准级饮水一晚解除中度脱水', !run.conditions.some((c) => c.startsWith('dehydration')), run.conditions.join(','));
+  }
+
+  {
+    // 重度脱水当夜仍喝不到限量级水＝死亡，死因是脱水
+    const run = mk();
+    run.waterUse = 'normal';
+    run.res.water = 0;
+    run.res.foodStaple = 40;
+    run.conditions.push('dehydrationSevere');
+    const consume = consumeDaily(run, makeRng(10, 0), 'story');
+    const health = resolveHealth(run, consume, makeRng(10, 1));
+    check('重度脱水再缺水当夜死亡', health.dead && health.cause === '脱水', `dead=${health.dead} cause=${health.cause}`);
+  }
+
+  {
+    // 限量级达标：不再直接扣 HP，改为口渴 debuff
+    const run = mk();
+    run.waterUse = 'normal';
+    run.res.water = 2.4; // 标准 3 L 不够，限量 1.8 L 够 → 口渴但不进脱水阶梯
+    run.res.foodStaple = 40;
+    const consume = consumeDaily(run, makeRng(11, 0), 'story');
+    const health = resolveHealth(run, consume, makeRng(11, 1));
+    check(
+      '喝到限量级会口渴但不脱水不扣 HP',
+      run.conditions.includes('thirst') &&
+        !run.conditions.some((c) => c.startsWith('dehydration')) &&
+        health.hpParts.every((p) => p.label !== '饮水限量' && p.label !== '脱水'),
+      `conds=${run.conditions.join(',')} parts=${JSON.stringify(health.hpParts)}`,
+    );
+  }
+
+  {
+    // 免疫窗口：7 日内再感染流感，当晚必愈
+    const run = mk();
+    run.res.water = 40;
+    run.res.foodStaple = 40;
+    run.conditions.push('flu');
+    run.immunity = { flu: run.day - 2 };
+    const consume = consumeDaily(run, makeRng(12, 0), 'story');
+    resolveHealth(run, consume, makeRng(12, 1));
+    check('免疫窗口内再感染当晚必愈', !run.conditions.includes('flu'), run.conditions.join(','));
   }
 
   {
@@ -1144,6 +1213,90 @@ console.log('\n  内容与建造修复：报警器货架 / 续篇汉化 / 回用
     '买了上门水会排程腹泻续篇',
     buyRun.pending.some((p) => p.familyId === 'nuke_chain_nopressure_3'),
     buyRun.pending.map((p) => p.familyId).join(','),
+  );
+}
+
+// ============================================================
+console.log('\n  sim-session  合法动作层与事件读表');
+// ============================================================
+{
+  const run = createRun({ seed: 7701, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  check('准备期第一天', run.day < TIME.COLLAPSE_DAY, `day=${run.day}`);
+  const s = createSession(run);
+  const blocked = sessionScavenge(s, 'supermarket', false);
+  check('准备期搜刮必须失败', !blocked.ok, blocked.reason);
+
+  const workRun = createRun({ seed: 7702, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(workRun, 'apartment');
+  workRun.day = 12;
+  workRun.phase = 'survival';
+  workRun.modules.fortify = 1;
+  workRun.res.materials = 80;
+  workRun.res.parts = 40;
+  workRun.ap = 4;
+  workRun.skills.mechanics = 0;
+  const started = startProject(workRun, 'fortify', 'diy');
+  check('开工加固二级', started.ok, started.reason);
+  const cursorBefore = workRun.rngCursor;
+  const sw = createSession(workRun);
+  const worked = sessionWork(sw, 'fortify');
+  check('work 调用成功', worked.ok, worked.reason);
+  check('work 推进 rngCursor', sw.run.rngCursor !== cursorBefore, `${cursorBefore} -> ${sw.run.rngCursor}`);
+
+  const recruitA = scoreIgnoresRecruit({ res: { foodStaple: 4 }, survivor: { recruit: 'random' } });
+  const recruitB = scoreIgnoresRecruit({ res: { foodStaple: 4 } });
+  check('预览忽略招募字段', recruitA === recruitB, `${recruitA} vs ${recruitB}`);
+
+  const food = { id: 'food', effect: { res: { foodStaple: 10 } } };
+  const hurt = { id: 'hurt', effect: { stats: { hp: -8 }, res: { cash: 400 } } };
+  const oracle = pickOracle(run, [hurt, food]);
+  check('oracle 在掉血与加粮之间选粮', oracle.choice.id === 'food', oracle.choice.id);
+  const sighted = pickSighted(run, [hurt, food], 20, 20);
+  check('sighted 避开掉血选项', sighted.id === 'food', sighted.id);
+
+  const a = createRun({ seed: 8801, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  const b = createRun({ seed: 8802, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(a, 'apartment');
+  chooseSite(b, 'apartment');
+  const oa = planBuildOrder(a).join(',');
+  const ob = planBuildOrder(b).join(',');
+  check('建造顺序按种子不同', oa !== ob, `${oa} vs ${ob}`);
+  check('同种子顺序稳定', planBuildOrder(a).join(',') === oa, planBuildOrder(a).join(','));
+  check('计划不含无线电', !oa.includes('radio') && !ob.includes('radio'), oa);
+
+  a.conditions = ['radiationSickness'];
+  a.modules.medbay = 0;
+  check('治不了的病把医疗站提前', planBuildOrder(a)[0] === 'medbay', planBuildOrder(a).join(','));
+
+  const prep = createRun({ seed: 8803, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(prep, 'apartment');
+  const ps = attach(prep);
+  const counters = emptyCounters();
+  while (ps.run.day < TIME.COLLAPSE_DAY && ps.run.phase !== 'ended') {
+    playDay(ps, PERSONA_BY_ID.passable, counters);
+  }
+  const l1 = (['cistern', 'filter', 'insulate', 'fortify', 'conceal', 'garden', 'power', 'airFilter', 'medbay'] as ModuleId[])
+    .filter((id) => (ps.run.modules[id] ?? 0) >= 1).length;
+  check('准备期末至少 3 个 1 级（不含无线电）', l1 >= 3, `l1=${l1} radio=${ps.run.modules.radio}`);
+  check('准备期不升无线电', (ps.run.modules.radio ?? 0) === 0, String(ps.run.modules.radio));
+
+  const heatRun = createRun({ seed: 8804, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(heatRun, 'apartment');
+  heatRun.day = TIME.COLLAPSE_DAY;
+  heatRun.phase = 'survival';
+  heatRun.modules.insulate = 1;
+  heatRun.res.fuel = 20;
+  heatRun.indoorTemp = 10;
+  heatRun.world.temperature = 2;
+  heatRun.heatMode = 'off';
+  const hs = attach(heatRun);
+  planHeat(hs);
+  check('有油且能燃油取暖时打开油暖', hs.run.heatMode === 'fuel', hs.run.heatMode);
+  check(
+    '燃料充足时目标至少到舒适线',
+    hs.run.heatTarget >= COLD.COMFORT,
+    `target=${hs.run.heatTarget} leaked≈${hs.run.indoorTemp}`,
   );
 }
 

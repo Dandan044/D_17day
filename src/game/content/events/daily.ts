@@ -240,10 +240,10 @@ beat({
           {
             id: 'replace',
 
-            requires: { res: { parts: 4 } },
+            requires: { tags: { all: ['item:filter>=1'] }, reason: '需要一只备用滤芯' },
             effect: {
-              res: { parts: -4 },
-              wear: { filterLife: 24 },
+              items: { filter: -1 },
+              wear: { filterLife: 30 },
 
               tone: 'good',
             },
@@ -255,7 +255,6 @@ beat({
             effect: {
               ap: -1,
               stats: { stamina: -8 },
-              wear: { filterLife: 8 },
 
               tone: 'neutral',
             },

@@ -2,7 +2,7 @@
  * 资源经济：配给消耗、腐败、产出、物价、采购与搜刮。
  */
 
-import { BANK, CAPS, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, STAMINA, TIME, WATER_NEED, WEAR } from '../balance';
+import { BANK, CAPS, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, RAD, STAMINA, TIME, WATER_NEED, WEAR } from '../balance';
 import { t } from '../copy/t';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
 import { SITE_BY_ID } from '../content/sites';
@@ -188,30 +188,29 @@ export function applyProduction(run: RunState): LedgerNote[] {
     }
   }
 
-  // 滤芯寿命：净水侧按天气/污染；空气过滤另计
+  // 滤芯耐久：单芯总耐久 30（精度 0.1），净水与空气过滤共用一只芯。
+  // 净水侧「实际产水或回用才扣」，按等级扣 0.5/1/1.5，水相关特殊天气再加成；
+  // 空气过滤侧每运行日按等级扣 0.5/1/1.5，乘以辐射占比（不高于基准）。
   const airFilter = effectiveModule(run, 'airFilter');
   if (filter > 0 || airFilter > 0) {
     let drain = 0;
     if (filter > 0) {
-      if (precip) {
-        if (run.world.weather === 'blackRain') drain += FILTER.WEAR_BLACK_RAIN;
-        else if (run.world.weather === 'flooding') drain += FILTER.WEAR_FLOODING;
-        else if (run.world.weather === 'storm' || run.world.weather === 'blizzard') drain += FILTER.WEAR_STORM;
-        else drain += FILTER.WEAR_RAIN;
-      } else if (!hasWell) {
-        drain += FILTER.WEAR_RECYCLE;
-      } else {
-        drain += FILTER.WEAR_RAIN * FILTER.WELL_DRY_MULT;
+      if (precip || hasWell) {
+        drain += WEAR.WATER_LVL[filter] ?? 0;
+        if (precip) drain += WEAR.WATER_WEATHER[run.world.weather] ?? 0;
+      } else if (!cisternBusy) {
+        // 旱天回用：净水在线参与回用降耗，同样磨芯
+        drain += WEAR.WATER_LVL[filter] ?? 0;
       }
-      drain *= FILTER.WEAR_LEVEL_MULT[filter] ?? 1;
     }
-    if (airFilter > 0) drain += FILTER.WEAR_AIR;
-    if (run.world.weather === 'ashfall') drain += FILTER.WEAR_ASH + WEAR.FILTER_EXTRA_DUST;
-    drain += (run.world.airPollution / 40) * FILTER.WEAR_POLLUTION_PER_40;
-    drain += (run.world.radiation / 40) * FILTER.WEAR_RAD_PER_40;
+    if (airFilter > 0) {
+      const tol = RAD.TOL_FOR_AIR[airFilter] ?? RAD.TOL_FOR_AIR[1]!;
+      const radMult = Math.max(WEAR.RAD_FLOOR, Math.min(1, run.world.radiation / tol));
+      drain += (WEAR.AIR_LVL[airFilter] ?? 0) * radMult;
+    }
     if (run.abilities.includes('chemist_consumables')) drain *= 0.6;
     if (run.abilities.includes('perk_maintainer')) drain *= 0.65;
-    run.wear.filterLife -= drain;
+    run.wear.filterLife = Math.max(0, Math.round((run.wear.filterLife - drain) * 10) / 10);
     if (run.wear.filterLife <= 0) {
       notes.push(ledger(t('ledger.filter.dead'), 'bad'));
     } else if (run.wear.filterLife <= 4) {
@@ -650,6 +649,19 @@ export function buyCoAlarm(run: RunState, locationId: string): { ok: boolean; re
   return { ok: true, spent: price };
 }
 
+/** 备用滤芯：准备期五金店有且仅有一只，500 × 物价指数；整局限购一次。 */
+export function buyCartridge(run: RunState, locationId: string): { ok: boolean; reason?: string; spent: number } {
+  if (locationId !== 'hardware') return { ok: false, reason: t('ledger.buy.filterShop'), spent: 0 };
+  if (run.day >= TIME.COLLAPSE_DAY) return { ok: false, reason: t('ledger.toast.shopOpen'), spent: 0 };
+  if (run.flags.includes('flag:filterBought')) return { ok: false, reason: t('ledger.buy.filterGone'), spent: 0 };
+  const price = Math.max(1, Math.round(PRICE.FILTER * run.world.priceIndex));
+  if (run.res.cash < price) return { ok: false, reason: t('ledger.buy.noCash'), spent: 0 };
+  run.res.cash -= price;
+  run.flags.push('flag:filterBought');
+  run.items.filter += 1;
+  return { ok: true, spent: price };
+}
+
 // ============================================================
 // 搜刮
 // ============================================================
@@ -682,7 +694,10 @@ export function carryCapacity(run: RunState, hasTruckerPerk: boolean): number {
 }
 
 export interface HaulItem {
-  res: ResourceId;
+  /** 常规物资条目；特殊物品条目改填 item */
+  res?: ResourceId;
+  /** 特殊物品条目（如备用滤芯），提交时进 run.items */
+  item?: string;
   amount: number;
   weight: number;
 }
@@ -719,9 +734,24 @@ export function rollHaul(run: RunState, locationId: string, night: boolean, rng:
     stockMult * threatMult * site.lootMult * DIFFICULTY[difficulty].lootMult * nightYield * scavBonus;
 
   const items: HaulItem[] = [];
+  // 灾难期物资点可搜到的水整体 ×1.3（崩溃日前理论上到不了搜刮，这里再兜一道）
+  const waterMult = run.day >= TIME.COLLAPSE_DAY ? 1.3 : 1;
   for (const entry of loc.loot) {
+    // 特殊物品条目：固定概率、不吃任何产出倍率，与常规物资共享门店库存池
+    if (entry.item) {
+      if (entry.item !== 'filter') continue;
+      if (run.items.filter > 0) continue;
+      if (run.flags.includes('flag:filterBought') || run.flags.includes('flag:filterFound')) continue;
+      if (stock <= LOOT.FILTER_STOCK_DRAIN) continue;
+      if (!rng.chance(entry.chance)) continue;
+      const st0 = run.locations.find((l) => l.id === locationId);
+      if (st0) st0.stock = Math.max(0, st0.stock - LOOT.FILTER_STOCK_DRAIN);
+      items.push({ item: entry.item, amount: 1, weight: 0 });
+      continue;
+    }
+    if (!entry.res) continue;
     if (!rng.chance(entry.chance)) continue;
-    const raw = rng.float(entry.min, entry.max) * mult;
+    const raw = rng.float(entry.min, entry.max) * mult * (entry.res === 'water' ? waterMult : 1);
     const amount = entry.res === 'cash' ? Math.round(raw) : Math.round(raw * 10) / 10;
     if (amount <= 0) continue;
     items.push({ res: entry.res, amount, weight: amount * (RES_WEIGHT[entry.res] ?? 1) });
@@ -737,11 +767,19 @@ export function rollHaul(run: RunState, locationId: string, night: boolean, rng:
   return { locationId, night, items, danger: Math.max(0, Math.min(100, Math.round(danger))) };
 }
 
-/** 玩家在负重上限内挑选后提交。水按剩余容量截断。 */
+/** 玩家在负重上限内挑选后提交。水按剩余容量截断，特殊物品直接进物品栏。 */
 export function commitHaul(run: RunState, picked: HaulItem[]): { notes: string[] } {
   const notes: string[] = [];
   let room = waterRoom(run);
   for (const it of picked) {
+    if (it.item === 'filter') {
+      if (run.flags.includes('flag:filterFound')) continue;
+      run.flags.push('flag:filterFound');
+      run.items.filter += 1;
+      notes.push(t('ledger.haul.filterFound'));
+      continue;
+    }
+    if (!it.res) continue;
     if (it.res === 'water') {
       if (room <= 0) {
         notes.push(t('ledger.buy.haulNoWater', { cap: waterCapacity(run) }));

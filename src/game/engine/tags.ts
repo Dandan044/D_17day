@@ -263,6 +263,7 @@ export function deriveFacts(run: RunState): Facts {
   nums['wear:filterLife'] = run.wear.filterLife;
   nums['wear:generatorOil'] = run.wear.generatorOil;
   nums['wear:batteryCharge'] = run.wear.batteryCharge;
+  nums['item:filter'] = run.items?.filter ?? 0;
 
   for (const [k, v] of Object.entries(run.res)) nums[`res:${k}`] = v;
   for (const [k, v] of Object.entries(run.stats)) nums[`stat:${k}`] = v;

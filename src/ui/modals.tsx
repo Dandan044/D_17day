@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { THREAT_DESC, TIME } from '../game/balance';
 import { DISASTER_BY_ID } from '../game/content/disasters';
 import { LOCATION_BY_ID, RES_NAME, RES_UNIT } from '../game/content/locations';
-import { SKILL_NAME } from '../game/copy/names';
+import { SKILL_NAME, ITEM_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import type { HaulItem } from '../game/engine/economy';
 import { waterRoom } from '../game/engine/economy';
@@ -277,8 +277,8 @@ export function HaulModal({ run }: { run: RunState }) {
 
   const [picked, setPicked] = useState<Record<string, number>>(() => {
     if (!haul) return {};
-    // 默认按单位重量从轻到重贪心装满
-    const sorted = [...haul.items].sort((a, b) => a.weight / a.amount - b.weight / b.amount);
+    // 默认按单位重量从轻到重贪心装满（特殊物品零重、必得，不参与贪心）
+    const sorted = [...haul.items].filter((it) => !it.item).sort((a, b) => a.weight / a.amount - b.weight / b.amount);
     const out: Record<string, number> = {};
     let used = 0;
     let waterLeft = Math.max(0, waterCapacity(run) - run.res.water);
@@ -290,7 +290,7 @@ export function HaulModal({ run }: { run: RunState }) {
         canTake = Math.min(canTake, waterLeft);
         waterLeft = Math.max(0, waterLeft - canTake);
       }
-      out[it.res] = Math.max(0, canTake);
+      out[it.res!] = Math.max(0, canTake);
       used += canTake * unitW;
     }
     return out;
@@ -298,10 +298,12 @@ export function HaulModal({ run }: { run: RunState }) {
 
   if (!haul) return null;
   const loc = LOCATION_BY_ID[haul.locationId];
+  const resItems = haul.items.filter((it) => !it.item);
+  const itemDrops = haul.items.filter((it) => it.item);
 
-  const totalWeight = haul.items.reduce((s, it) => {
+  const totalWeight = resItems.reduce((s, it) => {
     const unitW = it.weight / it.amount;
-    return s + (picked[it.res] ?? 0) * unitW;
+    return s + (picked[it.res!] ?? 0) * unitW;
   }, 0);
   const over = totalWeight > cap + 0.01;
 
@@ -318,13 +320,15 @@ export function HaulModal({ run }: { run: RunState }) {
   };
 
   const commit = () => {
-    const out: HaulItem[] = haul.items
+    const out: HaulItem[] = resItems
       .map((it) => {
-        const amount = Math.min(it.amount, picked[it.res] ?? 0);
+        const amount = Math.min(it.amount, picked[it.res!] ?? 0);
         const unitW = it.weight / it.amount;
         return { res: it.res, amount, weight: amount * unitW };
       })
       .filter((x) => x.amount > 0);
+    // 特殊物品零重必得，无需勾选
+    for (const it of itemDrops) out.push({ item: it.item, amount: 1, weight: 0 });
     takeHaul(out);
   };
 
@@ -363,22 +367,31 @@ export function HaulModal({ run }: { run: RunState }) {
           </div>
 
           <div className="space-y-2">
-            {haul.items.map((it) => {
+            {itemDrops.map((it) => (
+              <div key={it.item} className="panel p-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[13px] text-paper">{ITEM_NAME[it.item!]}</span>
+                  <span className="num text-[11.5px] text-faint">×1 · 直接放进物品栏</span>
+                </div>
+              </div>
+            ))}
+            {resItems.map((it) => {
+              const res = it.res as ResourceId;
               const unitW = it.weight / it.amount;
-              const cur = picked[it.res] ?? 0;
-              const waterMax = it.res === 'water' ? Math.min(it.amount, room) : it.amount;
+              const cur = picked[res] ?? 0;
+              const waterMax = res === 'water' ? Math.min(it.amount, room) : it.amount;
               return (
-                <div key={it.res} className="panel p-2.5">
+                <div key={res} className="panel p-2.5">
                   <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
                     <div>
-                      <span className="text-[13px] text-paper">{RES_NAME[it.res as ResourceId]}</span>
+                      <span className="text-[13px] text-paper">{RES_NAME[res]}</span>
                       <span className="num ml-2 text-[11.5px] text-faint">
                         {t('ui.haul.found', {
                           amt: it.amount,
-                          unit: RES_UNIT[it.res as ResourceId],
+                          unit: RES_UNIT[res],
                           w: unitW.toFixed(2),
                         })}
-                        {it.res === 'water' ? t('ui.haul.waterRoom', { room: room.toFixed(1) }) : ''}
+                        {res === 'water' ? t('ui.haul.waterRoom', { room: room.toFixed(1) }) : ''}
                       </span>
                     </div>
                     <span className="num text-[13px] text-amberhi">
@@ -392,15 +405,15 @@ export function HaulModal({ run }: { run: RunState }) {
                       max={waterMax}
                       step={it.amount > 20 ? 1 : 0.5}
                       value={Math.min(cur, waterMax)}
-                      onChange={(e) => set(it.res, Number(e.target.value))}
+                      onChange={(e) => set(res, Number(e.target.value))}
                       className="flex-1 accent-amber"
                     />
-                    <button className="btn btn-ghost px-2 py-0.5 text-[10.5px]" onClick={() => set(it.res, 0)}>
+                    <button className="btn btn-ghost px-2 py-0.5 text-[10.5px]" onClick={() => set(res, 0)}>
                       0
                     </button>
                     <button
                       className="btn btn-ghost px-2 py-0.5 text-[10.5px]"
-                      onClick={() => set(it.res, waterMax)}
+                      onClick={() => set(res, waterMax)}
                     >
                       {t('ui.haul.all')}
                     </button>
@@ -541,7 +554,7 @@ export function Toasts() {
       {list.map((item) => (
         <div
           key={item.id}
-          className="anim-rise border-l-2 bg-panel2/95 px-3 py-2 text-[12.5px] leading-snug shadow-lg backdrop-blur"
+          className="anim-rise border-l-2 bg-panel2 px-3 py-2 text-[12.5px] leading-snug shadow-lg"
           style={{
             borderColor:
               item.tone === 'good' ? 'var(--color-safe)' : item.tone === 'bad' ? 'var(--color-alarm)' : 'var(--color-line2)',

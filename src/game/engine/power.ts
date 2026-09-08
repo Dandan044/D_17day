@@ -48,6 +48,7 @@ export function batteryCapacity(run: RunState): number {
 }
 
 export function clampBattery(run: RunState): void {
+  if (!run.items) run.items = { filter: 0 };
   if (!run.wear) run.wear = { filterLife: WEAR.FILTER_LIFE, generatorOil: WEAR.GENERATOR_OIL, batteryCharge: 0 };
   run.wear.batteryCharge = Math.max(0, Math.min(batteryCapacity(run), run.wear.batteryCharge ?? 0));
 }
@@ -130,6 +131,14 @@ export function ensureRunDefaults(run: RunState): void {
     run.iodineUntil = run.day + 3;
   }
   if (!run.conditionAge) run.conditionAge = {};
+  if (!run.medicated) run.medicated = [];
+  if (!run.immunity) run.immunity = {};
+  // 旧档：旧「脱水」条件映射到新阶梯的轻度脱水
+  const oldDehy = (run.conditions as string[]).indexOf('dehydrated');
+  if (oldDehy >= 0) {
+    run.conditions.splice(oldDehy, 1);
+    if (!run.conditions.includes('dehydrationMild')) run.conditions.push('dehydrationMild');
+  }
   const oldHypo = (run.conditions as string[]).indexOf('hypothermia');
   if (oldHypo >= 0) {
     run.conditions.splice(oldHypo, 1);
@@ -139,6 +148,8 @@ export function ensureRunDefaults(run: RunState): void {
     run.wear = { filterLife: WEAR.FILTER_LIFE, generatorOil: WEAR.GENERATOR_OIL, batteryCharge: 0 };
   } else {
     if (run.wear.filterLife === undefined) run.wear.filterLife = WEAR.FILTER_LIFE;
+    // 滤芯总耐久 32→30 重做后，旧档超出的部分截断
+    if (run.wear.filterLife > WEAR.FILTER_LIFE) run.wear.filterLife = WEAR.FILTER_LIFE;
     if (run.wear.generatorOil === undefined) run.wear.generatorOil = WEAR.GENERATOR_OIL;
     if (run.wear.batteryCharge === undefined) run.wear.batteryCharge = 0;
   }

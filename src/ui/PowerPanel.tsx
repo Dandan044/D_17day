@@ -14,7 +14,7 @@ import {
 import { useGame } from '../game/store';
 import type { DisasterId, ModuleId, PowerLoadId, RunState, WeatherId } from '../game/types';
 import { cachedPower } from './derived';
-import { Chip, Modal, SectionLabel } from './kit';
+import { Chip, HelpHint, Modal, SectionLabel } from './kit';
 
 function disasterFactorLabel(id: DisasterId): string | null {
   if (id === 'nuclear') return t('ui.power.factorNuclear');
@@ -140,7 +140,11 @@ export function PowerPanel({ run }: { run: RunState }) {
   return (
     <Modal
       title={t('ui.power.title')}
-      subtitle={t('ui.power.subtitle')}
+      titleRight={
+        <HelpHint>
+          <span className="block">{t('ui.power.subtitle')}</span>
+        </HelpHint>
+      }
       onClose={() => setOverlay(null)}
       width="max-w-2xl"
     >

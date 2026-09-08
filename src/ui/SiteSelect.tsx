@@ -103,7 +103,7 @@ export default function SiteSelect() {
         </div>
 
         {selected && (
-          <div className="sticky bottom-0 mt-4 border-t border-line bg-ink/95 pt-4 backdrop-blur">
+          <div className="sticky bottom-0 mt-4 border-t border-line bg-ink pt-4">
             <div className="grid gap-3 lg:grid-cols-[1fr_240px]">
               <Panel title={t('ui.site.caps', { name: selected.name })}>
                 <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">

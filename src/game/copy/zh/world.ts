@@ -229,9 +229,21 @@ export const data = {
     }
   },
   "condition": {
-    "dehydrated": {
-      "name": "脱水",
-      "desc": "嘴唇裂了，尿液是深黄色的。思考变得像隔着一层棉花。"
+    "thirst": {
+      "name": "口渴",
+      "desc": "喉咙发紧，尿色变深。水还够维持身体运转——只是不够舒服。"
+    },
+    "dehydrationMild": {
+      "name": "轻度脱水",
+      "desc": "嘴唇起皮，站起来有点头晕。身体开始向不重要的器官回收水分。"
+    },
+    "dehydrationMod": {
+      "name": "中度脱水",
+      "desc": "站起来眼前发黑，尿液是深黄色的。思考变得像隔着一层棉花。"
+    },
+    "dehydrationSevere": {
+      "name": "重度脱水",
+      "desc": "皮肤捏起来不会回弹，心脏在干涸的血管里空转。今晚之前必须有水，否则过不去这一夜。"
     },
     "starving": {
       "name": "饥饿",

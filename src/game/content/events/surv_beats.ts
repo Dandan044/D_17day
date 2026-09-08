@@ -11,7 +11,7 @@ export const SURV_BEAT_EVENTS: EventFamily[] = [
 
 
     choices: [
-      ch('replace', { wear: { filterLife: 12 }, res: { parts: -1 }, stats: { stamina: -8 }, setFlags: ['flag:filterReplaced'],  tone: 'good' }, { requires: { res: { parts: 1 } } }),
+      ch('replace', { items: { filter: -1 }, wear: { filterLife: 30 }, stats: { stamina: -8 }, setFlags: ['flag:filterReplaced'],  tone: 'good' }, { requires: { tags: { all: ['item:filter>=1'] }, reason: '需要一只备用滤芯' } }),
       ch('boil', { res: { fuel: -1, water: -2 }, stats: { stamina: -6 },  tone: 'neutral' }, { requires: { res: { fuel: 1 } } }),
       skip({ wear: { filterLife: -2 }, stats: { sanity: -3 } }),
     ],

@@ -3,11 +3,11 @@
  * pending.waitFor 命中则把后续事件推进当天队列。
  */
 
-import { DIRECTOR, HEALTH, NUCLEAR_WINTER, TIME } from '../balance';
+import { COLD, DIRECTOR, HEALTH, NUCLEAR_WINTER, TIME } from '../balance';
 import { FAMILY_BY_ID } from '../content/events';
 import type { Rng } from '../rng';
 import type { ActionHook, PendingEvent, RunState } from '../types';
-import { comfortTemp, currentIndoor } from './climate';
+import { comfortTemp, currentIndoor, insulateLevel } from './climate';
 import { pickVariant } from './director';
 import { loadOnline } from './power';
 import { deriveFacts, matchQuery } from './tags';
@@ -98,8 +98,12 @@ export function collectThresholdForced(run: RunState): string[] {
   fire('lights', 'stat_arc_dark_1', !loadOnline(run, 'lights') && run.day >= TIME.COLLAPSE_DAY);
   fire('firstFreeze', 'env_first_freeze', run.indoorBand === 'freeze');
   fire('firstChill', 'env_first_chill', run.indoorBand === 'chill');
+  // 室外首次跌破舒适线且仍是 0 级保温：提醒玩家升级保温的一次性教学事件
+  fire('coldSnapNudge', 'env_cold_snap_nudge', run.world.temperature < COLD.COMFORT && insulateLevel(run) === 0, false);
   fire('hypoSevere', 'env_hypo_severe', run.conditions.includes('hypothermiaSevere'));
   fire('warmthBack', 'env_warmth_return', run.indoorBand === 'warm' && run.flags.includes('flag:wasCold'));
   fire('wokeCold', 'env_woke_cold', !!run.heatMissed && !nwMorning);
+  // 人性检定赠芯：滤芯见底且人性尚高时邻居递来一只备用芯（整局一次，不占每日配额）
+  fire('filterSamaritan', 'filter_cartridge_samaritan', run.wear.filterLife < 6 && run.stats.humanity > 75, false);
   return out;
 }

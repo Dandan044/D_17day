@@ -5,7 +5,7 @@
  * 事件只读标签，标签只读这里，所以气温曲线一改，整个事件池的语气会跟着变。
  */
 
-import { EXPOSURE, COLD, NUCLEAR_WINTER, PRICE, TIME, threatOfDay } from '../balance';
+import { EXPOSURE, COLD, NUCLEAR_WINTER, PRICE, SEASON_TEMP, TIME, threatOfDay } from '../balance';
 import { WEATHER_DESC, WEATHER_NAME } from '../copy/names';
 import { DISASTER_BY_ID } from '../content/disasters';
 import type { Rng } from '../rng';
@@ -32,9 +32,20 @@ const WEATHER_TEMP: Record<WeatherId, number> = {
   heatwave: 10,
 };
 
-/** 季节基础温度：从初秋走到深冬 */
+/**
+ * 季节基础温度：线性主干 + 正弦波动。
+ * 灾难首日（Day 8）≈ SEASON_TEMP.COLLAPSE_TEMP，此后以每天约
+ * TOTAL_DROP / FINAL_DAY 度的均速波动下行——降幅节奏与旧线性曲线一致，
+ * 但锯齿式回落让寒潮有"连着几天陡降、随后小幅回暖"的过程感。
+ */
 function baseTemperature(day: number): number {
-  return 19 - (Math.min(day, TIME.FINAL_DAY) / TIME.FINAL_DAY) * 17;
+  const d = Math.min(day, TIME.FINAL_DAY);
+  const start = SEASON_TEMP.COLLAPSE_TEMP + (TIME.COLLAPSE_DAY / TIME.FINAL_DAY) * SEASON_TEMP.TOTAL_DROP;
+  const linear = start - (d / TIME.FINAL_DAY) * SEASON_TEMP.TOTAL_DROP;
+  const wave =
+    SEASON_TEMP.WAVE_AMP *
+    Math.sin(((d - TIME.COLLAPSE_DAY) * Math.PI * 2) / SEASON_TEMP.WAVE_PERIOD);
+  return linear + wave;
 }
 
 export function createWorld(disaster: DisasterId, rng: Rng): WorldState {
@@ -145,7 +156,7 @@ export function tickClimate(run: RunState, rng: Rng, forDay?: number): void {
   } else {
     const bias = def.tempBias * Math.min(1, threat / 3);
     w.temperature = Math.round(baseTemperature(day) + bias + WEATHER_TEMP[w.weather] + rng.float(-2, 2));
-    w.season = baseTemperature(day) + bias < 9 ? 'winter' : 'autumn';
+    w.season = baseTemperature(day) + bias < SEASON_TEMP.WINTER_LINE ? 'winter' : 'autumn';
   }
 }
 

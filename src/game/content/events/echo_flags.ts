@@ -19,6 +19,8 @@ export const ECHO_CLUSTERS = {
     'flag:isolatedWater',
     'flag:tankKey',
     'flag:tankAsked',
+    'flag:helpedWoundedTrader',
+    'flag:tookFromWoundedTrader',
   ],
   door: [
     'flag:bracedDoor',

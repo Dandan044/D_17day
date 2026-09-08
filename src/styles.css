@@ -234,7 +234,11 @@
   .bar > i {
     display: block;
     height: 100%;
-    transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+    /* 进度用 transform 表达：transition 只走合成器，数值变化不再触发 reflow。
+       纯色填充，scaleX 与 width 视觉等价（.bar 有 overflow:hidden 兜底）。 */
+    width: 100%;
+    transform-origin: 0 50%;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* ---- 选项卡片 ---- */
@@ -299,74 +303,179 @@
   .anim-flash {
     animation: seven-flash 900ms ease-out both;
   }
+  /* 供暖滑块。
+     坑：厂商前缀的滑块伪元素**绝不能写进同一条分组选择器**——浏览器遇到自己不认识的
+     伪元素会把整条规则判为无效并整条丢弃（Chrome 不认 ::-moz-*，Firefox 不认 ::-webkit-*）。
+     原代码就是这么写的，所以轨道背景在 Chrome 上从来没渲染出来过。下面全部拆开写。
+     更稳的做法：轨道视觉不再依赖伪元素，改用真实 DOM（.thermo-rail 画浅色凹槽 + 刻度，
+     .thermo-rail-fill 按 --fill 画已选段），伪元素只负责 thumb 与命中区域。 */
+  .thermo-rail {
+    position: relative;
+    display: block;
+    height: 18px;
+    --fill: 0%;
+    --thermo-fill: var(--color-amber);
+  }
+  .thermo-rail-elec {
+    --thermo-fill: var(--color-info);
+  }
+  .thermo-rail-fuel {
+    --thermo-fill: var(--color-amber);
+  }
+  /* 凹槽：比面板底亮两档的 --color-line，加内阴影做出下凹感，25% 一道刻度 */
+  .thermo-rail::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 12px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background-color: var(--color-line);
+    background-image: repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.22) 0 1px,
+      rgba(255, 255, 255, 0) 1px 25%
+    );
+    box-shadow:
+      inset 0 0 0 1px var(--color-line2),
+      inset 0 1px 3px rgba(0, 0, 0, 0.65);
+  }
+  .thermo-rail-fill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 12px;
+    width: var(--fill);
+    transform: translateY(-50%);
+    border-radius: 2px 0 0 2px;
+    background-color: var(--thermo-fill);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+  }
+  .thermo-rail-off::before {
+    background-color: var(--color-panel2);
+    background-image: none;
+    box-shadow: inset 0 0 0 1px var(--color-line);
+  }
+  .thermo-rail-off .thermo-rail-fill {
+    display: none;
+  }
+
   .thermo-range {
     -webkit-appearance: none;
     appearance: none;
-    height: 16px;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 18px;
     margin: 0;
     background: transparent;
     cursor: pointer;
   }
+  /* 轨道透明：视觉交给 .thermo-rail，这里只定高以便 thumb 精确居中 */
   .thermo-range::-webkit-slider-runnable-track {
-    height: 8px;
+    height: 12px;
     background: transparent;
-  }
-  .thermo-range::-moz-range-track {
-    height: 8px;
-    background: var(--color-ink);
-    border: 1px solid var(--color-line2);
-    border-radius: 1px;
+    border: 0;
   }
   .thermo-range::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 12px;
+    width: 14px;
+    height: 14px;
+    margin-top: -1px; /* (轨道 12 - thumb 14) / 2 */
+    border: 0;
+    border-radius: 2px;
+    background-color: var(--thermo-thumb, var(--color-amberhi));
+    /* 竖向细纹 = 防滑抓手，强化「可拖动」暗示 */
+    background-image: repeating-linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.38) 0 1px,
+      rgba(0, 0, 0, 0) 1px 4px
+    );
+    box-shadow:
+      0 0 0 1px var(--color-void),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+      0 1px 3px rgba(0, 0, 0, 0.65);
+  }
+  .thermo-range::-moz-range-track {
     height: 12px;
-    margin-top: -2px;
-    border: 1px solid var(--color-ink);
-    border-radius: 1px;
-    background: var(--color-amberhi);
-    box-shadow: 0 0 0 1px var(--color-amberdim);
+    background: transparent;
+    border: 0;
   }
   .thermo-range::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    border: 1px solid var(--color-ink);
-    border-radius: 1px;
-    background: var(--color-amberhi);
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 2px;
+    background-color: var(--thermo-thumb, var(--color-amberhi));
+    background-image: repeating-linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.38) 0 1px,
+      rgba(0, 0, 0, 0) 1px 4px
+    );
+    box-shadow:
+      0 0 0 1px var(--color-void),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+      0 1px 3px rgba(0, 0, 0, 0.65);
+  }
+  /* Firefox 自带进度条会盖在轨道上，关掉 */
+  .thermo-range::-moz-range-progress {
+    background: transparent;
+  }
+  .thermo-range:hover::-webkit-slider-thumb,
+  .thermo-range:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+      0 0 0 1px var(--color-void),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+      0 0 0 3px rgba(224, 161, 18, 0.3);
+  }
+  .thermo-range:hover::-moz-range-thumb,
+  .thermo-range:focus-visible::-moz-range-thumb {
+    box-shadow:
+      0 0 0 1px var(--color-void),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+      0 0 0 3px rgba(224, 161, 18, 0.3);
+  }
+  .thermo-range:focus-visible {
+    outline: none;
+  }
+  .thermo-range-elec {
+    --thermo-thumb: var(--color-infohi);
+  }
+  .thermo-range-fuel {
+    --thermo-thumb: var(--color-amberhi);
   }
   .thermo-range:disabled {
     cursor: not-allowed;
   }
   .thermo-range:disabled::-webkit-slider-thumb {
-    background: var(--color-faint);
-    box-shadow: none;
+    background-color: var(--color-faint);
+    background-image: none;
+    box-shadow: 0 0 0 1px var(--color-void);
   }
-  .thermo-range-elec::-webkit-slider-runnable-track,
-  .thermo-range-fuel::-webkit-slider-runnable-track,
-  .thermo-range-elec::-moz-range-track,
-  .thermo-range-fuel::-moz-range-track {
-    height: 6px;
-    background: var(--color-ink);
-    border: 1px solid var(--color-line2);
-    border-radius: 1px;
-  }
-  .thermo-range-elec::-webkit-slider-thumb {
-    background: var(--color-infohi);
-    box-shadow: 0 0 0 1px #2a5a68;
-    width: 9px;
-    height: 9px;
-    margin-top: -2px;
-  }
-  .thermo-range-fuel::-webkit-slider-thumb {
-    background: var(--color-amber);
-    width: 9px;
-    height: 9px;
-    margin-top: -2px;
+  .thermo-range:disabled::-moz-range-thumb {
+    background-color: var(--color-faint);
+    background-image: none;
+    box-shadow: 0 0 0 1px var(--color-void);
   }
 
   .scroll-y {
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+
+  /* 长列表渲染跳过：屏外块不参与排版绘制，面板首渲染/滚动成本与历史长度解耦。
+     contain-intrinsic-size 的 auto 让浏览器记住已渲染高度，减少滚动条跳动；
+     不支持的浏览器直接忽略该属性，行为同现状（渐进增强）。 */
+  .cv-log {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 120px;
+  }
+  .cv-intel {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 200px;
   }
 }
 
@@ -424,6 +533,9 @@
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
+  /* 提示提升到独立合成层：脉冲动画只走合成器 opacity，不触发宿主阴影/背景重绘。
+     挂点仅 2-3 个常驻元素，内存代价可忽略。 */
+  will-change: opacity;
   animation: heat-glow 1.7s ease-in-out infinite;
 }
 

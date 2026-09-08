@@ -243,6 +243,7 @@ for (const f of ALL_FAMILIES) {
   if (
     f.id === 'env_first_freeze' ||
     f.id === 'env_first_chill' ||
+    f.id === 'env_cold_snap_nudge' ||
     f.id === 'env_hypo_severe' ||
     f.id === 'env_warmth_return' ||
     f.id === 'env_woke_cold' ||
@@ -250,7 +251,9 @@ for (const f of ALL_FAMILIES) {
     f.id === 'env_co_vent' ||
     f.id === 'env_co_drowning' ||
     f.id === 'nw_winter_arrives' ||
-    f.id === 'nw_winter_reward'
+    f.id === 'nw_winter_reward' ||
+    // 人性检定赠芯：collectThresholdForced 按滤芯耐久/人性阈值插入
+    f.id === 'filter_cartridge_samaritan'
   ) {
     continue;
   }

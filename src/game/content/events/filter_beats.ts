@@ -123,13 +123,13 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
         'swap',
         {
           ap: -1,
-          res: { parts: -2 },
-          wear: { filterLife: 20 },
+          items: { filter: -1 },
+          wear: { filterLife: 30 },
           stats: { stamina: -6, sanity: 3 },
 
           tone: 'good',
         },
-        { requires: { res: { parts: 2 }, ap: 1 } },
+        { requires: { tags: { all: ['item:filter>=1'] }, reason: '需要一只备用滤芯', ap: 1 } },
       ),
       ch(
         'stretch',

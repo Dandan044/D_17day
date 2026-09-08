@@ -42,6 +42,13 @@ export const RES_UNIT: Record<ResourceId, string> = {
   cash: '元',
 };
 
+/** 特殊物品名（物品面板 / 搜刮掉落共用这一份） */
+export const ITEM_NAME: Record<string, string> = {
+  filter: '备用滤芯',
+  coAlarm: '一氧化碳报警器',
+  iodine: '碘片',
+};
+
 export const SKILL_NAME: Record<SkillId, string> = {
   medicine: '医疗',
   mechanics: '机械',

@@ -1,5 +1,5 @@
 import type { ModuleDef, ModuleId } from '../types';
-import { AIR, CAPS, COLD, FILTER, POWER } from '../balance';
+import { AIR, CAPS, COLD, FILTER, POWER, WEAR } from '../balance';
 import { hydrateNamed } from '../copy/hydrate';
 import { pickCopy, t } from '../copy/t';
 import '../copy';
@@ -194,7 +194,7 @@ export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1):
       if (lv <= 0) return t('ledger.module.none');
       const rain = FILTER.RAIN_OUTPUT[lv] ?? 0;
       const save = Math.round((1 - (FILTER.RECYCLE_NEED[lv] ?? 1)) * 100);
-      const wear = FILTER.WEAR_LEVEL_MULT[lv] ?? 1;
+      const wear = (WEAR.WATER_LVL[lv] ?? 0).toFixed(1);
       return t('ledger.module.filter', { rain, save, wear });
     }
     case 'power': {
@@ -205,7 +205,13 @@ export function moduleHardEffect(id: ModuleId, level: number, waterCapMult = 1):
       return (
         t('ledger.module.insulate', { leak: Math.round((COLD.LEAK[lv] ?? 0) * 100) }) +
         (lv >= 1 ? t('ledger.module.insulateFuel', { fuel: COLD.FUEL_PER_DEGREE }) : '') +
-        (lv >= 2 ? t('ledger.module.insulateElec', { elec: COLD.ELECTRIC_PER_DEGREE }) : '')
+        (lv >= 2 ? t('ledger.module.insulateElec', { elec: COLD.ELECTRIC_PER_DEGREE }) : '') +
+        (lv === 0
+          ? t('ledger.module.insulateCold', {
+              fuel: COLD.FUEL_PER_DEGREE * COLD.UNINSULATED_MULT,
+              elec: COLD.ELECTRIC_PER_DEGREE * COLD.UNINSULATED_MULT,
+            })
+          : '')
       );
     case 'airFilter':
       return t('ledger.module.air', { tol: AIR.FILTER_TOLERANCE[lv], lvl: lv });

@@ -76,7 +76,46 @@ export const RATION_EFFECT = {
 export const WATER_EFFECT = {
   full: { hp: 1, sanity: 1 },
   normal: { hp: 0, sanity: 0 },
-  limited: { hp: -3, sanity: -1 },
+  // 限量档的代价改由「口渴」状态承担（见 DEHY），不再直接扣 HP
+  limited: { hp: 0, sanity: 0 },
+} as const;
+
+/**
+ * 水阶梯：口渴 → 轻/中/重度脱水。
+ * 摄入不足限量级（每人 1.8 L）逐夜加重一档；限量/标准/充足分别好转 1/2/3 档。
+ * 只有 HP 扣除随档位加重，体力/理智扣完全程一致。
+ */
+export const DEHY = {
+  /** 各档（1..3）过夜 HP 扣除 */
+  HP: [0, -3, -6, -12] as const,
+  /** 各档过夜体力 / 理智扣除（不随档位变化） */
+  STAMINA: -6,
+  SANITY: -1,
+  /** 口渴（限量档达标仍会口渴）的过夜扣除 */
+  THIRST_STAMINA: -5,
+  THIRST_SANITY: -1,
+  /** 摄入达标时的好转档数：限量 -1 / 标准 -2 / 充足 -3 */
+  RECOVER_LIMITED: 1,
+  RECOVER_NORMAL: 2,
+  RECOVER_FULL: 3,
+} as const;
+
+/**
+ * 治愈判定（仅「非条件治愈疾病」参与）：
+ * 总治愈率 = 基础(按严重度) + 医疗站(需通电) + 药品(当晚已用药)。
+ * 传染病治愈后 7 日内再感染＝已免疫（必愈）；窗口过后复发基础率减半。
+ */
+export const CURE = {
+  /** 基础治愈率，按严重度 1..5 */
+  BASE: [0, 0.25, 0.15, 0.08, 0.04, 0.01] as const,
+  /** 药品加成，按严重度 1..5（越严重加成越低） */
+  MEDS: [0, 0.3, 0.25, 0.2, 0.15, 0.1] as const,
+  /** 医疗站加成，按等级 1..3（断电不生效） */
+  MEDBAY: [0, 0.1, 0.2, 0.3] as const,
+  /** 传染病免疫窗口（天） */
+  IMMUNE_DAYS: 7,
+  /** 治愈率档位阈值：<2% 无药可救 / <10% 极低 / <25% 较低 / <45% 中等 / <75% 较高 / 其余极高 */
+  TIERS: [0.02, 0.1, 0.25, 0.45, 0.75] as const,
 } as const;
 
 // ============================================================
@@ -92,8 +131,6 @@ export const HEALTH = {
   SANITY_BREAK_HP: -3,
   /** 无食物储备时每日强制饥饿 */
   STARVE_HP: -8,
-  /** 无饮水储备时每日强制脱水 */
-  THIRST_HP: -12,
   /** 营养不良的累积阈值：连续 n 天半配给 */
   MALNOURISH_DAYS: 3,
   /** 标准/充足口粮连续 n 天解除营养不良 */
@@ -120,10 +157,10 @@ export const HEALTH = {
   MEDBAY_REST_HP: [0, 0, 0, 1],
 } as const;
 
-/** 净水：雨雪才进桶、旱天回用、滤芯跟污染走 */
+/** 净水：雨雪才进桶、旱天回用；滤芯耐久消耗表见 WEAR.WATER_LVL / WEAR.AIR_LVL */
 export const FILTER = {
-  /** 雨日基础产量 (L)，按净水等级 0..3 */
-  RAIN_OUTPUT: [0, 8, 16, 26],
+  /** 雨日基础产量 (L)，按净水等级 0..3（0.7 倍平衡削弱后） */
+  RAIN_OUTPUT: [0, 5.6, 11.2, 18.2],
   /** 天气对雨日产量的倍率 */
   WEATHER_YIELD: {
     rain: 1,
@@ -137,18 +174,6 @@ export const FILTER = {
   WELL_DRY_MULT: 0.35,
   /** 旱天回用：耗水倍率（有在线净水才生效） */
   RECYCLE_NEED: [1, 0.82, 0.72, 0.6],
-  /** 滤芯：雨日基础损耗；净水侧再乘等级倍率 */
-  WEAR_RAIN: 0.8,
-  WEAR_STORM: 1.1,
-  WEAR_FLOODING: 1.3,
-  WEAR_BLACK_RAIN: 1.6,
-  WEAR_RECYCLE: 0.5,
-  WEAR_AIR: 1,
-  WEAR_ASH: 1.0,
-  WEAR_POLLUTION_PER_40: 0.3,
-  WEAR_RAD_PER_40: 0.2,
-  /** 净水等级对滤芯损耗倍率 */
-  WEAR_LEVEL_MULT: [1, 1, 0.7, 0.45],
   /** 喝了今天滤出的雨水：致病概率 */
   SICK_RAIN: [0, 0.16, 0.07, 0.02],
   /** 旱天回用：致病概率 */
@@ -184,6 +209,8 @@ export const COLD = {
   /** 每升高 1°C 的油 / 电。保温的好处在漏热，不再打折每度成本 */
   FUEL_PER_DEGREE: 0.12,
   ELECTRIC_PER_DEGREE: 0.16,
+  /** 0 级保温没有热缓冲，炉子烧的是整间屋子：每度资源消耗倍率 */
+  UNINSULATED_MULT: 2,
   /** 预估室内比实际高这么多，算「估错了」 */
   SURPRISE_GAP: 4,
   /** 舒适以下得轻度低温症 / 流感 */
@@ -195,6 +222,22 @@ export const COLD = {
   PNEUMONIA_CHANCE: 0.4,
   /** 轻度 / 中度 / 重度（带内）日损 HP */
   STAGE_HP: [0, -5, -15, -25],
+} as const;
+
+/**
+ * 季节温度曲线（world.baseTemperature 用）。
+ * 主干为线性下降，叠加正弦波动形成"寒潮—回暖"的锯齿节奏。
+ */
+export const SEASON_TEMP = {
+  /** 灾难开始日（COLLAPSE_DAY）的室外温度 */
+  COLLAPSE_TEMP: 28,
+  /** 初秋到深冬的总降幅：每天约下降 TOTAL_DROP / FINAL_DAY 度 */
+  TOTAL_DROP: 17,
+  /** 正弦波动的振幅（°C）与周期（天） */
+  WAVE_AMP: 2.2,
+  WAVE_PERIOD: 10,
+  /** baseTemperature + 灾难偏移低于该值判为冬季（影响 season 标签与事件池） */
+  WINTER_LINE: 12,
 } as const;
 
 /**
@@ -248,6 +291,8 @@ export const RAD = {
   HP_PER_POINT: 0.15,
   /** 碘片可抵消的天数 */
   IODINE_DAYS: 3,
+  /** 空气过滤侧的耐久扣除辐射基准：该级过滤器可处理的最大辐射量 */
+  TOL_FOR_AIR: [30, 52, 74, 94],
 } as const;
 
 // ============================================================
@@ -311,6 +356,10 @@ export const LOOT = {
   CARRY_BASE: 22,
   CARRY_VEHICLE: 90,
   CARRY_CART: 40,
+  /** 灾难期搜刮五金店出备用滤芯的概率（整局限一次，不吃产出倍率） */
+  FILTER_CHANCE: 0.3,
+  /** 滤芯条目命中时扣的门店库存（≈两份建材的池子占用） */
+  FILTER_STOCK_DRAIN: 24,
 } as const;
 
 export const PRICE = {
@@ -325,6 +374,8 @@ export const PRICE = {
   BUY_MULT: 1.0,
   /** 成品被拦截的概率（按到货延迟天数累加） */
   DELIVERY_FAIL_PER_DAY: 0.14,
+  /** 备用滤芯的五金店基价，实付 = 基价 × 物价指数 */
+  FILTER: 500,
 } as const;
 
 // ============================================================
@@ -391,15 +442,19 @@ export const POWER = {
 
 /** 易耗品 */
 export const WEAR = {
-  FILTER_LIFE: 32,
-  /** 落灰/毒气天气的额外损耗 */
-  FILTER_EXTRA_DUST: 1.5,
-  /** 更换一组滤芯要几个零件，恢复多少天寿命 */
-  FILTER_PARTS: 4,
-  FILTER_RESTORE: 26,
+  /** 单只滤芯总耐久（精度 0.1）；净水与空气过滤共用一只芯 */
+  FILTER_LIFE: 30,
   GENERATOR_OIL: 24,
   OIL_PER_PART: 8,
   OIL_PARTS: 2,
+  /** 净水产水/回用一次的耐久扣除，按净水等级 0..3 */
+  WATER_LVL: [0, 0.5, 1, 1.5],
+  /** 空气过滤器每运行一天的耐久扣除，按空气过滤等级 0..3 */
+  AIR_LVL: [0, 0.5, 1, 1.5],
+  /** 水相关特殊天气对净水侧扣除的加成值（在等级扣除之上累加） */
+  WATER_WEATHER: { storm: 0.3, flooding: 0.5, blackRain: 0.8, blizzard: 0.2 } as Record<string, number>,
+  /** 空气过滤侧辐射占比修正的下限：辐射再低也至少扣这么多比例 */
+  RAD_FLOOR: 0.25,
 } as const;
 
 // ============================================================
@@ -478,6 +533,16 @@ export const INTEL = {
   PERK_BONUS: 0.12,
   /** 越接近崩溃日，真情报越多 */
   DAY_BONUS: 0.045,
+} as const;
+
+// ============================================================
+// 日记
+// ============================================================
+
+export const LOG = {
+  /** 保留上限：约 60 天以上的量，远超一局所需。
+      封顶后 structuredClone / persist 序列化 / 存档体积的成本不再随天数膨胀 */
+  CAP: 500,
 } as const;
 
 // ============================================================

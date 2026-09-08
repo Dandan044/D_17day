@@ -33,7 +33,10 @@ export type SkillId =
   | 'stealth'; // 隐蔽
 
 export type ConditionId =
-  | 'dehydrated' // 脱水
+  | 'thirst' // 口渴（限量档饮水的代价，脱水阶梯的前一站）
+  | 'dehydrationMild' // 轻度脱水
+  | 'dehydrationMod' // 中度脱水
+  | 'dehydrationSevere' // 重度脱水（当夜仍无限量级饮水＝死亡）
   | 'starving' // 饥饿
   | 'malnourished' // 营养不良
   | 'dysentery' // 痢疾
@@ -241,6 +244,8 @@ export interface Effect {
   shelter?: Partial<Record<ModuleId, number>>;
   /** 易耗品增量：滤芯寿命、机油、蓄电 */
   wear?: Partial<{ filterLife: number; generatorOil: number; batteryCharge: number }>;
+  /** 特殊物品增量：备用滤芯等（负为消耗，正为获得） */
+  items?: Partial<Record<'filter', number>>;
   /** 室内温度增量（开门漏热、半夜添火） */
   indoor?: number;
   /** 事件里改取暖模式（电热坏了改烧油） */
@@ -439,7 +444,10 @@ export interface Project {
 // ============================================================
 
 export interface LootEntry {
-  res: ResourceId;
+  /** 常规物资条目；特殊物品条目改填 item */
+  res?: ResourceId;
+  /** 特殊物品条目（如备用滤芯）：命中时进 run.items 而非 res，不吃任何产出倍率 */
+  item?: string;
   min: number;
   max: number;
   /** 出现概率 0-1 */
@@ -607,11 +615,17 @@ export interface RunState {
   conditions: ConditionId[];
   /** 各状态已持续天数，用于 afterDays 恶化 */
   conditionAge: Partial<Record<ConditionId, number>>;
+  /** 今晚已用药的疾病：过夜治愈判定吃药品加成，结算后清空 */
+  medicated?: ConditionId[];
+  /** 传染病最近一次治愈日；7 日内再感染＝已免疫（必愈），之后复发基础率减半 */
+  immunity?: Partial<Record<ConditionId, number>>;
 
   modules: Record<ModuleId, number>;
   projects: Project[];
-  /** 滤芯剩余天数、发电机保养度等易耗品 */
+  /** 滤芯剩余耐久、发电机保养度等易耗品 */
   wear: { filterLife: number; generatorOil: number; batteryCharge: number };
+  /** 特殊物品库存：备用滤芯等（碘片/报警器仍走 flags，不在此处） */
+  items: { filter: number };
   /** 连续状态计数器 */
   streaks: { lowRation: number; noThreatDays: number; goodRation: number; belowSurvival: number };
 
