@@ -462,6 +462,25 @@ button.art-link {
   transition: filter 180ms ease;
 }
 
+/* 多边形热区：svg 的 CSS 盒不再参与命中，只留被 clipPath 裁剪的 image 本体
+   （visiblePainted + clip 按规范限制命中面），透明留白从此点不到。 */
+.art-cut.is-clipped .art-cut-svg {
+  pointer-events: none;
+}
+
+/* 本子待办警戒描边：有橙/红待办时轮廓常亮同色光（置于 hover 规则前，悬停白晕临时覆盖）。 */
+.art-cut.is-tier-orange .art-cut-svg {
+  filter:
+    drop-shadow(0 0 4px rgba(224, 134, 42, 0.9))
+    drop-shadow(0 0 11px rgba(224, 134, 42, 0.45));
+}
+
+.art-cut.is-tier-red .art-cut-svg {
+  filter:
+    drop-shadow(0 0 5px rgba(211, 58, 44, 0.95))
+    drop-shadow(0 0 14px rgba(211, 58, 44, 0.55));
+}
+
 .art-cut:hover .art-cut-svg,
 .art-cut:focus-visible .art-cut-svg {
   filter:
@@ -825,10 +844,38 @@ button.art-link {
   transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.art-win-glass {
+.art-win-pane {
   position: absolute;
   z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+  container-type: size;
+}
+
+.art-win-hole {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 轻度玻璃感：斜向微反光 + 暗角，让天气像隔着玻璃，而不是四张 JPEG。 */
+.art-win-hole::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(105deg, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0) 24%),
+    radial-gradient(125% 95% at 50% 42%, rgba(0, 0, 0, 0) 58%, rgba(6, 10, 16, 0.26) 100%);
+  pointer-events: none;
+}
+
+.art-win-glass {
+  position: absolute;
+  width: 156cqw;
+  height: 156cqh;
+  max-width: none;
   object-fit: cover;
+  object-position: center 42%;
   pointer-events: none;
   user-select: none;
 }
@@ -982,4 +1029,228 @@ button.art-link {
   padding: 8px 14px;
   background: rgba(10, 13, 17, 0.72);
   border: 1px solid rgba(211, 219, 226, 0.12);
+}
+
+/* 纯装饰抠图层（如窗）：有遮挡关系但无交互，不出光晕轮廓，不接事件。 */
+.art-decor {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.art-decor img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 左下角常驻身体三要素：黑白末世风。fixed z-50 压在弹窗（z-40）与事件层之上。 */
+.art-stat-hud {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 50;
+  width: 172px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  background: rgba(11, 12, 14, 0.84);
+  border: 1px solid rgba(198, 202, 207, 0.16);
+  font-family: var(--font-mono);
+  user-select: none;
+  cursor: default;
+}
+
+.art-stat {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.art-stat-name {
+  flex: none;
+  width: 46px;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: #b4b8bd;
+  white-space: nowrap;
+}
+
+.art-stat-track {
+  flex: 1;
+  height: 5px;
+  background: #232527;
+  border: 1px solid rgba(198, 202, 207, 0.13);
+  overflow: hidden;
+}
+
+.art-stat-track i {
+  display: block;
+  height: 100%;
+  background: #a6aab0;
+  transition: width 500ms ease;
+}
+
+/* 低值警示：条变亮白并缓慢呼吸（黑白风里的强调手段）。 */
+.art-stat[data-low] .art-stat-track i {
+  background: #e8e5df;
+  animation: art-stat-low 1.6s ease-in-out infinite;
+}
+
+/* 行动点：分段点数条（与钟面 HUD 的 AP 点同语义，黑白化）。 */
+.art-stat-pips {
+  flex: 1;
+  display: flex;
+  gap: 3px;
+}
+
+.art-stat-pips i {
+  flex: 1;
+  height: 5px;
+  background: #232527;
+  border: 1px solid rgba(198, 202, 207, 0.13);
+}
+
+.art-stat-pips i.is-on {
+  background: #a6aab0;
+}
+
+.art-stat[data-low] .art-stat-pips i.is-on {
+  background: #e8e5df;
+  animation: art-stat-low 1.6s ease-in-out infinite;
+}
+
+@keyframes art-stat-low {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.art-stat-detail {
+  display: none;
+  position: absolute;
+  left: -1px;
+  bottom: calc(100% + 7px);
+  width: 208px;
+  padding: 8px 10px 9px;
+  background: rgba(13, 14, 16, 0.97);
+  border: 1px solid rgba(198, 202, 207, 0.24);
+  z-index: 2;
+}
+
+.art-stat:hover .art-stat-detail,
+.art-stat-hud.is-open .art-stat-detail {
+  display: block;
+}
+
+.art-stat-detail b {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #e8eaec;
+  font-weight: 600;
+}
+
+.art-stat-detail b em {
+  font-style: normal;
+  color: #84898f;
+  margin-left: 2px;
+}
+
+.art-stat-detail p {
+  margin: 5px 0 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: #9aa0a6;
+}
+
+/* 今日待办面板：红/橙分级卡片 + 事件钩子登记。 */
+.art-todo-item {
+  position: relative;
+  border: 1px solid rgba(198, 202, 207, 0.12);
+  border-left-width: 3px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  user-select: none;
+}
+
+.art-todo-item.is-red {
+  border-left-color: #d33a2c;
+}
+
+.art-todo-item.is-orange {
+  border-left-color: #e0862a;
+}
+
+.art-todo-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+}
+
+.art-todo-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.art-todo-item.is-red .art-todo-dot {
+  background: #d33a2c;
+  box-shadow: 0 0 6px rgba(211, 58, 44, 0.7);
+}
+
+.art-todo-item.is-orange .art-todo-dot {
+  background: #e0862a;
+  box-shadow: 0 0 6px rgba(224, 134, 42, 0.6);
+}
+
+.art-todo-title {
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  color: #dfe2e5;
+}
+
+.art-todo-detail {
+  /* 悬停/点击展开的详情是绝对定位浮层：盖在下方卡片上，列表零布局位移，弹窗不抖。 */
+  display: none;
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: 100%;
+  z-index: 5;
+  padding: 7px 12px 10px 25px;
+  background: rgba(16, 18, 21, 0.98);
+  border: 1px solid rgba(198, 202, 207, 0.22);
+  border-top: 1px dashed rgba(198, 202, 207, 0.18);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
+}
+
+.art-todo-item:hover .art-todo-detail,
+.art-todo-item.is-open .art-todo-detail {
+  display: block;
+}
+
+.art-todo-detail p {
+  margin: 0 0 3px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #b9bec3;
+}
+
+.art-todo-detail .art-todo-fix {
+  margin: 5px 0 0;
+  color: #8f9aa4;
+  font-size: 11px;
+}
+
+.art-todo-item.is-red .art-todo-detail p:first-child {
+  color: #e8b0a8;
+}
+
+.art-todo-item.is-orange .art-todo-detail p:first-child {
+  color: #e0c79e;
 }

@@ -80,7 +80,8 @@ export type Overlay =
   | 'help'
   | 'plan'
   | 'body'
-  | 'supplies';
+  | 'supplies'
+  | 'todo';
 export type Screen = 'menu' | 'setup' | 'game' | 'summary';
 export type GameUi = 'art' | 'classic';
 

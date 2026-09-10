@@ -4,7 +4,7 @@ import { t } from '../../game/copy/t';
 import { formatSeed } from '../../game/rng';
 import { useGame } from '../../game/store';
 import { ArtCutout, ArtSceneFrame } from './ArtHotspot';
-import { ART, CUT } from './skin';
+import { ART, CUT, MENU_POLY } from './skin';
 import './art.css';
 
 type Scene = 'room' | 'desk';
@@ -48,9 +48,10 @@ export default function ArtMainMenu() {
         className={`art-scene ${scene === 'room' && !leaving ? 'is-on' : ''} ${leaving === 'room' ? 'is-zoom-desk' : ''}`}
       >
         <ArtSceneFrame src={ART.sceneRoom}>
-          <ArtCutout {...CUT.table} src={ART.cutTable} label="桌子" sub="开始 / 继续" onClick={goDesk} />
+          <ArtCutout {...CUT.table} poly={MENU_POLY.table} src={ART.cutTable} label="桌子" sub="开始 / 继续" onClick={goDesk} />
           <ArtCutout
             {...CUT.shelves}
+            poly={MENU_POLY.shelves}
             src={ART.cutShelves}
             label={t('ui.menu.codex')}
             sub={t('ui.menu.seenEvent', { n: meta.seenFamilies.length })}
@@ -58,6 +59,7 @@ export default function ArtMainMenu() {
           />
           <ArtCutout
             {...CUT.vending}
+            poly={MENU_POLY.vending}
             src={ART.cutVending}
             label={t('ui.menu.meta')}
             sub={`${t('ui.menu.relics')} ${meta.relics}`}
@@ -82,12 +84,14 @@ export default function ArtMainMenu() {
         <ArtSceneFrame src={ART.sceneDesk}>
           <ArtCutout
             {...CUT.notebook}
+            poly={MENU_POLY.notebook}
             src={ART.cutNotebook}
             label={live ? t('ui.menu.restart') : t('ui.menu.start')}
             onClick={goSetup}
           />
           <ArtCutout
             {...CUT.journal}
+            poly={MENU_POLY.journal}
             src={ART.cutJournal}
             hidden={!live}
             label={t('ui.menu.resume', { n: run?.day ?? 0 })}
@@ -96,6 +100,7 @@ export default function ArtMainMenu() {
           />
           <ArtCutout
             {...CUT.stamp}
+            poly={MENU_POLY.stamp}
             src={ART.cutStamp}
             hidden={!live}
             label={confirmAbandon ? t('ui.menu.confirm') : t('ui.menu.abandon')}

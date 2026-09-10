@@ -15,6 +15,7 @@ import ArtSetup from './ui/art/ArtSetup';
 import ArtSiteSelect from './ui/art/ArtSiteSelect';
 import ArtGame from './ui/art/ArtGame';
 import { ArtBodyPanel, ArtPlanPanel, ArtSuppliesPanel } from './ui/art/ArtPlanPanel';
+import { ArtTodoPanel } from './ui/art/ArtTodoPanel';
 import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
@@ -127,6 +128,7 @@ export default function App() {
       {run && overlay === 'items' && <ItemsPanel run={run} />}
       {run && overlay === 'plan' && <ArtPlanPanel run={run} />}
       {run && overlay === 'body' && <ArtBodyPanel run={run} />}
+      {run && overlay === 'todo' && <ArtTodoPanel run={run} />}
       {run && overlay === 'supplies' && <ArtSuppliesPanel run={run} />}
       {overlay === 'meta' && <MetaPanel />}
       {overlay === 'codex' && <CodexPanel />}

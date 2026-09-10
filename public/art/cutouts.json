@@ -159,14 +159,15 @@
     "src": "scene-home-desk.jpg",
     "file": "cut-h-window.png",
     "left": 0.3,
-    "top": 0.12,
+    "top": 0.1,
     "width": 0.39999999999999997,
-    "height": 0.34,
+    "height": 0.36,
     "px": [
       665,
-      315
+      334
     ],
-    "cover": 0.505
+    "cover": 0.656,
+    "model": "glass-punch+pending"
   },
   "cut-h-blueprint": {
     "src": "scene-home-desk.jpg",
@@ -179,20 +180,22 @@
       399,
       372
     ],
-    "cover": 0.509
+    "cover": 0.508,
+    "model": "birefnet-general"
   },
   "cut-h-notebook": {
     "src": "scene-home-desk.jpg",
     "file": "cut-h-notebook.png",
-    "left": 0.16,
-    "top": 0.58,
-    "width": 0.17,
-    "height": 0.26,
+    "left": 0.158,
+    "top": 0.618,
+    "width": 0.148,
+    "height": 0.18300000000000005,
     "px": [
-      283,
-      241
+      247,
+      170
     ],
-    "cover": 0.133
+    "cover": 0.144,
+    "model": "birefnet-general"
   },
   "cut-h-plan": {
     "src": "scene-home-desk.jpg",
@@ -205,7 +208,8 @@
       283,
       260
     ],
-    "cover": 0.245
+    "cover": 0.233,
+    "model": "birefnet-general"
   },
   "cut-h-clock": {
     "src": "scene-home-desk.jpg",
@@ -218,7 +222,8 @@
       232,
       260
     ],
-    "cover": 0.247
+    "cover": 0.242,
+    "model": "birefnet-general"
   },
   "cut-h-radio": {
     "src": "scene-home-desk.jpg",
@@ -231,7 +236,8 @@
       400,
       315
     ],
-    "cover": 0.259
+    "cover": 0.259,
+    "model": "birefnet-general"
   },
   "cut-h-bed": {
     "src": "scene-home-side.jpg",
@@ -244,7 +250,8 @@
       532,
       705
     ],
-    "cover": 0.142
+    "cover": 0.232,
+    "model": "birefnet-general"
   },
   "cut-h-medkit": {
     "src": "scene-home-side.jpg",
@@ -257,7 +264,8 @@
       233,
       296
     ],
-    "cover": 0.669
+    "cover": 0.444,
+    "model": "birefnet-general"
   },
   "cut-h-door": {
     "src": "scene-home-side.jpg",
@@ -270,7 +278,8 @@
       332,
       816
     ],
-    "cover": 0.795
+    "cover": 0.764,
+    "model": "birefnet-general"
   },
   "cut-h-shelf": {
     "src": "scene-home-side.jpg",
@@ -283,6 +292,7 @@
       449,
       780
     ],
-    "cover": 0.47
+    "cover": 0.47,
+    "model": "isnet-general-use->u2net"
   }
 }

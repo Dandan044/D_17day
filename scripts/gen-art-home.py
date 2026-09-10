@@ -26,6 +26,7 @@ into the glass box. Prep vs survival share the same pane.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import time
 import urllib.error
@@ -48,9 +49,12 @@ NEG = (
     "人脸, 人物, 手, 重复物体, 过曝, 白色背景, 桌上放杯子, 桌上放书, "
     "第二本笔记本, 第二台收音机, 两张床, 两扇门, 鲜艳高饱和"
 )
+# 天气板专用：纯外景，禁止把窗框/窗帘画进去（场景图还需要窗，不能进全局 NEG）。
+NEG_WIN = NEG + ", 窗框, 窗帘, 窗台, 窗棂, 窗格, 玻璃窗, 玻璃反光, 室内"
 
 SCENE = "1664x928"
-PANE = "1024x1024"
+# 天气板与窗区同宽比（窗裁切区约 2.1:1），方图会被 object-fit:cover 切掉近一半高度。
+PANE = "1664x928"
 
 JOBS: list[tuple[str, str, str, int]] = [
     (
@@ -88,80 +92,83 @@ JOBS: list[tuple[str, str, str, int]] = [
         "win-pre-clear.jpg",
         PANE,
         STYLE
-        + "从六层居民楼窗玻璃里看出去的城市黄昏，晴朗，中国南方街巷与单元楼，暖色夕光，"
-        "没有窗框、没有窗帘、没有室内，只有窗外实景。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的中国城市黄昏，晴朗，南方街巷与单元楼，暖色夕光，"
+        "视野开阔，画面只有天空、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45201,
     ),
     (
         "win-pre-overcast.jpg",
         PANE,
         STYLE
-        + "从居民楼窗玻璃里看出去的阴天中国城市，灰云压楼顶，街道湿暗但还正常，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的阴天中国城市，灰云压楼顶，街道湿暗但还正常，"
+        "画面只有天空、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45202,
     ),
     (
         "win-pre-rain.jpg",
         PANE,
         STYLE
-        + "从居民楼窗玻璃里看出去的下雨中国城市，雨丝、积水倒影、撑伞的远景剪影尽量不要清晰人脸，"
-        "没有窗框、没有窗帘、没有室内。无人近景。无文字。",
+        + "超宽16:9，镜头在室外高处平视的下雨中国城市，雨丝、积水倒影、灰蓝雨幕，"
+        "撑伞的远景剪影尽量不要清晰人脸，画面只有天空、楼群和街道，"
+        "没有任何窗框、窗帘、窗台、玻璃或室内元素。无人近景。无文字。",
         45203,
     ),
     (
         "win-pre-fog.jpg",
         PANE,
         STYLE
-        + "从居民楼窗玻璃里看出去的浓雾中国城市，楼房只剩剪影，街灯晕开，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的浓雾中国城市，楼房只剩剪影，街灯晕开，"
+        "灰白雾气充满画面，画面只有雾、楼影和街道，"
+        "没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45204,
     ),
     (
         "win-rainstorm.jpg",
         PANE,
         STYLE
-        + "灾难后的中国城市暴雨内涝，窗外街道没过台阶，停电的楼，远处应急灯，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，灾难后的中国城市暴雨内涝，镜头在室外平视，街道积水没过台阶，"
+        "停电的楼，远处应急灯，雨幕密集，画面只有暴雨、楼群和街道，"
+        "没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45211,
     ),
     (
         "win-snow.jpg",
         PANE,
         STYLE
-        + "灾难后的中国城市核冬天积雪，灰黑雪、枯树、空荡街道，铅云，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的灾难后中国城市核冬天，灰黑积雪覆街，枯树、空荡街道，铅灰色低云，"
+        "画面只有雪、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45212,
     ),
     (
         "win-ashfall.jpg",
         PANE,
         STYLE
-        + "灾难后的中国城市落灰，屋顶和马路覆着一层细灰，天色土黄，能见度低，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的灾难后中国城市落灰天，屋顶和马路覆着一层细灰，天色土黄，能见度低，"
+        "画面只有灰、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45213,
     ),
     (
         "win-blackrain.jpg",
         PANE,
         STYLE
-        + "灾难后的中国城市黑雨，雨是深灰近黑，楼墙淌脏水痕，天空病绿，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的灾难后中国城市黑雨，雨丝深灰近黑，楼墙淌脏水痕，天空病绿，"
+        "画面只有雨、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45214,
     ),
     (
         "win-heatwave.jpg",
         PANE,
         STYLE
-        + "灾难后的中国城市热浪，白晃晃的死阳光，干裂路面，停运的车辆，空气扭曲，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的灾难后中国城市热浪，白晃晃的死阳光，干裂路面，停运的车辆，空气热扭曲，"
+        "画面只有阳光、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45215,
     ),
     (
         "win-smog.jpg",
         PANE,
         STYLE
-        + "灾难后的中国城市毒雾，黄绿雾气吞楼，能见度极低，几盏应急灯，"
-        "没有窗框、没有窗帘、没有室内。无人。无文字。",
+        + "超宽16:9，镜头在室外高处平视的灾难后中国城市毒雾，黄绿雾气吞楼，能见度极低，几盏应急灯晕开，"
+        "画面只有雾、楼群和街道，没有任何窗框、窗帘、窗台、玻璃或室内元素。无人。无文字。",
         45216,
     ),
 ]
@@ -173,6 +180,7 @@ def load_cfg() -> dict:
 
 def generate(cfg: dict, prompt: str, size: str, seed: int, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
+    neg = NEG_WIN if dest.name.startswith("win-") else NEG
     payload = json.dumps(
         {
             "model": cfg.get("model_name", "qwen-image"),
@@ -181,7 +189,7 @@ def generate(cfg: dict, prompt: str, size: str, seed: int, dest: Path) -> None:
             "size": size,
             "response_format": "b64_json",
             "num_inference_steps": 30,
-            "negative_prompt": NEG,
+            "negative_prompt": neg,
             "true_cfg_scale": 4.2,
             "seed": seed,
         },
@@ -215,13 +223,29 @@ def generate(cfg: dict, prompt: str, size: str, seed: int, dest: Path) -> None:
             print(f"  HTTP 429, retry in {delay:.0f}s ({attempt + 1}/6)", flush=True)
             time.sleep(delay)
             delay = min(delay * 1.8, 60.0)
+        except (http.client.HTTPException, ConnectionError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            # 大图响应容易半截断线，按 429 同样的节奏重试。
+            last_err = e
+            print(f"  {type(e).__name__}, retry in {delay:.0f}s ({attempt + 1}/6)", flush=True)
+            time.sleep(delay)
+            delay = min(delay * 1.8, 60.0)
     raise last_err if last_err else RuntimeError("generate failed")
 
 
 def main() -> None:
+    import sys
+
     cfg = load_cfg()
-    pending = [j for j in JOBS if not (OUT / j[0]).exists()]
-    print(f"{len(JOBS) - len(pending)} exist, {len(pending)} to generate", flush=True)
+    only = set(sys.argv[1:])
+    if only:
+        # 按名强制重生成（存在也覆盖）：python scripts/gen-art-home.py win-snow win-smog
+        pending = [j for j in JOBS if j[0] in only]
+        missing = only - {j[0] for j in pending}
+        if missing:
+            print(f"unknown jobs: {sorted(missing)}", flush=True)
+    else:
+        pending = [j for j in JOBS if not (OUT / j[0]).exists()]
+    print(f"{len(pending)} to generate", flush=True)
     for i, (name, size, prompt, seed) in enumerate(pending, 1):
         dest = OUT / name
         print(f"[{i}/{len(pending)}] {name} seed={seed}", flush=True)

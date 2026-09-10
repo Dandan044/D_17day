@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 
-import { RAD, TIME } from '../../game/balance';
+import { NUCLEAR_WINTER, RAD, TIME } from '../../game/balance';
 import { t } from '../../game/copy/t';
 import { currentIndoor } from '../../game/engine/climate';
 import { effectiveModule, iodineActive, radiationShield, threatName } from '../../game/engine/tags';
+import { todoTier } from '../../game/engine/todos';
 import { WEATHER_NAME } from '../../game/engine/world';
 import { useGame } from '../../game/store';
 import EventCard from '../EventCard';
 import { cachedPower } from '../derived';
 import { Chip } from '../kit';
 import { ArtCutout, ArtSceneFrame } from './ArtHotspot';
-import { ART, CUT_HOME, WIN_GLASS, hideBrokenImg, windowArt } from './skin';
+import { ArtStatusHud } from './ArtStatusHud';
+import { ART, CUT_HOME, HOME_POLY, HUD_BOX, HUD_SILL, WIN_PANES, hideBrokenImg, windowArt, type WindowStage } from './skin';
 import './art.css';
 
 type View = 'desk' | 'side';
@@ -43,6 +45,8 @@ export default function ArtGame() {
   if (!run) return null;
 
   const isPrep = run.day < TIME.COLLAPSE_DAY;
+  // 窗景阶段：灾前 / 灾变早期（threat 1-3）/ 核冬天（threat ≥ NUCLEAR_WINTER.THREAT_PHASE）。
+  const winStage: WindowStage = isPrep ? 'prep' : run.threat >= NUCLEAR_WINTER.THREAT_PHASE ? 'winter' : 'early';
   const mustRead = run.queue.length > 0;
   const noAp = run.ap <= 0;
   const indoorNow = currentIndoor(run);
@@ -80,11 +84,13 @@ export default function ArtGame() {
   };
 
   const onNotebook = () => {
-    if (run.queue.length === 0) {
-      toast(t('ui.game.noEvent'), 'neutral');
+    if (run.queue.length > 0) {
+      // 每日事件流程：有待处理事件先看事件（mustRead 兼容原逻辑）
+      setZoomEvent(true);
       return;
     }
-    setZoomEvent(true);
+    // 事件读完后可反复打开：进入今日待办面板
+    setOverlay('todo');
   };
 
   const onBed = () => {
@@ -104,22 +110,39 @@ export default function ArtGame() {
         className={`art-scene ${view === 'desk' && !leaving ? 'is-on' : ''} ${leaving === 'desk' ? 'is-slide-away' : ''} ${zoomEvent ? 'is-zoom-nb' : ''}`}
       >
         <ArtSceneFrame src={ART.sceneHomeDesk}>
-          <img
-            className="art-win-glass"
-            style={WIN_GLASS}
-            src={windowArt(run.world.weather, isPrep)}
-            alt=""
-            decoding="async"
-            onError={hideBrokenImg}
-          />
-          <ArtCutout
-            {...CUT_HOME.window}
-            src={ART.cutHWindow}
-            label={WEATHER_NAME[run.world.weather]}
-            sub={t('ui.game.outdoor', { out: run.world.temperature, in: indoorNow })}
-          />
+          <div className="art-win-pane" style={CUT_HOME.window}>
+            {WIN_PANES.map((pane, i) => (
+              <div
+                key={i}
+                className="art-win-hole"
+                style={{
+                  left: `${pane.l * 100}%`,
+                  top: `${pane.t * 100}%`,
+                  width: `${(pane.r - pane.l) * 100}%`,
+                  height: `${(pane.b - pane.t) * 100}%`,
+                }}
+              >
+                <img
+                  className="art-win-glass"
+                  style={{
+                    left: `calc(${-pane.l * 100}cqw - 28cqw)`,
+                    top: `calc(${-pane.t * 100}cqh - 28cqh)`,
+                  }}
+                  src={windowArt(run.world.weather, winStage)}
+                  alt=""
+                  decoding="async"
+                  onError={hideBrokenImg}
+                />
+              </div>
+            ))}
+          </div>
+          {/* 窗抠图是纯装饰层（天气洞的遮罩），无交互：不作为 button 渲染，不出光晕轮廓。 */}
+          <div className="art-decor" style={CUT_HOME.window} aria-hidden>
+            <img src={ART.cutHWindow} alt="" decoding="async" onError={hideBrokenImg} />
+          </div>
           <ArtCutout
             {...CUT_HOME.blueprint}
+            poly={HOME_POLY.blueprint}
             src={ART.cutHBlueprint}
             label={t('ui.game.buildTitle')}
             sub={t('ui.common.ap', { n: 1 })}
@@ -129,22 +152,25 @@ export default function ArtGame() {
           />
           <ArtCutout
             {...CUT_HOME.notebook}
+            poly={HOME_POLY.notebook}
             src={ART.cutHNotebook}
             label={t('ui.game.eventPeek')}
             sub={mustRead ? t('ui.event.more', { n: Math.max(0, run.queue.length - 1) }) : undefined}
             pulse={mustRead}
+            tier={todoTier(run) ?? undefined}
             onClick={onNotebook}
           />
           <ArtCutout
             {...CUT_HOME.plan}
+            poly={HOME_POLY.plan}
             src={ART.cutHPlan}
             label={t('ui.game.planTitle')}
             pulse={false}
             locked={locked}
             onClick={() => act(() => setOverlay('plan'))}
           />
-          <ArtCutout {...CUT_HOME.clock} src={ART.cutHClock} label={t('ui.game.ap')} />
-          <div className="art-hud art-hud-clock" style={CUT_HOME.clock}>
+          <ArtCutout {...CUT_HOME.clock} poly={HOME_POLY.clock} src={ART.cutHClock} label={t('ui.game.ap')} />
+          <div className="art-hud art-hud-clock" style={HUD_BOX.clock}>
             <div className="art-hud-day">
               {isPrep ? `D-${TIME.PREP_DAYS - run.day + 1}` : run.day}
             </div>
@@ -156,12 +182,13 @@ export default function ArtGame() {
           </div>
           <ArtCutout
             {...CUT_HOME.radio}
+            poly={HOME_POLY.radio}
             src={ART.cutHRadio}
             label={isPrep ? t('ui.game.intelPrep') : t('ui.game.intelLive')}
             locked={locked}
             onClick={() => act(() => setOverlay('intel'))}
           />
-          <div className="art-hud art-hud-sill" style={WIN_GLASS}>
+          <div className="art-hud art-hud-sill" style={HUD_SILL}>
             <span>
               {WEATHER_NAME[run.world.weather]} · {t('ui.game.outdoor', { out: run.world.temperature, in: indoorNow })}
             </span>
@@ -185,7 +212,7 @@ export default function ArtGame() {
             )}
           </div>
           {run.projects.length > 0 && (
-            <div className="art-hud art-hud-mark" style={CUT_HOME.blueprint}>
+            <div className="art-hud art-hud-mark" style={HUD_BOX.blueprint}>
               {t('ui.game.buildingShort')} {run.projects.length}
             </div>
           )}
@@ -198,6 +225,7 @@ export default function ArtGame() {
         <ArtSceneFrame src={ART.sceneHomeSide}>
           <ArtCutout
             {...CUT_HOME.bed}
+            poly={HOME_POLY.bed}
             src={ART.cutHBed}
             label={noAp ? t('ui.game.restEnd') : t('ui.game.restNow')}
             sub={noAp ? t('ui.game.noAp') : t('ui.common.ap', { n: 1 })}
@@ -207,6 +235,7 @@ export default function ArtGame() {
           />
           <ArtCutout
             {...CUT_HOME.medkit}
+            poly={HOME_POLY.medkit}
             src={ART.cutHMedkit}
             label={t('ui.game.body')}
             pulse={!locked && run.conditions.length > 0}
@@ -215,6 +244,7 @@ export default function ArtGame() {
           />
           <ArtCutout
             {...CUT_HOME.door}
+            poly={HOME_POLY.door}
             src={ART.cutHDoor}
             label={isPrep ? t('ui.game.buyTitle') : t('ui.game.scavTitle')}
             sub={t('ui.common.ap', { n: 1 })}
@@ -223,6 +253,7 @@ export default function ArtGame() {
           />
           <ArtCutout
             {...CUT_HOME.shelf}
+            poly={HOME_POLY.shelf}
             src={ART.cutHShelf}
             label={t('ui.game.supplies')}
             pulse={!locked && run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0)}
@@ -271,6 +302,8 @@ export default function ArtGame() {
           {t('ui.game.rules')}
         </button>
       </div>
+
+      <ArtStatusHud run={run} />
     </div>
   );
 }
