@@ -119,7 +119,7 @@ export const PERK_TEXT: Record<string, string> = {
   nurse_care: '临床经验：治疗效果 +50%，每日患病概率 -25%，自带 1 级医疗站。',
   veteran_defense: '战术素养：袭击防御 +15%，防守时弹药消耗减半。',
   hoarder_stash: '十年囤积：起始物资极其丰厚，但行动点 -1、初始理智 -15。',
-  hacker_analysis: '信号识别：情报辨伪率 +20%，自带 1 级无线电。',
+  hacker_analysis: '信号识别：情报辨伪率 +20%，自带 1 级电台。',
   trucker_vehicle: '自带车辆：可去远距离地点，负重上限 +40 kg。',
   chemist_consumables: '化学储备：滤芯与药品消耗速度 -40%，生水患病率减半。',
 };

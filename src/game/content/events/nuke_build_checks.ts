@@ -31,7 +31,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { fortify: 1 }, reason: '需要加固 1 级' } },
+        { requires: { modules: { fortify: 1 }, reason: '需要加固门 1 级' } },
       ),
       ch(
         'brace',
@@ -89,7 +89,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { fortify: 2 }, reason: '需要加固 2 级' } },
+        { requires: { modules: { fortify: 2 }, reason: '需要加固门 2 级' } },
       ),
       ch(
         'repair_brace',
@@ -187,7 +187,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { fortify: 1 }, reason: '需要加固 1 级' } },
+        { requires: { modules: { fortify: 1 }, reason: '需要加固门 1 级' } },
       ),
       ch(
         'seal_insulate',
@@ -199,7 +199,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { insulate: 1 }, reason: '需要保温 1 级' } },
+        { requires: { modules: { insulate: 1 }, reason: '需要保温层 1 级' } },
       ),
       ch(
         'tape_gap',
@@ -302,7 +302,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { filter: 1 }, reason: '需要净水 1 级' } },
+        { requires: { modules: { filter: 1 }, reason: '需要净水器 1 级' } },
       ),
       ch(
         'boil',
@@ -356,7 +356,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { filter: 2 }, reason: '需要净水 2 级' } },
+        { requires: { modules: { filter: 2 }, reason: '需要净水器 2 级' } },
       ),
       ch(
         'replace_core',
@@ -503,7 +503,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { insulate: 1 }, reason: '需要保温 1 级' } },
+        { requires: { modules: { insulate: 1 }, reason: '需要保温层 1 级' } },
       ),
       ch(
         'stuff_materials',
@@ -545,7 +545,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
 
           tone: 'good',
         },
-        { requires: { modules: { power: 1 }, reason: '需要发电 1 级' } },
+        { requires: { modules: { power: 1 }, reason: '需要发电机 1 级' } },
       ),
       ch(
         'gen_fuel',

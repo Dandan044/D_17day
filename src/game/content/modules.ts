@@ -13,13 +13,13 @@ import '../copy';
  *   成品 = buyCash + buyDays 到货延迟（买晚了钱付了货到不了）
  *
  * buildPenaltyTags 是关键：施工中的模块处于劣化状态，
- * 加固施工到一半时门窗是拆开的，防御比不动工更低。
+ * 加固门施工到一半时门窗是拆开的，防御比不动工更低。
  */
 export const MODULES: ModuleDef[] = [
   {
     id: 'fortify',
-    name: '加固',
-    short: '防',
+    name: '加固门',
+    short: '门',
     desc: '门窗、承重、射击位。决定袭击能不能被挡在外面。',
     zero: '一扇租房自带的防盗门，和几片玻璃。',
     buildPenaltyTags: ['building:fortify'],
@@ -32,8 +32,8 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'conceal',
-    name: '隐蔽',
-    short: '隐',
+    name: '遮光帘',
+    short: '帘',
     desc: '让别人根本不知道这里有人。降低每日暴露度累积。',
     zero: '窗帘拉着，但晚上灯一亮，整栋楼都知道你在家。',
     buildPenaltyTags: ['building:conceal'],
@@ -46,8 +46,8 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'cistern',
-    name: '储水',
-    short: '储',
+    name: '水箱',
+    short: '水',
     desc: '决定你能囤几天的水。容量按日耗算，不是无限水箱。',
     zero: '几个空矿泉水瓶和浴缸。大概能撑四五天。',
     buildPenaltyTags: ['building:cistern'],
@@ -63,8 +63,8 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'filter',
-    name: '净水',
-    short: '净',
+    name: '净水器',
+    short: '滤',
     desc: '雨雪天把水接进桶；旱天靠回用少喝一点。升级提高雨日产量、减缓滤芯损耗。',
     zero: '烧开而已。对付得了细菌，对付不了重金属和落灰。',
     buildPenaltyTags: ['building:filter'],
@@ -77,8 +77,8 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'power',
-    name: '发电',
-    short: '电',
+    name: '发电机',
+    short: '机',
     desc: '一切电动模块的前提。也是最响的那个东西。',
     zero: '手电筒和几节干电池。',
     buildPenaltyTags: ['building:power', 'power:blackout'],
@@ -91,7 +91,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'insulate',
-    name: '保温',
+    name: '保温层',
     short: '温',
     desc: '决定屋里的热能留多久。漏得慢，炉子就不用通宵烧。',
     zero: '一层单薄的墙和会漏风的窗框。',
@@ -105,7 +105,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'airFilter',
-    name: '空气过滤',
+    name: '空气过滤器',
     short: '气',
     desc: '挡灰、毒气、放射性微粒和飞沫。口罩不够用的时候靠它。',
     zero: '一包一次性口罩。',
@@ -133,8 +133,8 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'garden',
-    name: '农圃',
-    short: '农',
+    name: '菜圃',
+    short: '菜',
     desc: '唯一能凭空产出食物的东西。慢，但它是通往长期生存的门。',
     zero: '窗台上一盆快死的绿萝。',
     buildPenaltyTags: ['building:garden'],
@@ -147,7 +147,7 @@ export const MODULES: ModuleDef[] = [
   },
   {
     id: 'radio',
-    name: '无线电',
+    name: '电台',
     short: '讯',
     desc: '外面在发生什么。谁还活着。往哪走。',
     zero: '一部没有信号的手机。',

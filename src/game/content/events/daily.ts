@@ -834,7 +834,7 @@ beat({
           {
             id: 'call',
 
-            requires: { modules: { radio: 2 }, reason: '需要 2 级无线电才能发射' },
+            requires: { modules: { radio: 2 }, reason: '需要 2 级电台才能发射' },
             effect: {
               stats: { sanity: 14, reputation: 6 },
               world: { exposure: 8 },

@@ -1254,3 +1254,1064 @@ button.art-link {
 .art-todo-item.is-orange .art-todo-detail p:first-child {
   color: #e0c79e;
 }
+
+/* ============================================================
+   避难所工程：墙上的图纸"取下来摊开"
+   ------------------------------------------------------------
+   入口是左墙那张图纸热点，所以整张界面就是那张纸本身：
+   深调旧纸底（paper-shelter.jpg，纸心带十字折痕）+ CSS 画的墨线图框、
+   每行两个家电的卡片、点开才展开的施工说明、右下图签。
+   纸上的语义色：近黑墨正文 / 朱红批注（施工中·危险）/ 墨绿（可施工）/ 赭石（警示）。
+   深纸 + 近黑墨 + 加粗：正文 ≥ 7:1、次级 ≥ 6:1、注记 ≥ 4.5:1。
+   ============================================================ */
+
+.art-shelter-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3.2vh 3vw;
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  /* 墨色：全部压到近黑，深纸才有对比 */
+  --sh-ink: #17191a;
+  --sh-ink-2: #33352f;
+  --sh-ink-3: #3f3e37;
+  --sh-rule: rgba(20, 22, 21, 0.3);
+  --sh-rule-2: rgba(20, 22, 21, 0.55);
+  --sh-rule-3: rgba(20, 22, 21, 0.85);
+  /* 纸上的批注色：朱红 / 墨绿 / 赭石，都压到能在暗卡其上作正文用 */
+  --sh-red: #8f2a12;
+  --sh-red-2: #a83a1c;
+  --sh-green: #27492f;
+  --sh-ochre: #5c3f0a;
+  /* 深调旧纸（图未加载时的兜底色，必须与纸面同档，否则闪白） */
+  --sh-paper: #c6b491;
+  --sh-paper-hi: #cbb996;
+  --sh-paper-lo: #b3a17e;
+  /* 卡片/详情洗色：深纸上是「压暗」而不是「提亮」，白洗会发浑 */
+  --sh-card: rgba(20, 22, 21, 0.05);
+  --sh-detail: rgba(20, 22, 21, 0.08);
+  --sh-light: rgba(246, 240, 225, 0.28);
+  color: var(--sh-ink);
+  font-weight: 500;
+}
+
+/* ---- 背景：同一间屋子，虚焦压暗（手里拿着纸，房间在景深之外） ---- */
+.art-shelter-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.33) saturate(0.7);
+  animation: art-shelter-lift 460ms ease both;
+}
+
+.art-shelter-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.3) 24%, rgba(4, 6, 8, 0.86) 100%);
+  animation: art-shelter-lift 400ms ease both;
+}
+
+@keyframes art-shelter-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- 纸 ---- */
+.art-shelter-sheet {
+  position: relative;
+  z-index: 2;
+  width: min(1180px, 94vw);
+  height: min(900px, 92vh);
+  background: var(--sh-paper);
+  /* 缩放锚点≈场景里那张图纸在墙上偏左偏上的位置，放大时像从墙上飞过来 */
+  transform-origin: 13% 28%;
+  box-shadow:
+    0 48px 96px -30px rgba(0, 0, 0, 0.85),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+  animation: art-shelter-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.art-shelter-paper {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(40, 30, 15, 0.4),
+    inset 0 0 160px rgba(50, 36, 16, 0.3);
+}
+
+@keyframes art-shelter-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-30vw, -14vh, 0) scale(0.24) rotate(-3.2deg);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-shelter-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-shelter-veil.is-closing .art-shelter-sheet {
+  animation: art-shelter-out 240ms ease-in both;
+}
+
+.art-shelter-veil.is-closing .art-shelter-room,
+.art-shelter-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-shelter-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-26vw, -12vh, 0) scale(0.28) rotate(-3deg);
+  }
+}
+
+/* ---- 墨线图框 + 角标 ---- */
+.art-shelter-frame {
+  position: absolute;
+  inset: 1.7% 1.8%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 1.6px solid var(--sh-rule-3);
+}
+
+.art-shelter-frame::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 0.8px solid rgba(20, 22, 21, 0.4);
+  pointer-events: none;
+}
+
+.art-shelter-tick {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  pointer-events: none;
+}
+
+.art-shelter-tick.is-tl {
+  left: -6px;
+  top: -6px;
+  border-left: 1.2px solid var(--sh-rule-2);
+  border-top: 1.2px solid var(--sh-rule-2);
+}
+
+.art-shelter-tick.is-tr {
+  right: -6px;
+  top: -6px;
+  border-right: 1.2px solid var(--sh-rule-2);
+  border-top: 1.2px solid var(--sh-rule-2);
+}
+
+.art-shelter-tick.is-bl {
+  left: -6px;
+  bottom: -6px;
+  border-left: 1.2px solid var(--sh-rule-2);
+  border-bottom: 1.2px solid var(--sh-rule-2);
+}
+
+.art-shelter-tick.is-br {
+  right: -6px;
+  bottom: -6px;
+  border-right: 1.2px solid var(--sh-rule-2);
+  border-bottom: 1.2px solid var(--sh-rule-2);
+}
+
+/* ---- 图头 ---- */
+.art-shelter-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 20px 12px;
+  border-bottom: 1.6px solid var(--sh-rule-3);
+}
+
+.art-shelter-head-main {
+  min-width: 0;
+}
+
+.art-shelter-kicker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--sh-ink-2);
+}
+
+.art-shelter-stamp {
+  padding: 1px 6px;
+  border: 1px solid var(--sh-rule-2);
+  color: var(--sh-ink);
+  letter-spacing: 0.1em;
+}
+
+.art-shelter-title {
+  margin: 6px 0 0;
+  font-family: var(--art-serif);
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  color: var(--sh-ink);
+}
+
+.art-shelter-sub {
+  margin: 5px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-ink-2);
+}
+
+.art-shelter-head-side {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+/* 施工中的红章 */
+.art-shelter-seal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 58px;
+  padding: 5px 4px 4px;
+  border: 1.6px solid var(--sh-red-2);
+  color: var(--sh-red);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  opacity: 0.85;
+  transform: rotate(-7deg);
+}
+
+.art-shelter-seal em {
+  font-style: normal;
+}
+
+.art-shelter-seal b {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.art-shelter-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1.4px solid var(--sh-rule-2);
+  background: var(--sh-card);
+  color: var(--sh-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-shelter-close:hover {
+  background: var(--sh-ink);
+  border-color: var(--sh-ink);
+  color: #f2ece0;
+}
+
+/* ---- 正文滚动区 ---- */
+.art-shelter-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 11px 20px 18px;
+}
+
+.art-shelter-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.art-shelter-body::-webkit-scrollbar-track {
+  background: rgba(20, 22, 21, 0.09);
+}
+
+.art-shelter-body::-webkit-scrollbar-thumb {
+  background: rgba(20, 22, 21, 0.38);
+  border: 0;
+}
+
+.art-shelter-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(20, 22, 21, 0.6);
+}
+
+.art-shelter-hintrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 9px;
+}
+
+.art-shelter-hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-ink-2);
+}
+
+/* 图例：原表头被双列卡片取代，三枚色块把「已建/可建/超上限」的读法留住 */
+.art-shelter-legend {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--sh-ink-3);
+}
+
+.art-shelter-legend em {
+  font-style: normal;
+  margin-right: 4px;
+}
+
+/* ---- 家电卡片：两两成对，详情落在这对的下方并跨两列 ---- */
+.art-shelter-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.art-shelter-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.art-shelter-pair > .art-shelter-detail {
+  grid-column: 1 / -1;
+}
+
+.art-shelter-row {
+  position: relative;
+  min-width: 0;
+  border: 1.2px solid var(--sh-rule-2);
+  background: var(--sh-card);
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.art-shelter-row:hover,
+.art-shelter-row.is-open {
+  border-color: var(--sh-ink);
+  background: var(--sh-detail);
+}
+
+.art-shelter-rowbtn {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 缩略图：当前等级的配图；0 级复用 1 级图并压暗去色 + 「未建」角标 */
+.art-shelter-thumbwrap {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  overflow: hidden;
+  border: 1.2px solid var(--sh-rule-2);
+  background: #24251f;
+}
+
+.art-shelter-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 0 级（未建）的配图压暗去色：一眼看出还没建，但别暗到看不清是什么 */
+.art-shelter-row:not(.is-built) .art-shelter-thumb,
+.art-shelter-detail:not(.is-built) .art-shelter-detailthumb {
+  filter: grayscale(0.5) brightness(0.85) contrast(1.04);
+}
+
+.art-shelter-thumbtag {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px 0;
+  text-align: center;
+  background: rgba(18, 20, 19, 0.82);
+  color: #e6dcc4;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.art-shelter-codepill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  background: rgba(18, 20, 19, 0.82);
+  color: #e6dcc4;
+  font-family: var(--art-serif);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.art-shelter-row.is-building .art-shelter-codepill {
+  background: var(--sh-red);
+}
+
+.art-shelter-cardmain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sh-item-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.art-shelter-name {
+  font-family: var(--art-serif);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--sh-ink);
+}
+
+.art-shelter-count {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--sh-ochre);
+}
+
+.art-shelter-fx {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--sh-ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.art-shelter-pips {
+  display: flex;
+  gap: 4px;
+}
+
+.art-shelter-pip {
+  display: block;
+  width: 20px;
+  height: 9px;
+}
+
+.art-shelter-pip.is-built {
+  background: var(--sh-ink);
+}
+
+.art-shelter-pip.is-open {
+  border: 1.2px solid var(--sh-rule-2);
+}
+
+.art-shelter-pip.is-locked {
+  border: 1.2px solid rgba(143, 42, 18, 0.55);
+  background: repeating-linear-gradient(45deg, rgba(143, 42, 18, 0.4) 0 2px, transparent 2px 4px);
+}
+
+.art-shelter-cardend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+.art-shelter-state {
+  padding: 2px 6px;
+  border: 1px solid var(--sh-rule);
+  color: var(--sh-ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.art-shelter-state.is-open {
+  border-color: rgba(39, 73, 47, 0.6);
+  color: var(--sh-green);
+}
+
+.art-shelter-state.is-building {
+  border-color: var(--sh-red-2);
+  background: rgba(143, 42, 18, 0.08);
+  color: var(--sh-red);
+}
+
+.art-shelter-state.is-blocked {
+  border-color: rgba(92, 63, 10, 0.55);
+  color: var(--sh-ochre);
+}
+
+.art-shelter-caret {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--sh-ink-2);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms ease;
+}
+
+.art-shelter-row.is-open .art-shelter-caret {
+  transform: rotate(180deg);
+}
+
+/* ---- 展开的施工说明（跨两列，落在这对卡片下方） ---- */
+.art-shelter-detail {
+  position: relative;
+  padding: 12px 14px 14px;
+  border: 1.4px solid var(--sh-ink);
+  background: var(--sh-detail);
+  animation: art-shelter-detail-in 180ms ease both;
+}
+
+@keyframes art-shelter-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.art-shelter-detailhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.art-shelter-detailthumb {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  object-fit: cover;
+  border: 1.2px solid var(--sh-rule-2);
+  background: #24251f;
+}
+
+.art-shelter-detailname {
+  font-family: var(--art-serif);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sh-ink);
+}
+
+.art-shelter-detailrule {
+  flex: 1;
+  border-top: 1px dashed var(--sh-rule-2);
+}
+
+.art-shelter-desc {
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.7;
+  color: var(--sh-ink-2);
+}
+
+.art-shelter-effect {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.art-shelter-effect .is-now {
+  color: var(--sh-ink);
+}
+
+.art-shelter-effect .is-next {
+  color: var(--sh-ochre);
+}
+
+.art-shelter-order {
+  margin: 0 0 9px;
+  padding: 9px 11px;
+  border: 1.2px solid rgba(143, 42, 18, 0.5);
+  background: rgba(143, 42, 18, 0.06);
+}
+
+.sh-order-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sh-order-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--sh-red);
+}
+
+.sh-order-eta {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--sh-ink-2);
+}
+
+.art-shelter-bar {
+  position: relative;
+  height: 7px;
+  margin: 7px 0 0;
+  border: 1px solid rgba(143, 42, 18, 0.5);
+  background: rgba(246, 240, 225, 0.5);
+}
+
+.art-shelter-bar > i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: var(--sh-red-2);
+  transition: transform 200ms ease;
+}
+
+.art-shelter-penalty {
+  margin: 7px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-red);
+}
+
+.art-shelter-note {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-ink-2);
+}
+
+.sh-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.art-shelter-btn {
+  padding: 5px 13px;
+  border: 1.3px solid var(--sh-ink);
+  background: var(--sh-card);
+  color: var(--sh-ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.art-shelter-btn:disabled {
+  opacity: 0.45;
+}
+
+/* 深纸上的主按钮：近黑实底 + 暖米白字，再补一圈浅描边把按钮从纸面拎出来 */
+.art-shelter-btn.is-primary {
+  border-color: var(--sh-ink);
+  background: var(--sh-ink);
+  color: #f2ece0;
+  box-shadow: 0 0 0 1px var(--sh-light);
+}
+
+.art-shelter-btn.is-primary:hover:not(:disabled) {
+  background: #000;
+  border-color: #000;
+}
+
+.art-shelter-btn.is-danger {
+  border-color: var(--sh-red-2);
+  background: rgba(143, 42, 18, 0.07);
+  color: var(--sh-red);
+}
+
+.art-shelter-btn.is-danger:hover:not(:disabled) {
+  border-color: var(--sh-red);
+  background: var(--sh-red);
+  color: #fbeee8;
+}
+
+/* ---- 三条建造路径 ---- */
+.art-shelter-plan {
+  margin-bottom: 2px;
+}
+
+.art-shelter-planhead {
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed var(--sh-rule-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sh-ink);
+}
+
+.art-shelter-plangrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.art-shelter-plancard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1.2px solid var(--sh-rule-2);
+  background: var(--sh-card);
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 80ms ease;
+}
+
+.art-shelter-plancard:disabled {
+  opacity: 0.5;
+}
+
+.art-shelter-plancard:hover:not(:disabled) {
+  border-color: var(--sh-ink);
+  background: var(--sh-detail);
+  transform: translateY(-1px);
+}
+
+.sh-plan-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.art-shelter-planname {
+  font-family: var(--art-serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--sh-ink);
+}
+
+.art-shelter-plancap {
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--sh-red);
+}
+
+.art-shelter-plancost {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--sh-ink-2);
+}
+
+.art-shelter-planrisk {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--sh-red);
+}
+
+.art-shelter-blocked {
+  padding: 7px 10px;
+  border-left: 3px solid var(--sh-ochre);
+  background: rgba(92, 63, 10, 0.09);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-ochre);
+}
+
+/* ---- 附表：维护 / 拆解回收 ---- */
+.art-shelter-aux {
+  margin-top: 20px;
+}
+
+.art-shelter-auxhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.art-shelter-auxtitle {
+  padding: 2px 7px;
+  border: 1.2px solid var(--sh-rule-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--sh-ink);
+}
+
+.art-shelter-auxrule {
+  flex: 1;
+  border-top: 1px solid var(--sh-rule);
+}
+
+.art-shelter-auxhint {
+  margin: 7px 0 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-ink-3);
+}
+
+.art-shelter-auxgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.art-shelter-auxcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1.2px solid var(--sh-rule);
+  background: var(--sh-card);
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.art-shelter-auxcard:disabled {
+  opacity: 0.6;
+}
+
+.art-shelter-auxcard:hover:not(:disabled) {
+  border-color: var(--sh-ink-2);
+  background: var(--sh-detail);
+}
+
+.sh-aux-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sh-aux-chips {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.art-shelter-auxname {
+  font-family: var(--art-serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--sh-ink);
+}
+
+.art-shelter-auxdesc {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--sh-ink-2);
+}
+
+.art-shelter-auxcost {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--sh-ink-3);
+}
+
+.art-shelter-tag {
+  padding: 1.5px 6px;
+  border: 1px solid var(--sh-rule);
+  color: var(--sh-ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.art-shelter-tag.is-warn {
+  border-color: rgba(92, 63, 10, 0.55);
+  color: var(--sh-ochre);
+}
+
+.art-shelter-tag.is-bad {
+  border-color: rgba(143, 42, 18, 0.55);
+  color: var(--sh-red);
+}
+
+/* ---- 图签 ---- */
+.art-shelter-tb {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr 0.8fr;
+  border-top: 1.6px solid var(--sh-rule-3);
+}
+
+.sh-tb-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 5px 10px;
+  border-right: 1px solid var(--sh-rule-2);
+}
+
+.sh-tb-cell:last-child {
+  border-right: 0;
+}
+
+.sh-tb-k {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--sh-ink-3);
+}
+
+.sh-tb-v {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sh-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.art-shelter-appips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.art-shelter-appips i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--sh-rule-2);
+  border-radius: 50%;
+}
+
+.art-shelter-appips i.is-on {
+  border-color: var(--sh-ink);
+  background: var(--sh-ink);
+}
+
+/* ---- 窄屏：卡片退回真单列（详情本来就跨两列，此时即整宽） ---- */
+@media (max-width: 800px) {
+  .art-shelter-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .art-shelter-rowbtn {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+  }
+
+  .art-shelter-thumbwrap,
+  .art-shelter-thumb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .art-shelter-plangrid,
+  .art-shelter-auxgrid {
+    grid-template-columns: 1fr;
+  }
+
+  .art-shelter-hintrow {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .art-shelter-tb {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sh-tb-cell {
+    border-bottom: 1px solid var(--sh-rule);
+  }
+}

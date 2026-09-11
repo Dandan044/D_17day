@@ -116,16 +116,16 @@ export const TIER_DESC = [
 ] as const;
 
 export const MODULE_NAME: Record<ModuleId, string> = {
-  fortify: '加固',
-  conceal: '隐蔽',
-  cistern: '储水',
-  filter: '净水',
-  power: '发电',
-  insulate: '保温',
-  airFilter: '空气过滤',
+  fortify: '加固门',
+  conceal: '遮光帘',
+  cistern: '水箱',
+  filter: '净水器',
+  power: '发电机',
+  insulate: '保温层',
+  airFilter: '空气过滤器',
   medbay: '医疗站',
-  garden: '农圃',
-  radio: '无线电',
+  garden: '菜圃',
+  radio: '电台',
 };
 
 export const APPLIANCE_NAME: Record<ApplianceId, string> = {

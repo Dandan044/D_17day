@@ -470,7 +470,7 @@ beat({
           {
             id: 'radio',
 
-            requires: { modules: { radio: 1 }, reason: '需要 1 级无线电' },
+            requires: { modules: { radio: 1 }, reason: '需要 1 级电台' },
             effect: {
               faction: { rescue: 12 },
               stance: { rescue: 18 },
@@ -834,7 +834,7 @@ beat({
           {
             id: 'clear_masked',
 
-            requires: { tags: { all: ['mod:airFilter>=1'] }, reason: '需要 1 级空气过滤提供的防护装备' },
+            requires: { tags: { all: ['mod:airFilter>=1'] }, reason: '需要 1 级空气过滤器提供的防护装备' },
             effect: {
               stats: { stamina: -12 },
 
@@ -910,7 +910,7 @@ beat({
           {
             id: 'pump',
 
-            requires: { modules: { power: 1 }, res: { parts: 4 }, reason: '需要发电与 4 零件' },
+            requires: { modules: { power: 1 }, res: { parts: 4 }, reason: '需要发电机与 4 零件' },
             effect: {
               res: { parts: -4, fuel: -5 },
               stats: { stamina: -12 },
@@ -941,7 +941,7 @@ beat({
           {
             id: 'filter',
 
-            requires: { modules: { filter: 1 }, reason: '需要 1 级净水' },
+            requires: { modules: { filter: 1 }, reason: '需要 1 级净水器' },
             effect: {
               stats: { sanity: 3 },
 
@@ -1439,7 +1439,7 @@ beat({
           {
             id: 'call',
 
-            requires: { modules: { radio: 2 }, reason: '需要 2 级无线电才能发射' },
+            requires: { modules: { radio: 2 }, reason: '需要 2 级电台才能发射' },
             check: {
               skill: 'mechanics',
               dc: 12,

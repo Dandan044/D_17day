@@ -15,6 +15,7 @@ import ArtSetup from './ui/art/ArtSetup';
 import ArtSiteSelect from './ui/art/ArtSiteSelect';
 import ArtGame from './ui/art/ArtGame';
 import { ArtBodyPanel, ArtPlanPanel, ArtSuppliesPanel } from './ui/art/ArtPlanPanel';
+import { ArtShelterPanel } from './ui/art/ArtShelterPanel';
 import { ArtTodoPanel } from './ui/art/ArtTodoPanel';
 import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
@@ -117,7 +118,10 @@ export default function App() {
       {body()}
 
       {/* 浮层 */}
-      {run && overlay === 'shelter' && <ShelterPanel run={run} />}
+      {/* 避难所工程：档案皮肤下是"墙上的图纸取下来摊开"，经典界面沿用原面板。 */}
+      {run &&
+        overlay === 'shelter' &&
+        (art && gameUi === 'art' ? <ArtShelterPanel run={run} /> : <ShelterPanel run={run} />)}
       {run && overlay === 'power' && <PowerPanel run={run} />}
       {run && overlay === 'map' && <MapPanel run={run} />}
       {run && overlay === 'intel' && <IntelPanel run={run} />}

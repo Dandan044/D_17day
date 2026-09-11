@@ -38,7 +38,16 @@ description: 把游戏菜单/出身/选址/局内场景做成可点击场景：�
 
 ## 生图（配合后续抠图）
 
-### API（本机，key 不进仓库）
+### 首选：WorkBuddy ImageGen（一致性靠 img2img，不靠 prompt）
+
+素材只要有「已经存在的同类实物」当基准，就走 **ImageGen 的图生图**，而不是本机 API：`image1` 传基准图（如墙上的 `cut-h-blueprint.png`）、`input_fidelity: "high"`、`size` 按用途（广幅 1536x1024）。实测结构/材质保真极强（连阳台晾衣杆位置都逐位对应），材质一致性比写一百个 prompt 词都准。
+
+- 用途：同一实物的新视角/新状态（窗景 18 板、纸面纹理、阶段化纸面）。
+- 纯凭空新建、没有基准可锁的，才走下面的本机 API。
+- 成图右下角有「AI生成 WORKBUDDY」水印（约底部 7%），落盘前裁掉；`scripts/make-shelter-paper.py` 是「量折痕 + 对称裁切 + 落盘」的现成例子。
+- **对称裁切**能让基准图里的几何特征（如纸张十字折痕）留在 50%，CSS 侧才能用 `background-position: center` 直接对齐——不对称裁会让 CSS 画的线与烤进图里的线错开成双线。
+
+### 备选：本机 API（批量、可复现 seed）
 
 配置只从本机读，路径不要写进 git 以外的副本：
 
@@ -170,7 +179,7 @@ birefnet-general → birefnet-general-lite → isnet-general-use → u2net
 
 ## 交互叠图
 
-入口：`index.html` / `art.html` 的 `<body data-skin="art">` → `isArtSkin()`。经典界面在 `classic.html`。`App.tsx` 仅 `menu` / `setup` / `siteSelect` 走试验版；局内走 `ArtGame`（存档驱动）。
+入口：`index.html` / `art.html` 的 `<body data-skin="art">` → `isArtSkin()`。经典界面在 `classic.html`。`App.tsx` 仅 `menu` / `setup` / `siteSelect` 走试验版；局内走 `ArtGame`（存档驱动）。**局内浮层按皮肤分流**：`overlay==='shelter'` 在 `art && gameUi==='art'` 时走 `ArtShelterPanel`（图纸版），否则走经典 `ShelterPanel`——改一个界面不要牵动另一个。
 
 组件（已有就复用，不要新造一套）：
 
@@ -189,12 +198,55 @@ birefnet-general → birefnet-general-lite → isnet-general-use → u2net
 
 浏览器自动化要点：SVG 或对 button 调 `.click()`；**点在多边形外/透明处不触发是预期行为**（这正是验证项）。
 
+## 局内浮层的 diegetic 化（把弹窗做成场景里的实物）
+
+场景热点打开的功能面板**不要**直接落回通用 `Modal`——点的是墙上的图纸、弹出来的却是控制台面板，沉浸感就断在这一次跳转上。判据是一条：**进入方式与呈现必须互相解释**。
+
+现成例子：避难所工程 = 左墙图纸热点 → 整屏就是那张摊开的工程图纸（`src/ui/art/ArtShelterPanel.tsx`，2026-09-10）。
+
+做法要点：
+
+1. **背景 = 实物材质**：整屏铺一张用 img2img 从「那个热点物件」衍生出来的材质图（`ART.shelterPaper`），外面一层房间图 `blur(22px) brightness(.33)` 虚焦当景深。
+2. **文字与线条仍归 CSS**：材质图只负责纸/布/铁的肌理，边框、角标、表格线、图签、所有文字全用 CSS 画——文字能选中、能跟文案表走、能换皮。**别把图签画进图里**。
+3. **语义色换到实物上**：深色 UI 的琥珀/告警在米白纸上没对比度。纸上改用墨色系——暗墨蓝正文、朱红批注（进行中/危险）、墨绿（可用）、赭石（警示），定义成 `--sh-*` 挂在最外层 veil 上。
+4. **进/出场从热点位置飞入**：`transform-origin` 指向该物件在场景里的位置，起手 `translate3d(-30vw,-14vh,0) scale(.24) rotate(-3deg) + blur(4px)`，收到 `none`，约 470ms。关闭做 240ms 反向（要延迟 `setOverlay(null)`，本地 `closing` state + `setTimeout`）。
+5. **功能一条不丢**：老面板的每个字段/按钮都要能在新布局里找到落点（列成对照表自查）。重构布局可以，删功能不行；新增的只允许是**只读**装帧信息（代号、日期、AP、状态章）。
+6. **`var(--art-serif)` 不继承**：浮层挂在 `.art-root` **外面**（`App.tsx` 与 body 平级渲染），要用 serif 得在 veil 上重新定义一次；`--font-mono` 来自 Tailwind `@theme`，全局可用。
+
+## 同一实物的分级配图（1→2→3 递进）
+
+游戏里很多实体是**分级的**（避难所 10 个家电各 3 级）。别给每级单独文生图——三级会长成三件不同的东西。做法：
+
+1. **1 级文生图**，但想清楚"1 级是什么"。**别默认画废墟**：故事里玩家还在现代文明社会的公寓里，1 级就该是**崭新的现代家用成品**（干净的防盗门、新净水器、新毛毯）。末日感随等级递增：2 级自建加固（管路、支架、焊痕、沙袋），3 级军用级末世装备（气密门斗、反渗透、柴发、NBC 机组）。
+2. **2/3 级用上一级的图做 img2img**（`input_fidelity: "high"`），prompt 固定写「保持同一件东西、同一机位与光线不变，只做升级改造：<本级增量>」+「背景是一面无杂物的暗色墙面」「画面中只有这一件东西」。
+3. 每级增量直接取内容里该级的 `level.desc` 意象，别自己编。
+4. 背景写「无杂物暗墙」而不是"公寓室内"：反正要抠图，简单背景的 matte 干净得多，也压得住链式漂移。
+5. **每级必须目检"还是同一件东西"**。链式会漂——实测模型会把"毛毯"一路画成"床"，导致 1、2 级区分不出来，那时只能砍掉整条链从 1 级重生。
+
+### 批量抠图落盘（`scripts/gen-art-modules.py` 是现成实现）
+
+- **模型链 + 提亮回退**：`isnet-general-use` / `u2net` 两个模型各跑 `brighten 1.0 / 1.9 / 3.4`，共 6 个候选，按「覆盖度落在合理区间 → 不是碎块 → 碎块少 → 覆盖度接近 0.22」择优。**提亮后重跑**是治「暗主体贴暗背景」的通用招（u2net 对黑窗帘只剩 1% 覆盖度，提亮后才认出来）；alpha 与尺寸无关，仍贴回原图。
+- **剪边缘杂件**：rembg 会把碰巧挨着的台灯、包装袋、地毯一起留下。只保留"包围盒中心落在中央 70%~72% 内"的连通块，豁免 ≥ 最大块 45% 的大块（防宽主体被切），再清 < 0.5% 碎屑。
+- **落 512² 就够**：缩略图 88px、详情小图 40px，512 有 5x 余量；1024 版 30 张 25MB 太重（512 后 7.5MB）。
+- **不要用 ImageGen 的 `background: "transparent"`**：它不产出 alpha，而是把"透明棋盘格"画成像素。抠图只能走 rembg。
+- 模型下载：`C:\Users\Administrator\.u2net\`（u2net 176MB / isnet 179MB）。GitHub 直下会卡死，走 `ghfast.top` 镜像 + `curl -C -` 断点续传循环，下完核对 `content-length`。**不要提交**。
+
+### ImageGen 调用铁律
+
+- **不要并行调用**：`output_dir` 会互相串（5 张全落进同一个目录，同秒重名还会互相覆盖）。**逐张调用**，每张用独立的 `output_dir`（如 `.preview/gen/mod-<id>-<lv>/`），且**每个目录只放一张**——落盘脚本按目录取图就不需要改名。
+- 成图右下有「AI生成 WORKBUDDY」水印，裁掉再落盘。
+- **让它"调暗/去背景"这类像素级要求别指望 prompt**：实测 img2img 保真太强，"调暗"指令反而出图更亮。像素级目标（亮度定标、裁切、抠图）一律放到后处理脚本里算准。
+
 ## 验证（四件套，必做）
 
 1. **断言**：`python scripts/verify-art-layout.py` —— box/px 一致、alpha 不贴画布缘（豁免表除外）、poly 点数与坐标合法、HUD 锚点在位、同场景框重叠 report-only。必须全绿。
 2. **matte 目检**：`python scripts/preview-home-composite.py matte [key...]` —— 品红底 + 红色 poly 描边，脏边/孤岛/截断/clip 过紧一眼可见。
 3. **审计图**：`python scripts/audit-crops.py` —— 改框前量边界用（总览网格 + 2x 放大 + TRUNCATION-SUSPECT 探针）。
-4. **浏览器悬停**：`npm run dev` 后开档案版，逐件悬停看三点：光晕是否贴轮廓、tooltip 是否弹出、**点/悬停透明留白区必须无反应**。现成 CDP 测试脚本 `.preview/pwtest/cdp-test.mjs`（Edge headless 零依赖，可整条流程回归：菜单→开局→局内两视角→逐件悬停+透明区负样本）。
+4. **浏览器悬停 / 走完整流程**：`npm run dev` 后开档案版，逐件悬停看三点：光晕是否贴轮廓、tooltip 是否弹出、**点/悬停透明留白区必须无反应**。现成 **零依赖 CDP 脚本**（Node 22 自带全局 `WebSocket`，不用装 playwright）在 `.preview/pwtest/`：`shelter-shot.mjs`（开局→点热点→展开→滚到底→关闭 + 截图）、`shelter-states.mjs`（构造在建项目/崩溃日后等状态）、`probe.mjs`（页面渲染冒烟，可指 `classic.html` 查经典界面没被带偏）。四个环境坑记牢：
+   - Chrome 必须加 `--no-proxy-server --proxy-bypass-list=*`——本机 `http_proxy` 有值，不加连 127.0.0.1 都拒；
+   - `curl` 自检也要 `--noproxy '*'`（否则走代理拿到 502，误判服务没起）；
+   - vite 默认只绑 `[::1]`，要 127.0.0.1 就 `--host 127.0.0.1`（端口被占会顺延，看启动输出）；
+   - profile 目录**别 `fs.rmSync`**（本机 shim 成 trash，二手目录被锁会抛 `Some operations were aborted`）——用带时间戳的唯一目录名，顺带天然隔离玩家存档。
 
 存档安全（手测时）：开 `http://localhost:5180/`（端口被占会顺延，看启动输出）。**不要**为了截图去点「选择地点」/调用 `startRun`：会新建 run，覆盖玩家存档（曾有第 11 天档）。测完用「返回」，不要结束或开新局。局内只切视角；**床（休息/结束当天）与印章（弃局确认）绝不点**。CDP 脚本只做悬停 + 安全点击（打开 overlay 类）。
 
@@ -211,11 +263,13 @@ birefnet-general → birefnet-general-lite → isnet-general-use → u2net
 
 ## 本仓库文件地图
 
-- 生图：`scripts/gen-art-*.py`（天气板用 `NEG_WIN`）
+- 生图：**优先 WorkBuddy ImageGen**（本机 `scripts/gen-art-*.py` 依赖的 `img-qwen-image.json` 已不存在，跑不了；要复活那套本机 API 得先补回配置）
+- 后处理/落盘：`scripts/make-shelter-paper.py`（纸面裁切 + 亮度定标）、`scripts/gen-art-modules.py`（批量抠图落盘）、`scripts/rename-modules.py`（模块改名的显式短语映射）
 - 抠图：`scripts/cut-art-home.py`（局内）、`scripts/cut-art-objects.py`（菜单）、`scripts/art_common.py`（共享库：tighten/extract_polygon/drop_border_fringe/keep_connected/sweep_dust/EDGE_EXEMPT/layout 读写）
 - 审计/校验：`scripts/audit-crops.py`、`scripts/verify-art-layout.py`、`scripts/preview-home-composite.py`
-- 摆放数据：`src/ui/art/artLayout.json`（生成物，勿手改）、`src/ui/art/windowPanes.json`（窗几何）、`src/ui/art/skin.ts`（派生）
-- 组件：`src/ui/art/ArtHotspot.tsx`、`ArtGame.tsx`、`ArtMainMenu.tsx`、`ArtSetup.tsx`、`ArtSiteSelect.tsx`
-- 样式：`src/ui/art/art.css`（`.art-cut`、`.is-clipped`、`.art-spot-tip`）
+- 摆放数据：`src/ui/art/artLayout.json`（生成物，勿手改）、`src/ui/art/windowPanes.json`（窗几何）、`src/ui/art/skin.ts`（派生 + `ART` 资源表）
+- 组件：`src/ui/art/ArtHotspot.tsx`、`ArtGame.tsx`、`ArtMainMenu.tsx`、`ArtSetup.tsx`、`ArtSiteSelect.tsx`、`ArtShelterPanel.tsx`（diegetic 图示范例）
+- 样式：`src/ui/art/art.css`（`.art-cut`、`.is-clipped`、`.art-spot-tip`、`.art-shelter-*`）
+- 浏览器实测：`.preview/pwtest/*.mjs`（零依赖 CDP）
 - 产出：`public/art/*.jpg`、`public/art/cut-*.png`、`public/art/cut-h-*.png`
-- 交接文档：`HANDOVER-窗景与抠边.md`、`HANDOVER-热区与抠图.md`
+- 交接文档：`HANDOVER-窗景与抠边.md`、`HANDOVER-热区与抠图.md`、`HANDOVER-避难所图纸面板.md`

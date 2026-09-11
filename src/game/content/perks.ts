@@ -16,15 +16,15 @@ export const PERKS: PerkDef[] = [
   { id: 'perk_scavenger', tree: 'survival', tier: 2, name: '拾荒直觉', desc: '搜刮产出 +15%，且能看到地点的剩余存量。', cost: 60 },
   { id: 'perk_thickblood', tree: 'survival', tier: 2, name: '抗寒体质', desc: '舒适线和生存线各降低 4°C。', cost: 60, requires: ['perk_ironstomach'], wip: true },
   { id: 'perk_nightowl', tree: 'survival', tier: 3, name: '夜行', desc: '夜间搜刮的危险度 -25%，产出加成提高到 1.6 倍。', cost: 110, requires: ['perk_scavenger'] },
-  { id: 'perk_ghost', tree: 'survival', tier: 3, name: '不存在的人', desc: '隐蔽的每级效果提高 50%，暴露度自然衰减 +3。', cost: 110, requires: ['perk_thickblood'], wip: true },
+  { id: 'perk_ghost', tree: 'survival', tier: 3, name: '不存在的人', desc: '遮光帘的每级效果提高 50%，暴露度自然衰减 +3。', cost: 110, requires: ['perk_thickblood'], wip: true },
 
   // ============ 建造系 ============
   { id: 'perk_builder_hands', tree: 'build', tier: 1, name: '熟练的手', desc: 'DIY 工时 -15%。', cost: 30 },
   { id: 'perk_maintainer', tree: 'build', tier: 1, name: '会保养', desc: '滤芯与发电机机油寿命 +50%。', cost: 30 },
   { id: 'perk_logistics', tree: 'build', tier: 2, name: '物流关系', desc: '买成品的到货时间 -1 天，被拦截概率显著下降。', cost: 60, requires: ['perk_builder_hands'] },
-  { id: 'perk_electrician', tree: 'build', tier: 2, name: '电工', desc: '发电产量 +20%，模块耗电 -10%。', cost: 60, requires: ['perk_maintainer'], wip: true },
+  { id: 'perk_electrician', tree: 'build', tier: 2, name: '电工', desc: '发电机产量 +20%，模块耗电 -10%。', cost: 60, requires: ['perk_maintainer'], wip: true },
   { id: 'perk_salvager', tree: 'build', tier: 3, name: '拆解专家', desc: '拆解回收产出 +40%，且暴露度增量减半。', cost: 110, requires: ['perk_logistics'], wip: true },
-  { id: 'perk_greenthumb', tree: 'build', tier: 3, name: '会种东西', desc: '农圃产量 +30%，恶劣环境下的减产减半。', cost: 110, requires: ['perk_electrician'], wip: true },
+  { id: 'perk_greenthumb', tree: 'build', tier: 3, name: '会种东西', desc: '菜圃产量 +30%，恶劣环境下的减产减半。', cost: 110, requires: ['perk_electrician'], wip: true },
 
   // ============ 人际系 ============
   { id: 'perk_haggler', tree: 'social', tier: 1, name: '会砍价', desc: '所有采购价 -12%。', cost: 30, wip: true },

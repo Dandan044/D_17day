@@ -65,8 +65,12 @@ export const ART = {
   site: (id: string) => `./art/site-${id}.jpg`,
   model: (id: string) => `./art/model-${id}.jpg`,
   modelCut: (id: string) => `./art/cut-model-${id}.png`,
+  /** 避难所家电配图：mod-<id>-<lv>.png（rembg 抠出的透明底主体），lv 夹到 1..3。 */
+  module: (id: string, lv: number) => `./art/mod-${id}-${Math.min(3, Math.max(1, lv))}.png`,
   sceneHomeDesk: './art/scene-home-desk.jpg',
   sceneHomeSide: './art/scene-home-side.jpg',
+  /** 避难所工程图纸面板的纸面底（ImageGen 生成，scripts/make-shelter-paper.py 裁切）。 */
+  shelterPaper: './art/paper-shelter.jpg',
   cutHNotebook: './art/cut-h-notebook.png',
   cutHPlan: './art/cut-h-plan.png',
   cutHClock: './art/cut-h-clock.png',

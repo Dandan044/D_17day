@@ -61,7 +61,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       level: 'orange',
       title: '储水不足',
       lines: [`剩 ${Math.floor(run.res.water)} L，按当前用水档约够 ${days} 天。`, '断水后进入口渴与脱水链，脱水会要命。'],
-      fix: '净水器产水、升级储水，或外出取水。',
+      fix: '净水器产水、升级水箱，或外出取水。',
     });
   }
 
@@ -81,7 +81,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       level: 'orange',
       title: '存粮不足',
       lines: [`剩 ${Math.floor(food)} 份，按当前口粮档约够 ${days} 天。`, '断粮后进入饥饿链。'],
-      fix: '外出搜粮、采购，或开农圃自产。',
+      fix: '外出搜粮、采购，或开菜圃自产。',
     });
   }
 
@@ -176,7 +176,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       id: 'filter-dead',
       level: 'red',
       title: '滤芯报废',
-      lines: ['滤芯耐久已耗尽，净水与空气过滤全部停摆。', `备用滤芯库存：${run.items.filter}`],
+      lines: ['滤芯耐久已耗尽，净水器与空气过滤器全部停摆。', `备用滤芯库存：${run.items.filter}`],
       fix: run.items.filter > 0 ? '去物资面板换上备用滤芯。' : '尽快找到滤芯或五金零件应急。',
     });
   } else if (filterInUse && run.wear.filterLife < 6) {
@@ -184,7 +184,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       id: 'filter-worn',
       level: 'orange',
       title: '滤芯将耗尽',
-      lines: [`滤芯剩余耐久 ${run.wear.filterLife.toFixed(1)}/${WEAR.FILTER_LIFE}。`, '耗尽后净水与空气过滤一起停。'],
+      lines: [`滤芯剩余耐久 ${run.wear.filterLife.toFixed(1)}/${WEAR.FILTER_LIFE}。`, '耗尽后净水器与空气过滤器一起停。'],
       fix: run.items.filter > 0 ? `换备用滤芯（库存 ${run.items.filter}）。` : '储备备用滤芯或五金零件。',
     });
   }
@@ -194,7 +194,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       id: 'generator-oil',
       level: 'orange',
       title: '发电机缺保养',
-      lines: [`发电机保养度 ${Math.round(run.wear.generatorOil)}/${WEAR.GENERATOR_OIL}。`, '油尽后发电停摆，供电优先级再高也没用。'],
+      lines: [`发电机保养度 ${Math.round(run.wear.generatorOil)}/${WEAR.GENERATOR_OIL}。`, '油尽后发电机停摆，供电优先级再高也没用。'],
       fix: `用 ${WEAR.OIL_PARTS} 个五金零件做一次保养。`,
     });
   }
@@ -228,7 +228,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       level: 'orange',
       title: '高暴露度',
       lines: [`暴露度 ${Math.round(run.world.exposure)}/100。`, '被盯上的风险在上升，袭击与麻烦会找上门。'],
-      fix: '升级隐蔽伪装，减少喧闹的行为。',
+      fix: '升级遮光帘，减少喧闹的行为。',
     });
   }
   if (run.world.airPollution > 30) {
@@ -237,7 +237,7 @@ export function collectTodos(run: RunState): TodoItem[] {
       level: 'orange',
       title: '空气污浊',
       lines: [`空气污染 ${Math.round(run.world.airPollution)}。`, '不加过滤会伤肺，霉菌肺病就是从这来的。'],
-      fix: '升级空气过滤，污染天减少开窗与外出。',
+      fix: '升级空气过滤器，污染天减少开窗与外出。',
     });
   }
   if (run.world.lawOrder < 45) {
