@@ -143,6 +143,10 @@ function DayHeader({ run }: { run: RunState }) {
               )}
               {run.world.contagion > 20 && <Chip tone="psyche">{t('ui.game.contagion', { n: Math.round(run.world.contagion) })}</Chip>}
               {run.world.lawOrder < 45 && <Chip tone="bad">{t('ui.game.law', { n: Math.round(run.world.lawOrder) })}</Chip>}
+              {/* 物资稀缺度：原先只在情报面板的局势卡片里，随卡片移除挪到 HUD */}
+              {run.world.scarcity > 30 && (
+                <Chip tone="warn">{t('ui.game.scarcity', { n: Math.round(run.world.scarcity) })}</Chip>
+              )}
             </div>
           </div>
         )}
@@ -593,6 +597,9 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
     run.projects.length > 0 ||
     (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0));
 
+  // 准备期没有频道，所以这个数在准备期恒为 0（浮层也仍走情报板）
+  const radioUnread = isPrep ? 0 : run.channels.reduce((n, c) => n + c.inbox.length, 0);
+
   const actions = [
     {
       id: 'out',
@@ -612,9 +619,15 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
     {
       id: 'intel',
       title: isPrep ? t('ui.game.intelPrep') : t('ui.game.intelLive'),
-      desc: isPrep ? t('ui.game.intelPrepDesc') : t('ui.game.intelLiveDesc'),
+      desc: isPrep
+        ? t('ui.game.intelPrepDesc')
+        : radioUnread > 0
+          ? t('ui.game.intelLiveUnread', { n: radioUnread })
+          : t('ui.game.intelLiveDesc'),
       ap: 0,
       onClick: () => setOverlay('intel'),
+      // 频道有未读时脉冲提醒：否则玩家永远不知道那一头有人在说话
+      pulse: radioUnread > 0,
     },
     {
       id: 'rest',

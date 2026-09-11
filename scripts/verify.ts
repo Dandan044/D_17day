@@ -1293,5 +1293,773 @@ console.log('\n  sim-session  合法动作层与事件读表');
   );
 }
 
+// ============================================================
+console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
+// ============================================================
+{
+  const { tickChannels, searchChannel, openChannel, replyChannel, ensureChannelDefaults, bondOf } =
+    await import('../src/game/engine/channels');
+  const { CHANNEL } = await import('../src/game/balance');
+  const { LOCATION_BY_ID } = await import('../src/game/content/locations');
+
+  type St = import('../src/game/types').ChannelState;
+  const mkChannel = (id: string, extra: Partial<St> = {}): St => ({
+    id,
+    status: 'active',
+    affinity: 20,
+    doneBeats: [],
+    inbox: [],
+    log: [],
+    missed: 0,
+    repliedCount: 0,
+    lastContactDay: 0,
+    ...extra,
+  });
+
+  /** 造一个「灾后、有电、电台在线」的局 */
+  const survivalRun = (seed: number, day = TIME.COLLAPSE_DAY) => {
+    const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = day;
+    r.threat = 1;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 4;
+    r.queue = [];
+    return r;
+  };
+
+  // ---- 准备期：tickChannels 必须是 no-op，且不产生任何状态 ----
+  {
+    const r = survivalRun(6101, 3);
+    r.phase = 'prep';
+    r.channels = [];
+    const before = JSON.stringify(r.channels);
+    tickChannels(r);
+    check('准备期 tickChannels 是 no-op', JSON.stringify(r.channels) === before, `channels=${r.channels.length}`);
+    check('准备期仍自动推送 3 条 prep 情报', r.intel.length === 3, String(r.intel.length));
+  }
+
+  // ---- 崩溃日的插入位：day 7 → endDay → day 8 当天就该收到开场拍 ----
+  {
+    const r = survivalRun(6102, TIME.COLLAPSE_DAY - 1);
+    r.phase = 'prep';
+    r.ap = 0;
+    r.channels = [mkChannel('tmp_dying')];
+    r.queue = [];
+    endDay(r);
+    const st = r.channels[0]!;
+    check(
+      '崩溃日当天频道节拍已投递（守住 endDay 提前 return 之前的插入位）',
+      r.day === TIME.COLLAPSE_DAY && st.inbox.length >= 3,
+      `day=${r.day} inbox=${st.inbox.length}`,
+    );
+    check('开场拍被标记为等回复', st.awaitingBeat === 'd_open', String(st.awaitingBeat));
+  }
+
+  // ---- 未读搬进会话记录 + onRead 结算 ----
+  {
+    const r = survivalRun(6103);
+    r.channels = [mkChannel('tmp_dying')];
+    tickChannels(r);
+    const st = r.channels[0]!;
+    const unread = st.inbox.length;
+    const ap = r.ap;
+    const rng0 = r.rngCursor;
+    const out = openChannel(r, 'tmp_dying');
+    check('打开频道搬走未读', out.lines.length === unread && st.inbox.length === 0, `${unread} -> ${st.inbox.length}`);
+    check('读不消耗行动点', r.ap === ap, `${ap} -> ${r.ap}`);
+    check('读不推进共享随机游标', r.rngCursor === rng0, `${rng0} -> ${r.rngCursor}`);
+  }
+
+  // ---- 整条「求救的男人」：两次抉择都走一遍 ----
+  {
+    const r = survivalRun(6104);
+    r.channels = [mkChannel('tmp_dying')];
+    tickChannels(r);
+    openChannel(r, 'tmp_dying');
+
+    // 第一次抉择：回话
+    const a = replyChannel(r, 'tmp_dying', 'reply');
+    check('第一次抉择（回话）成功', a.ok, a.reason);
+    const st = r.channels[0]!;
+    check('回话进了会话记录', st.log.some((l) => l.from === 'you'), `log=${st.log.length}`);
+    check('好感度按选项声明增加', st.affinity === 20 + 4, String(st.affinity));
+
+    // 下一拍挂起，且没有 afterDays → 次日立刻到
+    const pending = st.pendingBeat;
+    tickChannels(r);
+    check('pendingBeat 次日整点投递', st.log.length + st.inbox.length > 0 && pending === 'd_ask' && st.awaitingBeat === 'd_ask', `awaiting=${st.awaitingBeat}`);
+
+    openChannel(r, 'tmp_dying');
+    const apBefore = r.ap;
+    const stamBefore = r.stats.stamina;
+    const expBefore = r.world.exposure;
+    const b = replyChannel(r, 'tmp_dying', 'go');
+    check('第二次抉择（答应去）成功', b.ok, b.reason);
+    check('答应去扣 2 行动点', r.ap === apBefore - 2, `${apBefore} -> ${r.ap}`);
+    check('答应去扣体力', r.stats.stamina < stamBefore, `${stamBefore} -> ${r.stats.stamina}`);
+    check('答应去涨暴露度', r.world.exposure > expBefore, `${expBefore} -> ${r.world.exposure}`);
+    check('去过的地下室变成可搜地点', r.locations.some((l) => l.id === 'sig_basement'), r.locations.map((l) => l.id).join(','));
+    tickChannels(r);
+    check('这条线以永久静默收尾', st.status === 'lost', st.status);
+  }
+
+  // ---- 第二次抉择：只说"记下了" → 三天后静默 ----
+  {
+    const r = survivalRun(6105);
+    r.channels = [mkChannel('tmp_dying')];
+    tickChannels(r);
+    openChannel(r, 'tmp_dying');
+    replyChannel(r, 'tmp_dying', 'reply');
+    tickChannels(r); // d_ask
+    openChannel(r, 'tmp_dying');
+    replyChannel(r, 'tmp_dying', 'note');
+    const st = r.channels[0]!;
+    check('记下之后进入三日等待', st.pendingBeat === 'd_note_after' && st.status === 'active', `${st.pendingBeat} / ${st.status}`);
+    r.day += 2;
+    tickChannels(r);
+    check('等待期内不提前兑现', st.status === 'active', st.status);
+    r.day += 1;
+    tickChannels(r);
+    check('满三天后静默', st.status === 'lost', st.status);
+  }
+
+  // ---- 超期未回：missed++ 且好感度 −6 ----
+  {
+    const r = survivalRun(6106);
+    r.channels = [mkChannel('tmp_dying')];
+    tickChannels(r);
+    const st = r.channels[0]!;
+    st.awaitSinceDay = r.day - 99; // 早就该回了
+    const aff = st.affinity;
+    tickChannels(r);
+    check('超期未回记一次 missed', st.missed === 1, String(st.missed));
+    check('超期未回扣好感度', st.affinity === aff + CHANNEL.AFF_MISSED, `${aff} -> ${st.affinity}`);
+    check('超期后不再挂着等回复', st.awaitingBeat === undefined, String(st.awaitingBeat));
+  }
+
+  // ---- lost 之后彻底不再投递 ----
+  {
+    const r = survivalRun(6107);
+    r.channels = [mkChannel('tmp_mother', { status: 'lost' })];
+    for (let i = 0; i < 20; i++) {
+      r.day += 1;
+      tickChannels(r);
+    }
+    const st = r.channels[0]!;
+    check('lost 频道不再投递任何拍', st.inbox.length === 0 && st.doneBeats.length === 0, `inbox=${st.inbox.length} done=${st.doneBeats.length}`);
+  }
+
+  // ---- 蓄电不足：拒绝发送，且一分钱都不扣 ----
+  {
+    const r = survivalRun(6108);
+    r.channels = [mkChannel('tmp_dying')];
+    tickChannels(r);
+    openChannel(r, 'tmp_dying');
+    r.wear.batteryCharge = 0;
+    const ap = r.ap;
+    const deny = replyChannel(r, 'tmp_dying', 'reply');
+    check('蓄电不足时发送被拒', deny.ok === false, deny.reason);
+    check('被拒时不扣行动点、不扣电', r.ap === ap && r.wear.batteryCharge === 0, `ap=${r.ap} kwh=${r.wear.batteryCharge}`);
+    const st = r.channels[0]!;
+    check('被拒时不推进剧情', st.awaitingBeat === 'd_open' && st.log.every((l) => l.from !== 'you'), String(st.awaitingBeat));
+  }
+
+  // ---- 1 级电台只能听不能说 ----
+  {
+    const r = survivalRun(6109);
+    r.modules.radio = 1;
+    r.channels = [mkChannel('tmp_dying')];
+    tickChannels(r);
+    openChannel(r, 'tmp_dying');
+    const deny = replyChannel(r, 'tmp_dying', 'reply');
+    check('1 级电台发不出话', deny.ok === false, deny.reason);
+    const quiet = replyChannel(r, 'tmp_dying', 'off'); // 不说话的那条应该仍然可选
+    check('1 级电台仍然可以「不回」', quiet.ok, quiet.reason);
+  }
+
+  // ---- 搜索频道：每日一次、池子有限、命中率按等级 ----
+  {
+    const r = survivalRun(6110, TIME.COLLAPSE_DAY + 2);
+    const first = searchChannel(r);
+    check('第一次搜索有结果（拿到的还是只有静电都算成功）', first.ok, first.reason);
+    const again = searchChannel(r);
+    check('同一天不能搜第二次', again.ok === false, again.reason);
+    // 把池子清空 → 只扣电不扣 AP
+    r.day += 1;
+    r.channelPool = [];
+    r.wear.batteryCharge = 8;
+    const ap = r.ap;
+    const kwh = r.wear.batteryCharge;
+    const empty = searchChannel(r);
+    check('池子搜空后仍然成功但只有静电', empty.ok === true && empty.found === null, String(empty.found));
+    check('池空只扣电不扣行动点', r.ap === ap && r.wear.batteryCharge < kwh, `ap=${r.ap} kwh=${kwh} -> ${r.wear.batteryCharge}`);
+  }
+
+  // ---- 好感度档位 ----
+  check('好感度映射成四档', bondOf(0) === 'stranger' && bondOf(30) === 'familiar' && bondOf(60) === 'close' && bondOf(90) === 'reliant', [0, 30, 60, 90].map((n) => bondOf(n)).join(','));
+
+  // ---- 隐藏信号点：初始不存在、搜不了，解锁后才能去 ----
+  {
+    const r = survivalRun(6111);
+    check('隐藏信号点不在初始 run.locations 里', !r.locations.some((l) => l.id === 'sig_basement'), r.locations.map((l) => l.id).join(','));
+    check('隐藏信号点本身仍是合法地点定义', !!LOCATION_BY_ID['sig_basement']?.hidden);
+    const sv = createSession(r);
+    const denied = sessionScavenge(sv, 'sig_basement', false);
+    check('未解锁时搜刮被拒', denied.ok === false, denied.reason);
+    // 用真实的效果通道解锁
+    applyEffect(r, { locations: [{ id: 'sig_basement', stock: 80 }] }, makeRng(1));
+    check('解锁后出现在 run.locations', r.locations.some((l) => l.id === 'sig_basement'), r.locations.map((l) => l.id).join(','));
+    r.res.fuel = 20;
+    r.stats.stamina = 100;
+    r.ap = 4;
+    const sv2 = createSession(r);
+    const ok2 = sessionScavenge(sv2, 'sig_basement', false);
+    check('解锁后可以搜刮', ok2.ok, ok2.reason);
+  }
+
+  // ---- 基线哨兵：连续 30 天 tickChannels 不得动共享随机游标 ----
+  {
+    const r = survivalRun(6112);
+    ensureChannelDefaults(r);
+    r.channels = [mkChannel('tmp_dying'), mkChannel('tmp_mother')];
+    const cursor0 = r.rngCursor;
+    for (let i = 0; i < 30; i++) {
+      r.day += 1;
+      tickChannels(r);
+    }
+    check(
+      '30 天 tickChannels 完全不动 run.rngCursor',
+      r.rngCursor === cursor0,
+      `${cursor0} -> ${r.rngCursor}（动了就意味着 720 局 sim 基线会漂移）`,
+    );
+    check('30 天后频道确实发生了推进（不是空转）', r.channels.some((c) => c.doneBeats.length > 0), r.channels.map((c) => `${c.id}:${c.doneBeats.length}`).join(' '));
+  }
+
+  // ---- 旧存档自愈 ----
+  {
+    const bare = { channels: undefined, channelPool: undefined } as unknown as RunState;
+    ensureChannelDefaults(bare);
+    check('旧档补出 channels 数组', Array.isArray(bare.channels) && bare.channels.length === 0);
+    check('旧档补出可搜频道池', Array.isArray(bare.channelPool) && bare.channelPool.length > 0, String(bare.channelPool.length));
+  }
+}
+
+// ============================================================
+console.log('\n  P1-x  小桃：固定日求救的三种结局');
+// ============================================================
+{
+  const { tickChannels, openChannel, replyChannel } = await import('../src/game/engine/channels');
+  type St = import('../src/game/types').ChannelState;
+
+  const mk = (extra: Partial<St> = {}): St => ({
+    id: 'xt',
+    status: 'active',
+    affinity: 60,
+    doneBeats: [],
+    inbox: [],
+    log: [],
+    missed: 0,
+    repliedCount: 0,
+    lastContactDay: 0,
+    ...extra,
+  });
+
+  /** 第 32 天之前该走完的主线拍（测试里直接标成已完成，免得一天只投一拍的节奏把用例拖长） */
+  const PRIOR = [
+    'xt_hello', 'xt_power', 'xt_daily_a', 'xt_share', 'xt_daily_b',
+    'xt_daily_c', 'xt_daily_d', 'xt_request', 'xt_gift', 'xt_reconnect', 'xt_afraid',
+  ];
+
+  /** 造一个「已经走完前置、正站在第 32 天」的局 */
+  const atAmbush = (seed: number, affinity: number) => {
+    const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = 32;
+    r.threat = 3;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 6;
+    r.res.water = 60;
+    r.res.foodStaple = 40;
+    // 前置：主线走到第 28 天（试音、交心、求助都已完成）
+    r.channels = [mk({ affinity, doneBeats: [...PRIOR], lastContactDay: 28 })];
+    r.queue = [];
+    return r;
+  };
+
+  // ---- 结局一：好感度够 + 上楼 → 她活着 ----
+  {
+    const r = atAmbush(6201, 60);
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('第 32 天按时收到求救', st.awaitingBeat === 'xt_ambush', String(st.awaitingBeat));
+    openChannel(r, 'xt');
+    check('答应出门成功', replyChannel(r, 'xt', 'go').ok);
+    tickChannels(r);
+    openChannel(r, 'xt');
+    check('到达分支进入楼道', st.awaitingBeat === 'xt_go', String(st.awaitingBeat));
+    replyChannel(r, 'xt', 'upstairs');
+    tickChannels(r);
+    openChannel(r, 'xt');
+    check('好感度足够时她活下来', r.flags.includes('flag:xtAlive'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
+    check('活着时频道仍在播', st.status === 'active', st.status);
+    // 存活线：第 36 天还能收到日常
+    r.day = 36;
+    tickChannels(r);
+    check('存活线后续节拍正常投递', st.doneBeats.includes('xt_live_a'), st.doneBeats.join(','));
+  }
+
+  // ---- 结局二：好感度不够 + 上楼 → 她死了（条件分叉走 elseBeat） ----
+  {
+    const r = atAmbush(6202, 60);
+    tickChannels(r);
+    openChannel(r, 'xt');
+    replyChannel(r, 'xt', 'go');
+    tickChannels(r);
+    openChannel(r, 'xt');
+    replyChannel(r, 'xt', 'upstairs');
+    r.channels[0]!.affinity = 45; // 拉低到门槛以下
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('好感度不足时走 elseBeat 死亡分支', st.doneBeats.includes('xt_dead'), st.doneBeats.join(','));
+    check('死亡分支把频道永久静默', st.status === 'lost', st.status);
+    check('死了就没有存活线', !r.flags.includes('flag:xtAlive'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
+  }
+
+  // ---- 结局三：前置不够 → 根本没收到求救，只有静默 ----
+  {
+    const r = atAmbush(6203, 20);
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('前置不够时不是求救而是静默', st.doneBeats.includes('xt_silent'), st.doneBeats.join(','));
+    check('静默分支同样永久静默', st.status === 'lost', st.status);
+    const lines = st.inbox;
+    check('静默分支确实给出了文本（不是空信息）', lines.length >= 2, String(lines.length));
+    check('玩家永远拿不到「因为好感度不够」这种提示', !lines.some((l) => l.text.includes('affinity')), lines.map((l) => l.text).join('|'));
+  }
+
+  // ---- 离线回归只在全程没回过时出现 ----
+  {
+    const before = PRIOR.filter((id) => id !== 'xt_reconnect');
+    const quiet = atAmbush(6204, 20);
+    quiet.day = 26;
+    quiet.channels = [mk({ affinity: 20, doneBeats: [...before], lastContactDay: 25 })];
+    tickChannels(quiet);
+    check('全程没回过 → 触发离线回归拍', quiet.channels[0]!.doneBeats.includes('xt_reconnect'), quiet.channels[0]!.doneBeats.join(','));
+
+    const talked = atAmbush(6205, 40);
+    talked.day = 26;
+    talked.flags = ['flag:xtReplied'];
+    talked.channels = [mk({ affinity: 40, doneBeats: [...before], lastContactDay: 25 })];
+    tickChannels(talked);
+    check('回过话 → 不触发离线回归拍', !talked.channels[0]!.doneBeats.includes('xt_reconnect'), talked.channels[0]!.doneBeats.join(','));
+  }
+
+  // ---- 前置不满足的拍不会堵住后面（曾经的「整线停滞」陷阱） ----
+  {
+    const r = atAmbush(6206, 20);
+    r.day = 28;
+    r.channels = [
+      mk({ affinity: 20, doneBeats: PRIOR.filter((id) => id !== 'xt_afraid'), lastContactDay: 25 }),
+    ];
+    // xt_reconnect(26) 的前置不满足且没有 elseBeat；xt_afraid(28) 必须照常投递
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('条件不满足的条件拍不会堵住后续拍', st.doneBeats.includes('xt_afraid'), st.doneBeats.join(','));
+  }
+}
+
+// ============================================================
+console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被攻陷」');
+// ============================================================
+{
+  const { tickChannels, openChannel, replyChannel } = await import('../src/game/engine/channels');
+  const { CHANNEL_BY_ID } = await import('../src/game/content/channels');
+  const { FAMILY_BY_ID } = await import('../src/game/content/events');
+  await import('../src/game/copy');
+  const { t: copyT } = await import('../src/game/copy/t');
+  type St = import('../src/game/types').ChannelState;
+
+  const ogAt = (seed: number, day: number, opts: { radio?: number; done?: string[]; flags?: string[] } = {}) => {
+    const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = day;
+    r.threat = 3;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = opts.radio ?? 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 6;
+    r.res.water = 60;
+    r.res.foodStaple = 40;
+    r.flags = [...(opts.flags ?? [])];
+    const st: St = {
+      id: 'og',
+      status: 'active',
+      affinity: 40,
+      doneBeats: [...(opts.done ?? [])],
+      inbox: [],
+      log: [],
+      missed: 0,
+      repliedCount: 0,
+      lastContactDay: day - 1,
+    };
+    r.channels = [st];
+    r.queue = [];
+    return r;
+  };
+
+  const MAIN = [
+    'og_open', 'og_weather', 'og_rules', 'og_coord', 'og_daily_a', 'og_daily_b', 'og_census',
+    'og_daily_c', 'og_leak', 'og_daily_d', 'og_crack', 'og_daily_e', 'og_seized',
+    'og_aftermath', 'og_after2',
+  ];
+
+  // ---- 到场与开场 ----
+  {
+    const r = createRun({ seed: 7001, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = TIME.COLLAPSE_DAY - 1;
+    r.phase = 'prep';
+    r.ap = 0;
+    r.queue = [];
+    endDay(r);
+    const og = r.channels.find((c) => c.id === 'og');
+    check('官方频道第 8 天自动到场', !!og, r.channels.map((c) => c.id).join(','));
+    check('到场当天就投出开场通报', (og?.inbox.length ?? 0) >= 3, String(og?.inbox.length));
+  }
+
+  // ---- 坐标拍：调频接收解锁一次性搜刮点 ----
+  {
+    const r = ogAt(7002, 12, { done: ['og_open', 'og_weather', 'og_rules'] });
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('第 12 天收到坐标拍', st.awaitingBeat === 'og_coord', String(st.awaitingBeat));
+    openChannel(r, 'og');
+    const kwh = r.wear.batteryCharge;
+    check('调频接收成功', replyChannel(r, 'og', 'tune').ok);
+    check('接收消耗蓄电', r.wear.batteryCharge < kwh, `${kwh} -> ${r.wear.batteryCharge}`);
+    check('坐标点进入了地图', r.locations.some((l) => l.id === 'sig_depot'), r.locations.map((l) => l.id).join(','));
+  }
+
+  // ---- 坐标拍：L3 能识破，但拿不到东西 ----
+  {
+    const r = ogAt(7003, 12, { radio: 3, done: ['og_open', 'og_weather', 'og_rules'] });
+    tickChannels(r);
+    openChannel(r, 'og');
+    check('L3 的比对载波选项可用', replyChannel(r, 'og', 'scan').ok);
+    check('识破不解锁坐标点', !r.locations.some((l) => l.id === 'sig_depot'), r.locations.map((l) => l.id).join(','));
+    check('识破留下痕迹', r.flags.includes('flag:ogRealized'), r.flags.filter((f) => f.startsWith('flag:og')).join(','));
+  }
+
+  // ---- 登记拍：虚报需要 2 级电台 ----
+  {
+    const r = ogAt(7004, 18, { radio: 1, done: MAIN.slice(0, 6) });
+    tickChannels(r);
+    openChannel(r, 'og');
+    const deny = replyChannel(r, 'og', 'fake');
+    check('1 级电台不能虚报（需收发机）', deny.ok === false, deny.reason);
+  }
+
+  // ---- 第 28 天：被攻陷 → 上报坐标会真的叫来袭击 ----
+  {
+    const r = ogAt(7005, 28, { done: MAIN.filter((id) => id !== 'og_seized') });
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('掠夺期按时被攻陷（口吻突变那一拍）', st.awaitingBeat === 'og_seized', String(st.awaitingBeat));
+    openChannel(r, 'og');
+    const exp = r.world.exposure;
+    const hum = r.stats.humanity;
+    check('上报坐标成功', replyChannel(r, 'og', 'report').ok);
+    check('上报涨暴露度', r.world.exposure > exp, `${exp} -> ${r.world.exposure}`);
+    check('上报扣人性', r.stats.humanity < hum, `${hum} -> ${r.stats.humanity}`);
+    check('累计上报被记住', r.flags.includes('flag:ogSoldOut'), r.flags.filter((f) => f.startsWith('flag:og')).join(','));
+    const raid = r.pending.find((p) => p.familyId === 'raid_attempt');
+    check('上报会排下一次袭击', !!raid, r.pending.map((p) => `${p.familyId}@${p.dueDay}`).join(','));
+    check('袭击排在次日', raid?.dueDay === r.day + 1, String(raid?.dueDay));
+    check('raid_attempt 是真实存在的事件家族', !!FAMILY_BY_ID['raid_attempt']);
+  }
+
+  // ---- 第 28 天：L2 报假坐标不叫袭击，L3 比对载波反而降低暴露 ----
+  {
+    const fake = ogAt(7006, 28, { done: MAIN.filter((id) => id !== 'og_seized') });
+    tickChannels(fake);
+    openChannel(fake, 'og');
+    check('L2 可以报假坐标', replyChannel(fake, 'og', 'fake').ok);
+    check('假坐标不排袭击', !fake.pending.some((p) => p.familyId === 'raid_attempt'), fake.pending.map((p) => p.familyId).join(','));
+    check('假坐标仍被记为「上报过」但没卖人', fake.flags.includes('flag:ogReported') && !fake.flags.includes('flag:ogSoldOut'), fake.flags.filter((f) => f.startsWith('flag:og')).join(','));
+
+    const scan = ogAt(7007, 28, { radio: 3, done: MAIN.filter((id) => id !== 'og_seized') });
+    tickChannels(scan);
+    openChannel(scan, 'og');
+    check('L3 可以比对载波', replyChannel(scan, 'og', 'scan').ok);
+    check('识破攻陷不叫袭击', !scan.pending.some((p) => p.familyId === 'raid_attempt'), scan.pending.map((p) => p.familyId).join(','));
+    check('L3 还能把暴露度压回去', !scan.flags.includes('flag:ogReported'), scan.flags.filter((f) => f.startsWith('flag:og')).join(','));
+  }
+
+  // ---- 三条结局分支互斥 ----
+  {
+    const coop = ogAt(7008, 40, { done: MAIN, flags: ['flag:ogReported', 'flag:ogSoldOut'] });
+    tickChannels(coop);
+    check('卖过人的走「合作者」结局', coop.channels[0]!.doneBeats.includes('og_endgame'), coop.channels[0]!.doneBeats.join(','));
+
+    const suspect = ogAt(7009, 40, { done: MAIN, flags: ['flag:ogReported'] });
+    tickChannels(suspect);
+    check('只报过片区的走「可疑分子」结局', suspect.channels[0]!.doneBeats.includes('og_suspect'), suspect.channels[0]!.doneBeats.join(','));
+
+    const ignored = ogAt(7010, 40, { done: MAIN, flags: [] });
+    tickChannels(ignored);
+    check(
+      '从没回过的走「无人应答」结局（elseBeat 链要一路走到底）',
+      ignored.channels[0]!.doneBeats.includes('og_ignored'),
+      ignored.channels[0]!.doneBeats.join(','),
+    );
+  }
+
+  // ---- 天气预报由官方频道承接 ----
+  {
+    const def = CHANNEL_BY_ID['og']!;
+    const weatherBeat = def.beats.find((b) => b.id === 'og_weather');
+    const dyn = weatherBeat?.out.find((l) => l.dynamic === 'forecast');
+    check('官方频道里有动态天气预报消息', !!dyn, String(!!dyn));
+    check('动态消息的文案留了 {a}/{b} 占位', !!dyn && /\{a\}/.test(copyT(dyn.text)) && /\{b\}/.test(copyT(dyn.text)), dyn ? copyT(dyn.text) : '');
+  }
+}
+
+// ============================================================
+console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
+// ============================================================
+{
+  const { tickChannels, openChannel, replyChannel, ensureChannelDefaults } = await import('../src/game/engine/channels');
+  const { CHANNEL_DEFS, CHANNEL_POOL, CHANNEL_BY_ID } = await import('../src/game/content/channels');
+  type St = import('../src/game/types').ChannelState;
+
+  const cvAt = (seed: number, day: number, opts: { radio?: number; done?: string[]; flags?: string[]; food?: number } = {}) => {
+    const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = day;
+    r.threat = 2;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = opts.radio ?? 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 6;
+    r.res.water = 60;
+    r.res.foodStaple = opts.food ?? 40;
+    r.res.fuel = 20;
+    r.flags = [...(opts.flags ?? [])];
+    const st: St = {
+      id: 'cv',
+      status: 'active',
+      affinity: 40,
+      doneBeats: [...(opts.done ?? [])],
+      inbox: [],
+      log: [],
+      missed: 0,
+      repliedCount: 0,
+      lastContactDay: day - 1,
+    };
+    r.channels = [st];
+    r.queue = [];
+    return r;
+  };
+
+  const CV_MAIN = [
+    'cv_invite', 'cv_rules', 'cv_ration', 'cv_daily_e', 'cv_vote_virus', 'cv_daily_a',
+    'cv_list', 'cv_daily_b', 'cv_leak', 'cv_notice', 'cv_daily_c', 'cv_trial', 'cv_daily_d',
+    'cv_quota', 'cv_after',
+  ];
+
+  // ---- 到场 ----
+  {
+    const r = createRun({ seed: 8001, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = 14;
+    r.phase = 'survival';
+    r.threat = 1;
+    r.queue = [];
+    tickChannels(r);
+    check('第 15 天前委员会还没到场', !r.channels.some((c) => c.id === 'cv'), r.channels.map((c) => c.id).join(','));
+    r.day = 15;
+    r.threat = 2;
+    tickChannels(r);
+    const cv = r.channels.find((c) => c.id === 'cv');
+    check('第 15 天委员会自动到场并开场', !!cv && cv.inbox.length >= 3, `${cv?.inbox.length}`);
+  }
+
+  // ---- 表决：耗电 0.3，需要 2 级电台 ----
+  {
+    const r = cvAt(8002, 22, { done: CV_MAIN.slice(0, 4) });
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('第 22 天进入表决拍', st.awaitingBeat === 'cv_vote_virus', String(st.awaitingBeat));
+    openChannel(r, 'cv');
+    const kwh = r.wear.batteryCharge;
+    const hum = r.stats.humanity;
+    const food = r.res.foodStaple;
+    check('赞成票投得出去', replyChannel(r, 'cv', 'yes').ok);
+    check('表决消耗蓄电', r.wear.batteryCharge < kwh, `${kwh} -> ${r.wear.batteryCharge}`);
+    check('赞成驱逐扣人性', r.stats.humanity < hum, `${hum} -> ${r.stats.humanity}`);
+    check('赞成驱逐换来物资', r.res.foodStaple > food - 4, `${food} -> ${r.res.foodStaple}`);
+    check('表决被记为参与过', r.flags.includes('flag:cvVoted'), r.flags.filter((f) => f.startsWith('flag:cv')).join(','));
+  }
+  {
+    const r = cvAt(8003, 22, { radio: 1, done: CV_MAIN.slice(0, 4) });
+    tickChannels(r);
+    openChannel(r, 'cv');
+    check('1 级电台不能表决（要能发一个音）', replyChannel(r, 'cv', 'yes').ok === false);
+  }
+
+  // ---- 跨线耦合：没有官方频道的录音就放不出来 ----
+  {
+    const without = cvAt(8004, 30, { done: CV_MAIN.filter((id) => !['cv_leak', 'cv_notice', 'cv_daily_c', 'cv_trial', 'cv_daily_d', 'cv_quota', 'cv_after'].includes(id)) });
+    tickChannels(without);
+    openChannel(without, 'cv');
+    const deny = replyChannel(without, 'cv', 'publish');
+    check('没有录音时公布选项被拒', deny.ok === false, deny.reason);
+    check('被拒理由说明是缺录音', (deny.reason ?? '').includes('没有'), deny.reason);
+
+    const withLeak = cvAt(8005, 30, {
+      flags: ['flag:ogLeak'],
+      done: CV_MAIN.filter((id) => !['cv_leak', 'cv_notice', 'cv_daily_c', 'cv_trial', 'cv_daily_d', 'cv_quota', 'cv_after'].includes(id)),
+    });
+    tickChannels(withLeak);
+    openChannel(withLeak, 'cv');
+    check('拿到录音后可以公布（跨线耦合成立）', replyChannel(withLeak, 'cv', 'publish').ok);
+    check('公布留下痕迹', withLeak.flags.includes('flag:cvPublished'), withLeak.flags.filter((f) => f.startsWith('flag:cv')).join(','));
+  }
+
+  // ---- 三条结局互斥 ----
+  {
+    const order = cvAt(8006, 44, { done: CV_MAIN, flags: ['flag:cvPaidUp'] });
+    tickChannels(order);
+    check('交过份子的走「秩序」结局', order.channels[0]!.doneBeats.includes('cv_end_order'), order.channels[0]!.doneBeats.join(','));
+
+    const tyr = cvAt(8007, 44, { done: CV_MAIN, flags: ['flag:cvPaidUp', 'flag:cvPublished'] });
+    tickChannels(tyr);
+    check('公布过录音的走「暴政」结局', tyr.channels[0]!.doneBeats.includes('cv_end_tyranny'), tyr.channels[0]!.doneBeats.join(','));
+
+    const dis = cvAt(8008, 44, { done: CV_MAIN, flags: [] });
+    tickChannels(dis);
+    check('什么都没做的走「解散」结局', dis.channels[0]!.doneBeats.includes('cv_end_dissolve'), dis.channels[0]!.doneBeats.join(','));
+  }
+
+  // ---- 骗子：去了就是给袭击开门 ----
+  {
+    const r = createRun({ seed: 8009, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = 20;
+    r.threat = 2;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 6;
+    r.queue = [];
+    r.channels = [{
+      id: 'tmp_scammer', status: 'active', affinity: 20, doneBeats: [], inbox: [], log: [],
+      missed: 0, repliedCount: 0, lastContactDay: 0,
+    }];
+    tickChannels(r);
+    openChannel(r, 'tmp_scammer');
+    const exp = r.world.exposure;
+    check('骗子的选项能选', replyChannel(r, 'tmp_scammer', 'go').ok);
+    check('去了暴露度上升', r.world.exposure > exp, `${exp} -> ${r.world.exposure}`);
+    check('去了会招来袭击', r.pending.some((p) => p.familyId === 'raid_attempt'), r.pending.map((p) => p.familyId).join(','));
+  }
+
+  // ---- 十个临时频道都在搜索池里 ----
+  {
+    const searchable = CHANNEL_DEFS.filter((d) => d.discover === 'search');
+    check('搜索池正好十个临时频道', searchable.length === 10 && CHANNEL_POOL.length === 10, `${searchable.length}/${CHANNEL_POOL.length}`);
+    check('三个核心频道都不在搜索池里', !CHANNEL_POOL.some((id) => ['og', 'xt', 'cv'].includes(id)), CHANNEL_POOL.join(','));
+    const allTmp = CHANNEL_DEFS.filter((d) => d.id.startsWith('tmp_'));
+    check('十个临时频道都有名字与标语文案', allTmp.every((d) => !!CHANNEL_BY_ID[d.id]), allTmp.map((d) => d.id).join(','));
+  }
+
+  // ---- 隐藏路线点：要靠司机给 ----
+  {
+    const r = createRun({ seed: 8010, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = 24;
+    r.threat = 2;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 6;
+    r.res.fuel = 20;
+    r.queue = [];
+    r.channels = [{
+      id: 'tmp_trucker', status: 'active', affinity: 20, doneBeats: ['tk_open'],
+      inbox: [], log: [], missed: 0, repliedCount: 0, lastContactDay: 22,
+    }];
+    check('路线点初始不在地图上', !r.locations.some((l) => l.id === 'sig_route'), r.locations.map((l) => l.id).join(','));
+    // 已经用油换过路线：隔两天他该把坐标给出来了
+    r.flags.push('flag:tkTraded');
+    r.day = 24;
+    r.wear.batteryCharge = 8;
+    tickChannels(r);
+    openChannel(r, 'tmp_trucker');
+    check('司机给路线后解锁货场', r.locations.some((l) => l.id === 'sig_route'), r.locations.map((l) => l.id).join(','));
+  }
+
+  // ---- 「只有没看过的才流式播放」：关掉再打开不能把整段历史重念一遍 ----
+  {
+    const { openChannel: open, replyChannel: reply } = await import('../src/game/engine/channels');
+    const r = cvAt(8011, 19, { done: ['cv_invite', 'cv_rules'] });
+    tickChannels(r);
+    const st = r.channels[0]!;
+    const pendingLines = st.inbox.length;
+    check('刚到场时有未读', pendingLines > 0, String(pendingLines));
+
+    const first = open(r, 'cv');
+    check('首次打开从头开始播', first.from === 0, String(first.from));
+    check('首次打开带出新读到的行', first.lines.length === pendingLines, `${first.lines.length}/${pendingLines}`);
+    check('打开后播放起点推进到会话末尾', st.seenLines === st.log.length, `${st.seenLines}/${st.log.length}`);
+
+    const again = open(r, 'cv');
+    check('没有新消息时不再从头播', again.from === st.log.length, `${again.from}/${st.log.length}`);
+    check('重开不会重复结算 onRead', again.lines.length === 0, String(again.lines.length));
+
+    // 回一条之后：只有自己那句是新的
+    const beat = st.awaitingBeat;
+    check('还等着玩家回话', !!beat, String(beat));
+    if (beat) {
+      const before = st.log.length;
+      const rr = reply(r, 'cv', 'pay');
+      check('回话成功', rr.ok, rr.reason);
+      check('自己说的那句也算看过', st.seenLines === st.log.length, `${st.seenLines}/${st.log.length}`);
+      check('自己那句确实是新增的一行', st.log.length === before + 1, `${before} -> ${st.log.length}`);
+    }
+  }
+
+  // ---- 旧档池子补齐：新增的临时频道对老存档也要生效 ----
+  {
+    const bare = { channels: [{ id: 'tmp_dying' }], channelPool: undefined } as unknown as RunState;
+    ensureChannelDefaults(bare);
+    check('旧档补池时不会再塞进已经拥有的频道', !bare.channelPool.includes('tmp_dying'), bare.channelPool.join(','));
+    check('旧档补池包含全部十个', bare.channelPool.length === 9, String(bare.channelPool.length));
+  }
+}
+
 console.log(`\n  结果：${pass} 通过 · ${fail} 失败\n`);
 process.exit(fail > 0 ? 1 : 0);

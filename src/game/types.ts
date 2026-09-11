@@ -475,6 +475,11 @@ export interface Location {
   /** 采购时的商品单价（准备期） */
   prices?: Partial<Record<ResourceId, number>>;
   tags?: string[];
+  /**
+   * 隐藏地点：不进 createRun 的初始 run.locations，地图上也不列。
+   * 靠事件/频道的 Effect.locations 写入条目后才会出现（一次性信号点用这个）。
+   */
+  hidden?: boolean;
 }
 
 export interface LocationState {
@@ -483,6 +488,138 @@ export interface LocationState {
   searchedDay?: number;
   /** 路况：封路/桥断/检查站 */
   blocked?: string;
+}
+
+// ============================================================
+// 频道（收音机网络）
+// ============================================================
+
+export type ChannelKind = 'org' | 'person';
+/** active 在播 · silent 静默（可回归） · lost 永久静默（不可逆） */
+export type ChannelStatus = 'active' | 'silent' | 'lost';
+/** 关系档：UI 只显示这四档文字，不显示 affinity 数值 */
+export type BondLevel = 'stranger' | 'familiar' | 'close' | 'reliant';
+
+/**
+ * 频道定义（静态内容）。
+ *
+ * 所有人类可读文本一律存**文案键**，由 UI / 引擎经 t() 解析，
+ * 这样 copy/zh/channels/* 才是唯一文案来源。
+ */
+export interface ChannelDef {
+  id: string;
+  kind: ChannelKind;
+  /** 文案键 channels.<id>.name */
+  name: string;
+  /** 列表头像字，单字 */
+  short: string;
+  /** 文案键 channels.<id>.tagline */
+  tagline: string;
+  discover: 'auto' | 'search' | 'prepEvent';
+  /** auto：固定到场日 */
+  discoverDay?: number;
+  /** search：最低末世等级 */
+  discoverThreat?: number;
+  /** search：可被搜到所需的无线电台等级 */
+  minRadio?: number;
+  /** 需要玩家回应的拍，超这么多天没回算 missed */
+  replyWindowDays: number;
+  /** 核心频道：横跨整个末世，拍数有下限护栏（lint 用） */
+  core?: boolean;
+  beats: ChannelBeat[];
+}
+
+/**
+ * 一拍频道事件。
+ *
+ * 调度优先级：at（绝对日）> afterDays（相对上一拍完成日）。
+ * 前置不满足时，有 elseBeat 就走替代拍——「你没参与，但事情照样发生」。
+ */
+export interface ChannelBeat {
+  id: string;
+  at?: number;
+  afterDays?: number;
+  /** 必须已完成的 beat */
+  need?: string[];
+  minAffinity?: number;
+  require?: TagQuery;
+  /** 前置不满足时的替代拍 id；缺省则整条线停在这一拍 */
+  elseBeat?: string;
+  expectReply?: boolean;
+  out: ChatLine[];
+  choices?: ChatChoice[];
+  /** 这一拍之后频道永久静默（没去救人、对方死了） */
+  silence?: boolean;
+}
+
+export interface ChatLine {
+  from: 'peer' | 'you';
+  /** 文案键 channels.<channelId>.<beatId>.line.<n> */
+  text: string;
+  /** 读到这条时立即生效 */
+  onRead?: Effect;
+  /** 特殊呈现：分隔条 / 静默提示 / 不可辨识 / 旁白叙述 */
+  sys?: 'divider' | 'silent' | 'unreadable' | 'narrate';
+  /** 毫秒/字，覆盖默认流式速度 */
+  cps?: number;
+  /** 到达日。由引擎在投递时写入，UI 用来插「第 N 天」分隔 */
+  day?: number;
+  /**
+   * 运行时内容：这条消息的正文里有一部分是当前世界状态。
+   * `forecast` 用 `{a}` / `{b}` 占位，UI 填 run.world.forecast 的两天天气——
+   * 官方频道因此天然承接了被删掉的天气预报卡片，而它报的本来就是
+   * 那份会随 threat 变差、会撒谎的预报。
+   */
+  dynamic?: 'forecast';
+}
+
+export interface ChatChoice {
+  id: string;
+  /** 文案键 */
+  label: string;
+  /** 文案键，代价说明如「耗电 0.15 kWh」 */
+  note?: string;
+  /** 门槛：常用 modules.radio 做等级鉴定 */
+  requires?: Requirement;
+  effect?: Effect;
+  /** 好感度增减，由内容显式声明（拒绝与答应差别很大，不靠推断） */
+  affinity?: number;
+  /** 发送后追加到右侧气泡的文案键 */
+  say?: string;
+  /** 下一拍 id；缺省表示对方不回 */
+  reply?: string;
+  /** 这一选让对方永久静默 */
+  silence?: boolean;
+}
+
+/** 频道运行状态。信封与队列无关：独立配额、不挡「结束这一天」 */
+export interface ChannelState {
+  id: string;
+  status: ChannelStatus;
+  /** 好感度 0-100，内部值，UI 只映射成 BondLevel */
+  affinity: number;
+  doneBeats: string[];
+  /** 已到达未读 */
+  inbox: ChatLine[];
+  /** 已读记录，按频道独立封顶 */
+  log: ChatLine[];
+  /**
+   * 已经「看过」的会话行数。只服务于呈现：只有第 seenLines 条之后的内容才做流式播放，
+   * 之前的一律直接显示。否则每次打开收音机都会把整段历史从头念一遍。
+   */
+  seenLines?: number;
+  /** 正在等玩家回的拍 */
+  awaitingBeat?: string;
+  awaitSinceDay?: number;
+  /** 选项指定的下一拍（分支），播放时绕过时间锚 */
+  pendingBeat?: string;
+  /** pendingBeat 的设定日；该拍自带 afterDays 时从这天起算 */
+  pendingSinceDay?: number;
+  missed: number;
+  repliedCount: number;
+  lastContactDay: number;
+  /** 离线回归用：连续没有互动的起始日 */
+  offlineSinceDay?: number;
 }
 
 // ============================================================
@@ -672,6 +809,15 @@ export interface RunState {
   world: WorldState;
 
   intel: IntelReading[];
+  /**
+   * 频道平行信箱。刻意不走 run.queue：队列有 4 层限流且非空就挡住「结束这一天」，
+   * 一条横跨 40 天的主线塞进去会挤掉常规事件。
+   */
+  channels: ChannelState[];
+  /** 尚未被搜到的临时频道 id */
+  channelPool: string[];
+  /** 当天已搜过（值为 run.day） */
+  channelSearchDay?: number;
   flags: string[];
   /** familyId -> 最后触发日，用于冷却 */
   eventHistory: Record<string, number>;

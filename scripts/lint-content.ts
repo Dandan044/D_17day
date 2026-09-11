@@ -643,6 +643,136 @@ for (const [sig, ids] of bodyDup) {
 }
 
 // ============================================================
+// 频道（无线电网络）
+// ============================================================
+
+{
+  const { CHANNEL_DEFS } = await import('../src/game/content/channels');
+  const MAX_LINE = 45;
+  const CORE_MIN_BEATS = 18;
+
+  const seenIds = new Set<string>();
+  for (const def of CHANNEL_DEFS) {
+    if (seenIds.has(def.id)) err(`频道 id 重复：${def.id}`);
+    seenIds.add(def.id);
+
+    for (const key of [def.name, def.tagline]) {
+      if (!hasCopy(key)) err(`频道 ${def.id} 缺少文案键：${key}`);
+    }
+
+    // ---- 拍数下限：核心频道要能横跨整个末世 ----
+    if (def.core && def.beats.length < CORE_MIN_BEATS) {
+      err(`核心频道 ${def.id} 只有 ${def.beats.length} 拍，需要 >= ${CORE_MIN_BEATS}`);
+    }
+    if (def.beats.length === 0) err(`频道 ${def.id} 没有任何拍`);
+
+    const beatIds = new Set<string>();
+    for (const b of def.beats) {
+      if (beatIds.has(b.id)) err(`频道 ${def.id} 有重复的 beat id：${b.id}`);
+      beatIds.add(b.id);
+    }
+
+    // ---- at 必须递增且不重复：firstDueBeat 按数组顺序取第一个到点的，乱序会跨拍 ----
+    let lastAt = -Infinity;
+    for (const b of def.beats) {
+      if (b.at === undefined) continue;
+      if (b.at <= lastAt) {
+        err(`频道 ${def.id} 的 at 必须按数组顺序严格递增：${b.id} 的 at=${b.at} <= 前一个 ${lastAt}`);
+      }
+      lastAt = b.at;
+    }
+
+    const checkKey = (key: string | undefined, what: string) => {
+      if (!key) return;
+      if (!hasCopy(key)) err(`${what} 缺少文案键：${key}`);
+    };
+
+    for (const b of def.beats) {
+      const where = `频道 ${def.id} / ${b.id}`;
+      for (const n of b.need ?? []) {
+        if (!beatIds.has(n)) err(`${where} 的 need 指向不存在的 beat：${n}`);
+      }
+      if (b.elseBeat && !beatIds.has(b.elseBeat)) {
+        err(`${where} 的 elseBeat 指向不存在的 beat：${b.elseBeat}`);
+      }
+      if (b.expectReply && !(b.choices && b.choices.length > 0)) {
+        err(`${where} 声明了 expectReply 却没有 choices，玩家永远无法推进`);
+      }
+      if (b.silence && b.choices?.length) {
+        warn(`${where} 同时有 silence 和 choices：choices 会先接管，silence 只在这拍没有选择时生效`);
+      }
+
+      for (const [i, line] of b.out.entries()) {
+        checkKey(line.text, `${where} 的第 ${i + 1} 条消息`);
+        if (!line.sys && hasCopy(line.text)) {
+          const text = copyT(line.text);
+          if (text.length > MAX_LINE) {
+            err(`${where} 的第 ${i + 1} 条消息 ${text.length} 字，超过 ${MAX_LINE} 字单条上限`);
+          }
+        }
+      }
+
+      for (const c of b.choices ?? []) {
+        const cwhere = `${where} / 选项 ${c.id}`;
+        checkKey(c.label, cwhere);
+        checkKey(c.note, cwhere);
+        checkKey(c.say, `${cwhere} 的 say`);
+        if (c.reply && !beatIds.has(c.reply)) {
+          err(`${cwhere} 的 reply 指向不存在的 beat：${c.reply}`);
+        }
+        if (c.say && c.affinity === undefined) {
+          warn(`${cwhere} 是一句说出去的话，却没有声明 affinity：好感度不会变`);
+        }
+      }
+    }
+
+    // ---- elseBeat 不得成环 ----
+    const elseOf = new Map(def.beats.filter((b) => b.elseBeat).map((b) => [b.id, b.elseBeat!]));
+    for (const b of def.beats) {
+      const path = new Set<string>([b.id]);
+      let cur = elseOf.get(b.id);
+      while (cur) {
+        if (path.has(cur)) {
+          err(`频道 ${def.id} 的 elseBeat 成环：${[...path].join(' → ')} → ${cur}`);
+          break;
+        }
+        path.add(cur);
+        cur = elseOf.get(cur);
+      }
+    }
+  }
+
+  // ---- UI 侧用到的 bond 档位必须都有文案（模板字符串拼出来的，静态扫不到） ----
+  for (const lv of ['stranger', 'familiar', 'close', 'reliant']) {
+    if (!hasCopy(`channels.ui.bond.${lv}`)) err(`缺少文案键：channels.ui.bond.${lv}`);
+  }
+
+  // ---- 静态扫描：src/** 里出现的 t('channels.…') 必须都能解析 ----
+  // t() 缺键会静默返回键名，不查就会把 channels.ui.xxx 直接显示给玩家。
+  {
+    const { readdirSync, readFileSync: read } = await import('node:fs');
+    const walk = (dir: string): string[] => {
+      const out: string[] = [];
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+        const p = `${dir}/${e.name}`;
+        if (e.isDirectory()) out.push(...walk(p));
+        else if (/\.tsx?$/.test(e.name)) out.push(p);
+      }
+      return out;
+    };
+    const used = new Set<string>();
+    for (const file of walk('src')) {
+      const src = read(file, 'utf8');
+      for (const m of src.matchAll(/\bt\(\s*'(channels\.[A-Za-z0-9_.]+)'/g)) used.add(m[1]!);
+    }
+    for (const key of used) {
+      if (!hasCopy(key)) err(`代码里引用了不存在的频道文案键：${key}`);
+    }
+  }
+}
+
+// ============================================================
 // 输出
 // ============================================================
 

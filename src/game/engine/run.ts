@@ -4,6 +4,7 @@
 
 import { AP, BANK, COLD, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, WEAR, threatOfDay } from '../balance';
 import { t } from '../copy/t';
+import { CHANNEL_POOL } from '../content/channels';
 import { CLASS_BY_ID, PACK_BY_ID } from '../content/classes';
 import { DISASTER_BY_ID } from '../content/disasters';
 import { FAMILY_BY_ID } from '../content/events';
@@ -23,6 +24,7 @@ import type {
   SkillId,
   StatId,
 } from '../types';
+import { tickChannels } from './channels';
 import { assessCollapse } from './collapse';
 import { advanceProjects } from './construction';
 import { recordBeat, selectEvents, applyDirectorBoost } from './director';
@@ -129,7 +131,8 @@ export function createRun(opts: CreateRunOptions): RunState {
     directorBoost: {},
     thresholdFired: {},
     survivors: [],
-    locations: LOCATIONS.map((l) => ({ id: l.id, stock: l.stock })),
+    // 隐藏地点不进初始状态：它们是频道/事件给出坐标后才出现的一次性信号点
+    locations: LOCATIONS.filter((l) => !l.hidden).map((l) => ({ id: l.id, stock: l.stock })),
     visitedToday: [],
     boughtToday: {},
     savings: cashout ? BANK.SAVINGS / 2 : BANK.SAVINGS,
@@ -137,6 +140,8 @@ export function createRun(opts: CreateRunOptions): RunState {
     hasVehicle: cls.perk === 'trucker_vehicle',
     world,
     intel: [],
+    channels: [],
+    channelPool: [...CHANNEL_POOL],
     flags: [...(cls.tags ?? [])],
     eventHistory: {},
     recentBeats: [],
@@ -393,6 +398,12 @@ export function endDay(run: RunState): NightReport {
   run.visitedToday = [];
   run.boughtToday = {};
   run.atmUsed = 0;
+  run.channelSearchDay = undefined;
+
+  // 频道节拍投递。必须放在崩溃日的提前 return **之前**——
+  // 否则 day 8 那一拍（官方台开场）会整整迟到一天，而且不报任何错。
+  // tickChannels 内部不接收 rng：它走派生序列，保证整局随机流不变。
+  tickChannels(run);
 
   // ---------- 崩溃日 ----------
   if (run.day === TIME.COLLAPSE_DAY) {

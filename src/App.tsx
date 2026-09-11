@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import './game/copy';
 import { rebuildSettlement, useGame } from './game/store';
 import { t } from './game/copy/t';
+import { TIME } from './game/balance';
 import { SITE_BY_ID } from './game/content/sites';
 import Game from './ui/Game';
 import MainMenu from './ui/MainMenu';
@@ -20,6 +21,7 @@ import { ArtTodoPanel } from './ui/art/ArtTodoPanel';
 import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
+import { RadioPanel } from './ui/RadioPanel';
 import { PowerPanel } from './ui/PowerPanel';
 import { HelpPanel } from './ui/Help';
 import { ItemsPanel } from './ui/ItemsPanel';
@@ -124,7 +126,11 @@ export default function App() {
         (art && gameUi === 'art' ? <ArtShelterPanel run={run} /> : <ShelterPanel run={run} />)}
       {run && overlay === 'power' && <PowerPanel run={run} />}
       {run && overlay === 'map' && <MapPanel run={run} />}
-      {run && overlay === 'intel' && <IntelPanel run={run} />}
+      {/* 一个 overlay 值分两个面板：准备期情报板 → 灾后频段网络。
+          分流放这里而不是塞进 IntelPanel，是为了让准备期分支保持原样。 */}
+      {run &&
+        overlay === 'intel' &&
+        (run.day < TIME.COLLAPSE_DAY ? <IntelPanel run={run} /> : <RadioPanel run={run} />)}
       {run && overlay === 'crew' && (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) > 0 && (
         <CrewPanel run={run} />
       )}

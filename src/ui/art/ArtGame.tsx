@@ -55,6 +55,8 @@ export default function ArtGame() {
   // 窗景阶段：灾前 / 灾变早期（threat 1-3）/ 核冬天（threat ≥ NUCLEAR_WINTER.THREAT_PHASE）。
   const winStage: WindowStage = isPrep ? 'prep' : run.threat >= NUCLEAR_WINTER.THREAT_PHASE ? 'winter' : 'early';
   const mustRead = run.queue.length > 0;
+  // 准备期没有频道，这个数在准备期恒为 0（浮层也仍走情报板）
+  const radioUnread = isPrep ? 0 : run.channels.reduce((n, c) => n + c.inbox.length, 0);
   const noAp = run.ap <= 0;
   const indoorNow = currentIndoor(run);
   const power = cachedPower(run);
@@ -192,6 +194,9 @@ export default function ArtGame() {
             poly={HOME_POLY.radio}
             src={ART.cutHRadio}
             label={isPrep ? t('ui.game.intelPrep') : t('ui.game.intelLive')}
+            sub={radioUnread > 0 ? t('ui.game.intelUnread', { n: radioUnread }) : undefined}
+            // 频道有未读就脉冲：否则玩家永远不知道那一头有人在说话
+            pulse={radioUnread > 0}
             locked={locked}
             onClick={() => act(() => setOverlay('intel'))}
           />
@@ -221,6 +226,10 @@ export default function ArtGame() {
                 {iodineActive(run) && <Chip tone="good">{t('ui.game.iodine')}</Chip>}
                 {run.world.contagion > 20 && <Chip tone="psyche">{t('ui.game.contagion', { n: Math.round(run.world.contagion) })}</Chip>}
                 {run.world.lawOrder < 45 && <Chip tone="bad">{t('ui.game.law', { n: Math.round(run.world.lawOrder) })}</Chip>}
+                {/* 物资稀缺度：原先只在情报面板的局势卡片里，随卡片移除挪到 HUD */}
+                {run.world.scarcity > 30 && (
+                  <Chip tone="warn">{t('ui.game.scarcity', { n: Math.round(run.world.scarcity) })}</Chip>
+                )}
               </span>
             )}
           </div>

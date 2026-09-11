@@ -1,10 +1,10 @@
 import { memo, useMemo, useState } from 'react';
 
 import { BANK, PRICE, TIME } from '../game/balance';
-import { DISASTERS, DISASTER_BY_ID } from '../game/content/disasters';
+import { DISASTERS } from '../game/content/disasters';
 import { SOURCE_NAME } from '../game/content/intel';
 import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locations';
-import { BUILD_PATH_NAME, FACTION_NAME, ITEM_NAME, SKILL_NAME } from '../game/copy/names';
+import { BUILD_PATH_NAME, ITEM_NAME, SKILL_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES, moduleHardEffect, moduleSpec, moduleTier } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
@@ -17,11 +17,10 @@ import {
   nextWorkPortion,
 } from '../game/engine/construction';
 import { IODINE_BOX_LIMIT, IODINE_BOX_PRICE, CO_ALARM_PRICE, iodineBoughtCount, remainingBuyLimit, waterRoom } from '../game/engine/economy';
-import { effectiveModule, waterCapacity } from '../game/engine/tags';
-import { forecastAccuracy, WEATHER_NAME } from '../game/engine/world';
+import { waterCapacity } from '../game/engine/tags';
 import { useGame } from '../game/store';
 import type { DisasterId, IntelReading, LogEntry, ModuleId, ResourceId, RunState } from '../game/types';
-import { Bar, Chip, Empty, Modal, Panel, SectionLabel, Stat } from './kit';
+import { Bar, Chip, Empty, Modal, Panel, SectionLabel } from './kit';
 
 // ============================================================
 // 避难所
@@ -266,7 +265,10 @@ export function MapPanel({ run }: { run: RunState }) {
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const [night, setNight] = useState(false);
   const nightowl = run.abilities.includes('perk_nightowl');
-  const listed = isPrep ? LOCATIONS.filter((loc) => loc.prepShop) : LOCATIONS;
+  // 准备期只列能采购的（且隐藏信号点还没解锁）；生存期列全部，但隐藏点要已解锁
+  const listed = isPrep
+    ? LOCATIONS.filter((loc) => loc.prepShop && !loc.hidden)
+    : LOCATIONS.filter((loc) => !loc.hidden || run.locations.some((s) => s.id === loc.id));
 
   return (
     <Modal
@@ -402,10 +404,9 @@ export function IntelPanel({ run }: { run: RunState }) {
       onClose={() => setOverlay(null)}
       width="max-w-4xl"
     >
-      {run.world.revealed ? (
-        <RevealedIntel run={run} />
-      ) : (
-        <Panel title={t('ui.intel.infer')} mark className="mb-4">
+      {/* 灾后不出现在这里了：App 把 day >= COLLAPSE_DAY 的 intel 浮层转给 RadioPanel。
+          原先的「当前灾难 / 天气预报 / 局势指标」三张卡片已随之删除。 */}
+      <Panel title={t('ui.intel.infer')} mark className="mb-4">
           <p className="mb-3 text-[12px] leading-snug text-faint">{t('ui.intel.inferHint')}</p>
           <div className="space-y-2">
             {DISASTERS.map((d) => {
@@ -438,8 +439,7 @@ export function IntelPanel({ run }: { run: RunState }) {
               );
             })}
           </div>
-        </Panel>
-      )}
+      </Panel>
 
       <SectionLabel>{t('ui.intel.stream')}</SectionLabel>
       {days.length === 0 && <Empty>{t('ui.intel.empty')}</Empty>}
@@ -525,71 +525,9 @@ const IntelDay = memo(function IntelDay({
   );
 });
 
-function RevealedIntel({ run }: { run: RunState }) {
-  const def = DISASTER_BY_ID[run.world.disaster];
-  const acc = forecastAccuracy(run);
-  return (
-    <div className="mb-4 space-y-3">
-      <Panel title={t('ui.intel.current', { name: def.name })} mark>
-        <p className="mb-2 text-[12.5px] leading-relaxed text-amberhi">{def.thesis}</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div>
-            <div className="label mb-1">{t('ui.intel.keySupplies')}</div>
-            <div className="flex flex-wrap gap-1">
-              {def.keySupplies.map((s) => (
-                <Chip key={s} tone="warn">
-                  {s}
-                </Chip>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="label mb-1">{t('ui.intel.factions')}</div>
-            <div className="flex flex-wrap gap-1">
-              {def.factions.map((f) => (
-                <Chip key={f} tone="info">
-                  {FACTION_NAME[f] ?? f} {Math.round(run.world.factions[f])}
-                </Chip>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Panel>
-
-      <Panel title={t('ui.intel.forecast')} mark right={<span className="text-faint">{t('ui.intel.accuracy', { n: Math.round(acc * 100) })}</span>}>
-        <div className="flex gap-2">
-          {run.world.forecast.map((w, i) => (
-            <div key={i} className="flex-1 border border-line bg-ink px-2 py-2 text-center">
-              <div className="label">{t('ui.common.dayN', { n: run.day + i + 1 })}</div>
-              <div className="mt-1 text-[13px] text-paper">{WEATHER_NAME[w]}</div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-2 text-[11.5px] leading-snug text-faint">
-          {effectiveModule(run, 'radio') > 0
-            ? t('ui.intel.radioOn')
-            : run.modules.radio > 0
-              ? t('ui.intel.radioOff')
-              : t('ui.intel.noRadio')}
-        </p>
-      </Panel>
-
-      <Panel title={t('ui.intel.world')} mark>
-        <div className="grid gap-x-4 sm:grid-cols-2">
-          <Stat label={t('ui.intel.law')} value={Math.round(run.world.lawOrder)} tone={run.world.lawOrder < 40 ? 'bad' : 'warn'} />
-          <Stat label={t('ui.intel.scarcity')} value={Math.round(run.world.scarcity)} tone="warn" />
-          <Stat
-            label={t('ui.intel.neighborhood')}
-            value={Math.round(run.world.neighborhood)}
-            tone={run.world.neighborhood > 0 ? 'good' : 'bad'}
-          />
-          <Stat label={t('ui.intel.rad')} value={Math.round(run.world.radiation)} tone={run.world.radiation > 30 ? 'bad' : 'warn'} />
-          <Stat label={t('ui.intel.contagion')} value={Math.round(run.world.contagion)} tone="psyche" />
-        </div>
-      </Panel>
-    </div>
-  );
-}
+// 灾后的「当前灾难 / 天气预报 / 局势指标」三张卡片已随频道系统上线删除：
+// 前两者交给「战时官方频道」广播（准确度随 threat 衰减，后期开始撒谎），
+// 局势指标挪进 HUD 状态条。这里不再需要灾后分支。
 
 // ============================================================
 // 同伴
