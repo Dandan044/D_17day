@@ -176,15 +176,17 @@ export function computePower(run: RunState, heaterKwh?: number): PowerReport {
   let fuelBurn = 0;
   let battery = 0;
 
-  const rewiring = run.projects.some((p) =>
-    MODULE_BY_ID[p.moduleId].buildPenaltyTags.includes('power:blackout'),
-  );
+  const prepGrid = run.day < TIME.COLLAPSE_DAY;
+  // 换线只在灾后算断电：灾前电网还在供，改自家线路不该让冰箱和灯一起黑掉
+  // （原先这一支排在 prepGrid 之前，导致灾前只要发电机在建就误报「家电将停电」）。
+  const rewiring =
+    !prepGrid &&
+    run.projects.some((p) => MODULE_BY_ID[p.moduleId].buildPenaltyTags.includes('power:blackout'));
   if (rewiring) available = 0;
 
   const draws = collectDraws(run, heaterKwh);
   const demand = draws.reduce((s, d) => s + d.kwh, 0);
   const heaterRequest = draws.find((d) => d.id === 'heater')?.kwh ?? 0;
-  const prepGrid = run.day < TIME.COLLAPSE_DAY;
 
   if (!rewiring && batteryStored > 0 && demand > available) {
     battery = Math.min(batteryStored, demand - available);

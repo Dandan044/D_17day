@@ -149,7 +149,6 @@ export function deriveFacts(run: RunState): Facts {
   nums['streak:belowSurvival'] = run.streaks?.belowSurvival ?? 0;
 
   // --- 环境（均为越高越糟） ---
-  add(band(w.airPollution, [25, 50, 75], ['air:good', 'air:poor', 'air:bad', 'air:lethal']));
   add(band(w.radiation, [10, 40, 70], ['rad:none', 'rad:low', 'rad:high', 'rad:lethal']));
   add(band(w.contagion, [10, 45], ['contagion:none', 'contagion:low', 'contagion:high']));
   add(`water:${w.waterTable}`);
@@ -218,6 +217,7 @@ export function deriveFacts(run: RunState): Facts {
   if (run.flags.includes('flag:hasPet')) add('hasPet');
   if (hasIodinePrep(run)) add('hasIodine');
   if (run.flags.includes('flag:geiger')) add('hasGeiger');
+  // flag:mask 已无机械效果（空气污染链路删除后 MASK_BONUS 不复存在），保留仅作叙事
   if (run.flags.includes('flag:mask')) add('hasMask');
 
   for (const c of run.conditions) add(`cond:${c}`);
@@ -252,7 +252,6 @@ export function deriveFacts(run: RunState): Facts {
 
   // --- 数值事实 ---
   nums['world:temperature'] = w.temperature;
-  nums['world:airPollution'] = w.airPollution;
   nums['world:radiation'] = w.radiation;
   nums['world:contagion'] = w.contagion;
   nums['world:lawOrder'] = w.lawOrder;

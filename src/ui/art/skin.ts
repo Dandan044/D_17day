@@ -36,8 +36,14 @@ const boxLTWH = (b: readonly number[]): BoxStyle => ({
 const polyOf = (key: string): ArtPoly | undefined =>
   (item(key).poly as unknown as ArtPoly | null) ?? undefined;
 
+/** 图挂了就藏掉（避免出现浏览器默认的破图标）。开发模式下留一条日志——
+ *  静默隐藏会让"整块图没了"无从查起，把失败的 URL 打出来就能一眼定位。 */
 export function hideBrokenImg(e: { currentTarget: HTMLImageElement }) {
-  e.currentTarget.style.visibility = 'hidden';
+  const img = e.currentTarget;
+  if (import.meta.env.DEV) {
+    console.warn('[art] 图片加载失败，已隐藏：', img.currentSrc || img.src);
+  }
+  img.style.visibility = 'hidden';
 }
 
 export const ART = {
@@ -71,6 +77,24 @@ export const ART = {
   sceneHomeSide: './art/scene-home-side.jpg',
   /** 避难所工程图纸面板的纸面底（ImageGen 生成，scripts/make-shelter-paper.py 裁切）。 */
   shelterPaper: './art/paper-shelter.jpg',
+  /** 今日待办：笔记本内页的冷米白纸底（make-todo-paper.py）。 */
+  todoPaper: './art/paper-todo.jpg',
+  /** 今日计划：计划表纸的暖卡其纸底（make-plan-paper.py）。 */
+  planPaper: './art/paper-plan.jpg',
+  /** 今日计划三栅的手绘线稿（make-art-linefig.py 生成）。线稿与其 -mask 成对使用：
+   *  线稿内部透明、压在填充层之上；掩膜把填充色裁进形状内部（否则颜色会从轮廓外渗出）。 */
+  linePower: './art/line-power.png',
+  linePowerMask: './art/line-power-mask.png',
+  lineRation: './art/line-ration.png',
+  lineRationMask: './art/line-ration-mask.png',
+  lineWater: './art/line-water.png',
+  lineWaterMask: './art/line-water-mask.png',
+  lineThermo: './art/line-thermo.png',
+  lineThermoMask: './art/line-thermo-mask.png',
+  /** 笔记本纸面的动态污损（make-notebook-wear.py）：理智降档出皱与涂鸦，人性降档出血污。 */
+  wearSanity: (stage: 2 | 3, i: number) => `./art/wear-sanity${stage}-${'abc'[i] ?? 'a'}.jpg`,
+  wearBlood: (i: number) => `./art/wear-blood-${i + 1}.jpg`,
+  wearHand: './art/wear-hand.jpg',
   cutHNotebook: './art/cut-h-notebook.png',
   cutHPlan: './art/cut-h-plan.png',
   cutHClock: './art/cut-h-clock.png',

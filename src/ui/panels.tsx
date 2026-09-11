@@ -6,7 +6,7 @@ import { SOURCE_NAME } from '../game/content/intel';
 import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locations';
 import { BUILD_PATH_NAME, FACTION_NAME, ITEM_NAME, SKILL_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
-import { MODULES, moduleHardEffect, moduleSpec } from '../game/content/modules';
+import { MODULES, moduleHardEffect, moduleSpec, moduleTier } from '../game/content/modules';
 import { SITE_BY_ID } from '../game/content/sites';
 import {
   SALVAGE_TARGETS,
@@ -80,7 +80,7 @@ export function ShelterPanel({ run }: { run: RunState }) {
                     {project && <Chip tone="warn">{t('ui.common.building')}</Chip>}
                   </div>
                   <div className="truncate text-[11.5px] text-faint">
-                    {moduleHardEffect(id, level, site.waterCapMult) ||
+                    {moduleHardEffect(id, level) ||
                       (level > 0 ? (moduleSpec(id, level)?.desc ?? m.desc) : m.zero)}
                   </div>
                 </div>
@@ -101,11 +101,15 @@ export function ShelterPanel({ run }: { run: RunState }) {
               {isOpen && (
                 <div className="border-t border-line p-3">
                   <p className="mb-3 text-[12.5px] leading-relaxed text-dim">{m.desc}</p>
+                  {/* 当前等级的"构成"，随等级变化（0 级说现状，1/2/3 级说材料与做法） */}
+                  <p className="mb-3 border-l-2 border-line2 pl-2 text-[12.5px] leading-relaxed text-paper">
+                    {level === 0 ? m.zero : (moduleSpec(id, level)?.desc ?? m.desc)}
+                  </p>
                   <div className="mb-3 text-[12px] leading-snug text-amberhi">
                     {t('ui.shelter.current', {
-                      fx: moduleHardEffect(id, level, site.waterCapMult) || t('ui.common.none'),
+                      fx: moduleHardEffect(id, level) || t('ui.common.none'),
                     })}
-                    {target ? t('ui.shelter.next', { fx: moduleHardEffect(id, target, site.waterCapMult) }) : ''}
+                    {target ? t('ui.shelter.next', { fx: moduleHardEffect(id, target) }) : ''}
                   </div>
 
                   {project && (
@@ -182,7 +186,9 @@ export function ShelterPanel({ run }: { run: RunState }) {
                           ))}
                         </div>
                       )}
-                      {spec.power ? <p className="mt-2 text-[11.5px] text-faint">{t('ui.shelter.power', { n: spec.power })}</p> : null}
+                      {spec.power ? (
+                        <p className="mt-2 text-[11.5px] text-faint">{t('ui.shelter.power', { tier: moduleTier(target ?? 0) })}</p>
+                      ) : null}
                     </>
                   )}
 
@@ -577,7 +583,6 @@ function RevealedIntel({ run }: { run: RunState }) {
             value={Math.round(run.world.neighborhood)}
             tone={run.world.neighborhood > 0 ? 'good' : 'bad'}
           />
-          <Stat label={t('ui.intel.air')} value={Math.round(run.world.airPollution)} tone="warn" />
           <Stat label={t('ui.intel.rad')} value={Math.round(run.world.radiation)} tone={run.world.radiation > 30 ? 'bad' : 'warn'} />
           <Stat label={t('ui.intel.contagion')} value={Math.round(run.world.contagion)} tone="psyche" />
         </div>

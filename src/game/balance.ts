@@ -129,6 +129,8 @@ export const HEALTH = {
   /** 理智低于此值开始每日掉 HP */
   SANITY_BREAK: 15,
   SANITY_BREAK_HP: -3,
+  /** 人性低于此值开始出现「罪孽回头找你」的预警（与笔记本纸面的血污档位对齐） */
+  HUMANITY_OMEN: 20,
   /** 无食物储备时每日强制饥饿 */
   STARVE_HP: -8,
   /** 营养不良的累积阈值：连续 n 天半配给 */
@@ -273,14 +275,8 @@ export const NUCLEAR_WINTER = {
   WEATHER_WEIGHT: 0.5,
 } as const;
 
-/** 空气：过滤等级能抵御的污染上限 */
+/** 只剩 CO 风险：原「空气污染」链路（过滤容忍 / 每夜扣血 / 口罩加成）已整体删除 */
 export const AIR = {
-  FILTER_TOLERANCE: [42, 62, 82, 97],
-  HP_PER_POINT: 0.1,
-  /** 密封对颗粒物同样有效：每级保温提升的容忍度 */
-  SEAL_BONUS: 4,
-  /** 有口罩时的容忍度加成 */
-  MASK_BONUS: 10,
   /** 密封（保温≥2）且燃烧取暖时的 CO 中毒概率，有报警器则清零 */
   CO_RISK: 0.16,
 } as const;
@@ -301,8 +297,8 @@ export const RAD = {
 
 export const EXPOSURE = {
   MAX: 100,
-  /** 每日自然衰减（已并入 dailyExposure 的隐蔽/天气项，勿在 endDay 再扣一遍） */
-  DECAY: 4,
+  // 说明：**当前不存在每日自然衰减**。曾经设想的 DECAY 从未接进 dailyExposure，
+  // 已在 2026-09-11 连同无人调用的 decayExposure() 一起删除（要补衰减属独立平衡任务）。
   /** 各来源的每日增量 */
   SRC_POWER_FULL: 9,
   SRC_POWER_THRIFTY: 3,

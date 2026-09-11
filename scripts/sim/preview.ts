@@ -14,7 +14,6 @@ export interface EffectDelta {
   skills: Partial<Record<SkillId, number>>;
   world: {
     exposure?: number;
-    airPollution?: number;
     radiation?: number;
     contagion?: number;
     temperature?: number;
@@ -68,7 +67,6 @@ export function flattenEffect(eff: Effect | undefined): EffectDelta {
   if (eff.world) {
     const w = eff.world;
     if (w.exposure) d.world.exposure = (d.world.exposure ?? 0) + w.exposure;
-    if (w.airPollution) d.world.airPollution = (d.world.airPollution ?? 0) + w.airPollution;
     if (w.radiation) d.world.radiation = (d.world.radiation ?? 0) + w.radiation;
     if (w.contagion) d.world.contagion = (d.world.contagion ?? 0) + w.contagion;
     if (w.temperature) d.world.temperature = (d.world.temperature ?? 0) + w.temperature;
@@ -190,7 +188,6 @@ export function scoreDelta(d: EffectDelta): number {
   s += (d.world.exposure ?? 0) * -6;
   s += (d.world.radiation ?? 0) * -5;
   s += (d.world.contagion ?? 0) * -4;
-  s += (d.world.airPollution ?? 0) * -2;
   s += (d.world.lawOrder ?? 0) * 0.5;
   s += (d.world.scarcity ?? 0) * -0.3;
   s += (d.world.temperature ?? 0) * 0.4;

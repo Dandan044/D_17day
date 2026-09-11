@@ -332,16 +332,10 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   notes.push(ledger(t('ledger.health.indoor', { felt, comfort, survival })));
   run.flags = run.flags.filter((f) => f !== 'flag:layeredClothes');
 
-  // ---------- 4. 空气 ----------
+  // ---------- 4. 一氧化碳 ----------
+  // 原「空气污染 → 每夜扣血」整段已删（核污染独占该生态位；空气过滤器改为只在辐射屏蔽里出力）。
+  // airFilter 这个局部量后面「辐射」与「水源与疾病」两节还在用，保留。
   const airFilter = effectiveModule(run, 'airFilter');
-  let airTol = AIR.FILTER_TOLERANCE[airFilter] ?? AIR.FILTER_TOLERANCE[0]!;
-  airTol += insulate * AIR.SEAL_BONUS;
-  if (run.flags.includes('flag:mask')) airTol += AIR.MASK_BONUS;
-  if (run.world.airPollution > airTol) {
-    const over = run.world.airPollution - airTol;
-    hit(-over * AIR.HP_PER_POINT, t('ledger.cause.air'));
-    notes.push(ledger(t('ledger.health.air', { pollution: Math.round(run.world.airPollution), over: Math.round(over) }), 'bad'));
-  }
 
   const sealed = insulate >= 2;
   const coImmune = run.flags.includes('flag:coVenting');

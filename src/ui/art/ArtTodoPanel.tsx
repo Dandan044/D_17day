@@ -1,80 +1,62 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-import { HOOK_NAME } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
-import { collectHookRegister, collectTodos, HOOK_CONDITIONS } from '../../game/engine/todos';
 import { useGame } from '../../game/store';
 import type { RunState } from '../../game/types';
-import { Modal, SectionLabel } from '../kit';
+import { NotebookSheet } from './NotebookSheet';
+import { ART } from './skin';
+import { TodoSpread } from './TodoSpread';
+import './art.css';
 
-/** 今日待办面板：上栏迫在眉睫（红/橙分级卡片，悬停或点击展开详情），
- *  下栏事件钩子登记（只列已挂起钩子的名与触发条件，不透后果）。
- *  纯派生只读面板——不动 run，随时可开可关。 */
+/**
+ * 今日待办：桌面上那本横开笔记本，翻开摊在眼前。
+ *
+ * 进入方式与视觉必须呼应——点的是桌上的本子，所以整屏就是这本本子摊开的两页：
+ * 左页「迫在眉睫」（红笔划定 = 要命、橙色马克笔 = 预警），右页「在等的事」（钩子登记）。
+ * 纸的冷米白、中缝与针脚、横格底线都是拿来解释"这是一本手写本"的。
+ *
+ * 正文在 `TodoSpread` 里——另一个入口是「事件翻完」，那时纸不该重新进场，
+ * 所以只有这里负责整屏 veil 与纸的进/出场动画。
+ *
+ * 与旧版的两点差别：
+ * 1. 详情从"悬停弹深色浮层"改成**点开内联推挤**——深色浮层在米白纸上正是要消灭的控制台感，
+ *    而且浮层里的东西悬不稳、触屏直接失效；
+ * 2. 每条常显「标题 + 一行最要害的数值」，其余数值行与对策点开才看。
+ *
+ * 纯派生只读面板——不动 run，随时可开可关。数据契约仍走 collectTodos / collectHookRegister。
+ */
+
+const SHEET_OUT_MS = 240;
+
 export function ArtTodoPanel({ run }: { run: RunState }) {
   const setOverlay = useGame((s) => s.setOverlay);
-  const todos = useMemo(() => collectTodos(run), [run]);
-  const hooks = useMemo(() => collectHookRegister(run), [run]);
-  const [openId, setOpenId] = useState<string | null>(null);
-  const hasEventWaiting = run.queue.length > 0;
+  const [closing, setClosing] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+    timer.current = window.setTimeout(() => setOverlay(null), SHEET_OUT_MS);
+  };
 
   return (
-    <Modal title={t('ui.game.todoTitle')} onClose={() => setOverlay(null)} width="max-w-2xl">
-      <SectionLabel>{t('ui.game.todoUrgent')}</SectionLabel>
-      {todos.length === 0 ? (
-        <p className="text-[12px] leading-relaxed text-faint">{t('ui.game.todoNone')}</p>
-      ) : (
-        <div className="space-y-2">
-          {todos.map((td) => {
-            const open = openId === td.id;
-            return (
-              <div
-                key={td.id}
-                className={`art-todo-item is-${td.level}${open ? ' is-open' : ''}`}
-                onClick={() => setOpenId(open ? null : td.id)}
-              >
-                <div className="art-todo-head">
-                  <span className="art-todo-dot" aria-hidden />
-                  <span className="art-todo-title">{td.title}</span>
-                </div>
-                <div className="art-todo-detail" role="note">
-                  {td.lines.map((line) => (
-                    <p key={line}>{line}</p>
-                  ))}
-                  <p className="art-todo-fix">
-                    {t('ui.game.todoFix')}：{td.fix}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="mt-4 border-t border-line pt-3">
-        <SectionLabel>{t('ui.game.todoHooks')}</SectionLabel>
-        {hooks.length === 0 ? (
-          <p className="text-[12px] text-faint">{t('ui.game.todoNoHooks')}</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {hooks.map((row) => (
-              <li key={row.hook} className="flex items-baseline justify-between gap-3 text-[12px] leading-snug">
-                <span className="text-[#dfe2e5]">
-                  {HOOK_NAME[row.hook]}
-                  {row.count > 1 && (
-                    <span className="text-faint">
-                      （{row.count} {t('ui.game.todoHookWait')}）
-                    </span>
-                  )}
-                </span>
-                <span className="text-right text-[11px] text-dim">{HOOK_CONDITIONS[row.hook]}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {hasEventWaiting && (
-          <p className="mt-3 border-t border-line pt-2 text-[11.5px] text-amberhi">{t('ui.game.todoOpenEvent')}</p>
-        )}
-      </div>
-    </Modal>
+    <div
+      className={`art-nb-veil${closing ? ' is-closing' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('ui.game.todoTitle')}
+    >
+      <div className="art-nb-room" style={{ backgroundImage: `url(${ART.sceneHomeDesk})` }} aria-hidden />
+      <NotebookSheet run={run}>
+        <TodoSpread run={run} onClose={close} />
+      </NotebookSheet>
+    </div>
   );
 }

@@ -181,7 +181,6 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
         'seal_fort',
         {
           stats: { stamina: -6, sanity: 2 },
-          world: { airPollution: -2 },
           setFlags: ['flag:smokeSealedFort'],
           schedule: [{ familyId: 'nuke_build_smoke_2', inDays: 1 }],
 
@@ -193,7 +192,6 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
         'seal_insulate',
         {
           stats: { stamina: -6, sanity: 2 },
-          world: { airPollution: -2 },
           setFlags: ['flag:smokeSealedInsulate'],
           schedule: [{ familyId: 'nuke_build_smoke_2', inDays: 1 }],
 
@@ -227,7 +225,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ),
       skip({
         stats: { hp: -4, sanity: -6 },
-        world: { radiation: 3, airPollution: 6, exposure: 4 },
+        world: { radiation: 3, exposure: 4 },
         setFlags: ['flag:smokeOpenedWindow'],
         schedule: [{ familyId: 'nuke_build_smoke_2', inDays: 1 }],
       }),

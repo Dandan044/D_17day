@@ -995,29 +995,6 @@ button.art-link {
   transform: scaleX(-1) translateX(4px);
 }
 
-.art-event-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6vh 8vw;
-  background: rgba(7, 9, 11, 0.42);
-}
-
-.art-event-card {
-  width: min(640px, 100%);
-  max-height: 86vh;
-  overflow: auto;
-}
-
-.art-event-back {
-  position: absolute;
-  top: 5%;
-  left: 4%;
-}
-
 .art-dock {
   position: absolute;
   left: 50%;
@@ -1164,95 +1141,6 @@ button.art-link {
   font-size: 10.5px;
   line-height: 1.6;
   color: #9aa0a6;
-}
-
-/* 今日待办面板：红/橙分级卡片 + 事件钩子登记。 */
-.art-todo-item {
-  position: relative;
-  border: 1px solid rgba(198, 202, 207, 0.12);
-  border-left-width: 3px;
-  background: rgba(255, 255, 255, 0.025);
-  cursor: pointer;
-  user-select: none;
-}
-
-.art-todo-item.is-red {
-  border-left-color: #d33a2c;
-}
-
-.art-todo-item.is-orange {
-  border-left-color: #e0862a;
-}
-
-.art-todo-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-}
-
-.art-todo-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-
-.art-todo-item.is-red .art-todo-dot {
-  background: #d33a2c;
-  box-shadow: 0 0 6px rgba(211, 58, 44, 0.7);
-}
-
-.art-todo-item.is-orange .art-todo-dot {
-  background: #e0862a;
-  box-shadow: 0 0 6px rgba(224, 134, 42, 0.6);
-}
-
-.art-todo-title {
-  font-size: 12.5px;
-  letter-spacing: 0.08em;
-  color: #dfe2e5;
-}
-
-.art-todo-detail {
-  /* 悬停/点击展开的详情是绝对定位浮层：盖在下方卡片上，列表零布局位移，弹窗不抖。 */
-  display: none;
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  top: 100%;
-  z-index: 5;
-  padding: 7px 12px 10px 25px;
-  background: rgba(16, 18, 21, 0.98);
-  border: 1px solid rgba(198, 202, 207, 0.22);
-  border-top: 1px dashed rgba(198, 202, 207, 0.18);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55);
-}
-
-.art-todo-item:hover .art-todo-detail,
-.art-todo-item.is-open .art-todo-detail {
-  display: block;
-}
-
-.art-todo-detail p {
-  margin: 0 0 3px;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: #b9bec3;
-}
-
-.art-todo-detail .art-todo-fix {
-  margin: 5px 0 0;
-  color: #8f9aa4;
-  font-size: 11px;
-}
-
-.art-todo-item.is-red .art-todo-detail p:first-child {
-  color: #e8b0a8;
-}
-
-.art-todo-item.is-orange .art-todo-detail p:first-child {
-  color: #e0c79e;
 }
 
 /* ============================================================
@@ -1890,6 +1778,18 @@ button.art-link {
   color: var(--sh-ink-2);
 }
 
+/* 当前等级的"构成"（材料与做法）：用一条左侧墨线把它从简介里拎出来，像图纸上的做法说明。
+   0 级写现状有多寒酸，1/2/3 级写材料与做法，随等级变化。 */
+.art-shelter-build {
+  margin: 0 0 10px;
+  padding-left: 10px;
+  border-left: 2.2px solid var(--sh-rule-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.8;
+  color: var(--sh-ink);
+}
+
 .art-shelter-effect {
   margin: 0 0 9px;
   font-size: 12.5px;
@@ -2314,4 +2214,2073 @@ button.art-link {
   .sh-tb-cell {
     border-bottom: 1px solid var(--sh-rule);
   }
+}
+
+/* ============================================================
+   今日待办：桌上那本横开笔记本，翻开摊在眼前
+   ------------------------------------------------------------
+   进入方式与呈现互相解释——点的是桌上的本子，整屏就是这本本子摊开的两页。
+   左页「迫在眉睫」的红/橙分级用**手写批注**表达：红笔划定 = 要命、橙色马克笔 = 预警；
+   右页「在等的事」是钩子登记。冷米白纸 + 中缝针脚 + 每行一条横格底线，
+   都拿来解释"这是一本手写本"（横格由每条自己画——条目高度会随展开变化，
+   烤进贴图的格线必然与内容错位）。
+   ============================================================ */
+
+.art-nb-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3.2vh 3vw;
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  /* 手写楷体栈：本子上的字 */
+  --nb-hand: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  /* 冷调米白纸 + 蓝黑圆珠笔：与避难所那张暖卡其图纸刻意分家 */
+  --nb-ink: #1c2026;
+  --nb-ink-2: #3a4048;
+  --nb-ink-3: #5a616b;
+  --nb-red: #b02a1e;
+  --nb-orange-ink: #8a5210;
+  --nb-marker: rgba(217, 131, 36, 0.42);
+  --nb-rule: rgba(58, 78, 110, 0.28);
+  --nb-rule-2: rgba(58, 78, 110, 0.5);
+  --nb-margin: rgba(178, 58, 48, 0.5);
+  --nb-pencil: #4a4a4a;
+  /* 兜底纸色必须与纸面图同档，否则图未加载瞬间闪白 */
+  --nb-paper: #e3e1d4;
+  --nb-paper-hi: #eae8dc;
+  --nb-paper-lo: #d3d1c2;
+  --nb-card: rgba(28, 32, 38, 0.045);
+  --nb-detail: rgba(28, 32, 38, 0.07);
+  color: var(--nb-ink);
+  font-weight: 500;
+}
+
+.art-nb-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.33) saturate(0.7);
+  animation: art-nb-lift 460ms ease both;
+}
+
+.art-nb-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.3) 24%, rgba(4, 6, 8, 0.86) 100%);
+  animation: art-nb-lift 400ms ease both;
+}
+
+@keyframes art-nb-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- 本子 ---- */
+.art-nb-sheet {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(1160px, 93vw);
+  height: min(700px, 90vh);
+  background: var(--nb-paper);
+  /* 缩放锚点＝桌面上那本本子的位置（left 24.8% / top 69.5%，188×81） */
+  transform-origin: 30% 74%;
+  box-shadow:
+    0 40px 88px -26px rgba(0, 0, 0, 0.8),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: art-nb-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.art-nb-paper {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(60, 52, 34, 0.22);
+}
+
+/* 左侧朱红页边线 */
+.art-nb-margin {
+  position: absolute;
+  left: 38px;
+  top: 0;
+  bottom: 0;
+  width: 1.4px;
+  background: var(--nb-margin);
+}
+
+/* 中缝：折痕 + 四针装订 */
+.art-nb-spine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(60, 56, 42, 0) 0%,
+    rgba(60, 56, 42, 0.09) 34%,
+    rgba(44, 40, 28, 0.3) 50%,
+    rgba(60, 56, 42, 0.09) 66%,
+    rgba(60, 56, 42, 0) 100%
+  );
+}
+
+.art-nb-spine i {
+  position: absolute;
+  left: 50%;
+  width: 13px;
+  height: 3px;
+  margin-left: -6.5px;
+  background: var(--nb-pencil);
+  opacity: 0.5;
+  transform: rotate(-3deg);
+}
+
+.art-nb-spine i:nth-child(1) {
+  top: 16%;
+}
+
+.art-nb-spine i:nth-child(2) {
+  top: 39%;
+}
+
+.art-nb-spine i:nth-child(3) {
+  top: 62%;
+}
+
+.art-nb-spine i:nth-child(4) {
+  top: 85%;
+}
+
+@keyframes art-nb-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-24vw, 30vh, 0) scale(0.2) rotate(-2.6deg);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-nb-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-nb-veil.is-closing .art-nb-sheet {
+  animation: art-nb-out 240ms ease-in both;
+}
+
+.art-nb-veil.is-closing .art-nb-room,
+.art-nb-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-nb-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-20vw, 26vh, 0) scale(0.22) rotate(-2deg);
+  }
+}
+
+/* ---- 本子抬头 ---- */
+.art-nb-strip {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 20px 11px 52px;
+}
+
+.art-nb-stamp {
+  padding: 1px 7px;
+  border: 1.2px solid var(--nb-margin);
+  color: var(--nb-red);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  transform: rotate(-1.6deg);
+}
+
+.art-nb-title {
+  margin: 0;
+  font-family: var(--nb-hand);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--nb-ink);
+}
+
+.art-nb-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.3px solid var(--nb-rule-2);
+  background: rgba(255, 255, 255, 0.35);
+  color: var(--nb-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-nb-close:hover {
+  background: var(--nb-ink);
+  border-color: var(--nb-ink);
+  color: #f2ece0;
+}
+
+/* ---- 对开两页 ---- */
+.art-nb-spread {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.art-nb-spread::-webkit-scrollbar {
+  width: 8px;
+}
+
+.art-nb-spread::-webkit-scrollbar-track {
+  background: rgba(58, 78, 110, 0.08);
+}
+
+.art-nb-spread::-webkit-scrollbar-thumb {
+  background: rgba(58, 78, 110, 0.35);
+}
+
+.art-nb-page {
+  min-width: 0;
+  padding: 0 22px 18px;
+}
+
+.art-nb-page.is-left {
+  padding-left: 52px;
+}
+
+.art-nb-page.is-right {
+  padding-right: 30px;
+}
+
+.art-nb-pagehead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1.4px solid var(--nb-rule-2);
+}
+
+.art-nb-pagename {
+  margin: 0;
+  font-family: var(--nb-hand);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--nb-red);
+}
+
+.art-nb-page.is-right .art-nb-pagename {
+  color: var(--nb-ink-2);
+}
+
+.art-nb-empty {
+  margin: 8px 0 0;
+  font-family: var(--nb-hand);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--nb-ink-3);
+}
+
+/* ---- 条目 ---- */
+.art-nb-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.art-nb-item {
+  position: relative;
+  border-bottom: 1px solid var(--nb-rule);
+}
+
+.art-nb-itembtn {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 2px 7px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.art-nb-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.art-nb-head {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.art-nb-no {
+  color: var(--nb-ink-3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.art-nb-name {
+  font-family: var(--nb-hand);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--nb-ink);
+}
+
+/* 红笔划定：两条略斜的线叠成手绘下划线，比 border-bottom 更像笔迹 */
+.art-nb-item.is-red .art-nb-name::after {
+  content: '';
+  display: block;
+  height: 5px;
+  margin-top: -1px;
+  background:
+    linear-gradient(94deg, transparent 0 1%, var(--nb-red) 1% 99%, transparent 99%) center 0 / 100% 2px no-repeat,
+    linear-gradient(86deg, transparent 46%, var(--nb-red) 46% 53%, transparent 53%) center 100% / 100% 2px no-repeat;
+  opacity: 0.85;
+}
+
+/* 橙色马克笔：斜切、上下留白、边缘不齐，像马克笔扫过标题带 */
+.art-nb-item.is-orange .art-nb-head::before {
+  content: '';
+  position: absolute;
+  inset: 1px -7px 2px -4px;
+  z-index: 0;
+  background: linear-gradient(180deg, transparent 0 14%, var(--nb-marker) 14% 86%, transparent 86%);
+  transform: rotate(-0.6deg) skewX(-2deg);
+  mix-blend-mode: multiply;
+  opacity: 0.6;
+}
+
+.art-nb-item.is-orange .art-nb-head > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 常显的关键数值行 */
+.art-nb-key {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--nb-ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.art-nb-caret {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--nb-ink-3);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms ease;
+}
+
+.art-nb-item.is-open .art-nb-caret {
+  transform: rotate(180deg);
+}
+
+.art-nb-item.is-open .art-nb-itembtn {
+  background: var(--nb-card);
+}
+
+/* 展开区：内联推挤（不是绝对定位浮层），列表高度真的会变 */
+.art-nb-detail {
+  padding: 2px 4px 9px 21px;
+  animation: art-nb-detail-in 160ms ease both;
+}
+
+@keyframes art-nb-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.art-nb-detail p {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.72;
+  color: var(--nb-ink-2);
+}
+
+.art-nb-fix {
+  margin-top: 4px !important;
+  padding-left: 9px;
+  border-left: 2.4px solid var(--nb-red);
+  font-weight: 600 !important;
+  color: var(--nb-red) !important;
+}
+
+/* ---- 右页：在等的事 ---- */
+.art-nb-hooks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.art-nb-hook {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--nb-rule);
+}
+
+.art-nb-hookname {
+  font-family: var(--nb-hand);
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--nb-ink);
+}
+
+.art-nb-hookcount {
+  margin-left: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--nb-ink-3);
+}
+
+.art-nb-hookcond {
+  flex: none;
+  max-width: 52%;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--nb-ink-3);
+}
+
+/* 页脚红笔批注 */
+.art-nb-note {
+  margin: 10px 0 0;
+  padding: 5px 8px 5px 10px;
+  border-left: 3px solid var(--nb-red);
+  background: rgba(176, 42, 30, 0.07);
+  font-family: var(--nb-hand);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--nb-red);
+}
+
+/* ---- 本子页脚 ---- */
+.art-nb-foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 20px 10px 52px;
+  border-top: 1px solid var(--nb-rule);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--nb-ink-3);
+}
+
+.art-nb-footdot {
+  opacity: 0.6;
+}
+
+/* ---- 窄屏：两页改上下叠 ---- */
+@media (max-width: 900px) {
+  .art-nb-sheet {
+    height: min(760px, 92vh);
+  }
+
+  .art-nb-spread {
+    grid-template-columns: 1fr;
+  }
+
+  .art-nb-spine,
+  .art-nb-margin {
+    display: none;
+  }
+
+  .art-nb-page,
+  .art-nb-page.is-left,
+  .art-nb-page.is-right {
+    padding: 0 16px 14px;
+  }
+
+  .art-nb-strip,
+  .art-nb-foot {
+    padding-left: 18px;
+  }
+
+  .art-nb-hook {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .art-nb-hookcond {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+/* ============================================================
+   今日计划：桌上那张宽横纸，摊开来是一张「睡前安排」计划表
+   ------------------------------------------------------------
+   左栅配给 / 中栅取暖 / 右栅供电。纸与逻辑同避难所那张公文纸一个家族
+   （墨色/朱红/赭石/墨绿取同一组 hex，纸色提亮一档），与笔记本的冷色纸刻意分家。
+   取暖那两根滑杆做成「纸上刻度尺 + 游标」——游标就是重皮后的原生 thumb，
+   不另做独立元素（原生 thumb 两端有内缩，独立游标必然与真值错位）。
+   ============================================================ */
+
+.art-pl-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3.2vh 3vw;
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  --pl-ink: #191b1c;
+  --pl-ink-2: #33352f;
+  --pl-ink-3: #3f3e37;
+  --pl-rule: rgba(20, 22, 21, 0.3);
+  --pl-rule-2: rgba(20, 22, 21, 0.58);
+  --pl-rule-3: rgba(20, 22, 21, 0.86);
+  --pl-red: #8f2a12;
+  --pl-red-2: #a83a1c;
+  --pl-ochre: #5c3f0a;
+  --pl-green: #27492f;
+  --pl-blue: #1f3a52;
+  /* 兜底纸色（比避难所 #c6b491 略亮，好让两张公文纸也分得开） */
+  --pl-paper: #c9b994;
+  --pl-paper-hi: #cfc09a;
+  --pl-paper-lo: #b7a680;
+  --pl-card: rgba(20, 22, 21, 0.05);
+  --pl-detail: rgba(20, 22, 21, 0.08);
+  color: var(--pl-ink);
+  font-weight: 500;
+}
+
+.art-pl-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.33) saturate(0.7);
+  animation: art-pl-lift 460ms ease both;
+}
+
+.art-pl-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.3) 24%, rgba(4, 6, 8, 0.86) 100%);
+  animation: art-pl-lift 400ms ease both;
+}
+
+@keyframes art-pl-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.art-pl-sheet {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(1320px, 96vw);
+  height: min(680px, 88vh);
+  background: var(--pl-paper);
+  /* 缩放锚点＝桌面上那张计划纸的位置（left 36.1% / top 67.9%，354×105） */
+  transform-origin: 47% 74%;
+  box-shadow:
+    0 40px 88px -26px rgba(0, 0, 0, 0.8),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: art-pl-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.art-pl-paper {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(40, 30, 15, 0.38),
+    inset 0 0 150px rgba(50, 36, 16, 0.26);
+}
+
+@keyframes art-pl-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-16vw, 30vh, 0) scale(0.16) rotate(1.8deg);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-pl-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-pl-veil.is-closing .art-pl-sheet {
+  animation: art-pl-out 240ms ease-in both;
+}
+
+.art-pl-veil.is-closing .art-pl-room,
+.art-pl-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-pl-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-14vw, 26vh, 0) scale(0.18) rotate(1.4deg);
+  }
+}
+
+/* ---- 表头 / 图签 / 正文 ---- */
+.art-pl-frame {
+  position: absolute;
+  inset: 1.6% 1.5%;
+  display: flex;
+  flex-direction: column;
+  border: 1.6px solid var(--pl-rule-3);
+}
+
+.art-pl-frame::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 0.8px solid rgba(20, 22, 21, 0.38);
+  pointer-events: none;
+}
+
+.art-pl-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 12px 20px 10px;
+  border-bottom: 1.6px solid var(--pl-rule-3);
+}
+
+.art-pl-stamp {
+  padding: 1px 7px;
+  border: 1px solid var(--pl-rule-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.art-pl-headmain {
+  min-width: 0;
+}
+
+.art-pl-title {
+  margin: 0;
+  font-family: var(--art-serif);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--pl-ink);
+}
+
+.art-pl-sub {
+  margin: 3px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.3px solid var(--pl-rule-2);
+  background: var(--pl-card);
+  color: var(--pl-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-pl-close:hover {
+  background: var(--pl-ink);
+  border-color: var(--pl-ink);
+  color: #f2ece0;
+}
+
+.art-pl-body {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.art-pl-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.art-pl-body::-webkit-scrollbar-track {
+  background: rgba(20, 22, 21, 0.09);
+}
+
+.art-pl-body::-webkit-scrollbar-thumb {
+  background: rgba(20, 22, 21, 0.38);
+}
+
+/* ---- 三栅 ---- */
+.art-pl-cols {
+  display: grid;
+  /* 供电栏最宽（负荷台账一行要塞名字+kWh+状态+三个操作） */
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.08fr) minmax(0, 1.24fr);
+  align-items: start;
+  padding: 14px 8px 16px;
+}
+
+.art-pl-col {
+  min-width: 0;
+  padding: 0 18px;
+}
+
+.art-pl-col:not(:last-child) {
+  border-right: 1.3px solid var(--pl-rule-2);
+}
+
+.art-pl-colname {
+  margin: 0 0 9px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--pl-rule);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--pl-ink);
+}
+
+/* 取暖栏的危险/预警：红笔划重点框 / 赭石批注（不用霓虹脉冲） */
+.art-pl-col.is-danger {
+  box-shadow: inset 0 0 0 1.6px rgba(143, 42, 18, 0.5);
+}
+
+.art-pl-col.is-warn {
+  box-shadow: inset 0 0 0 1.6px rgba(92, 63, 10, 0.42);
+}
+
+/* ---- 配给 ---- */
+.art-pl-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.art-pl-row.is-gap {
+  margin-top: 12px;
+}
+
+.art-pl-rowk {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--pl-ink);
+}
+
+.art-pl-rowv {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-stamps {
+  display: grid;
+  gap: 5px;
+}
+
+.art-pl-stamps.is-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.art-pl-stamps.is-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 档位做成"方戳"：选中 = 盖上朱印 */
+.art-pl-stamp {
+  padding: 4px 2px;
+  border: 1.2px solid var(--pl-rule-2);
+  background: var(--pl-card);
+  color: var(--pl-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    color 130ms ease;
+}
+
+.art-pl-stamp:hover {
+  border-color: var(--pl-ink-2);
+}
+
+.art-pl-stamp.is-on {
+  border-color: var(--pl-red);
+  background: rgba(143, 42, 18, 0.86);
+  color: #f7ece4;
+  box-shadow: 0 0 0 1px rgba(246, 240, 225, 0.28);
+}
+
+.art-pl-prep {
+  padding: 10px 11px;
+  border: 1.2px dashed var(--pl-rule-2);
+  background: var(--pl-card);
+}
+
+.art-pl-preptitle {
+  margin: 0 0 5px;
+  font-family: var(--art-serif);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.art-pl-prepbody {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--pl-ink-2);
+}
+
+.art-pl-stats {
+  display: flex;
+  gap: 18px;
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--pl-rule);
+}
+
+.art-pl-stats div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.art-pl-stats dt {
+  font-size: 11px;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-stats dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pl-ink);
+}
+
+.art-pl-note {
+  margin: 9px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.65;
+  color: var(--pl-ink-3);
+}
+
+/* ---- 取暖：温度带 ---- */
+.art-pl-reads {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.art-pl-est {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--pl-ink);
+}
+
+.art-pl-est.is-danger {
+  color: var(--pl-red);
+  box-shadow: inset 0 -2px 0 var(--pl-red);
+}
+
+.art-pl-est.is-warn {
+  color: var(--pl-ochre);
+  background: rgba(92, 63, 10, 0.13);
+}
+
+.art-pl-now {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-band {
+  position: relative;
+  height: 46px;
+  margin-bottom: 4px;
+}
+
+.art-pl-bandmarks em {
+  position: absolute;
+  top: 0;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.art-pl-bandmarks em.is-survival {
+  color: var(--pl-red);
+}
+
+.art-pl-bandmarks em.is-comfort {
+  color: var(--pl-green);
+}
+
+.art-pl-bandtrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 17px;
+  height: 10px;
+  border: 1px solid var(--pl-rule-2);
+  overflow: hidden;
+}
+
+.art-pl-bandtrack i {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+
+.art-pl-bandtrack i.is-cold {
+  background: rgba(143, 42, 18, 0.18);
+}
+
+.art-pl-bandtrack i.is-mild {
+  background: rgba(92, 63, 10, 0.16);
+}
+
+.art-pl-bandtrack i.is-safe {
+  background: rgba(39, 73, 47, 0.16);
+}
+
+.art-pl-bandtrack i.is-elec {
+  background: rgba(31, 58, 82, 0.62);
+}
+
+.art-pl-bandtrack i.is-fuel {
+  background: rgba(92, 63, 10, 0.62);
+}
+
+.art-pl-needle {
+  position: absolute;
+  top: 14px;
+  width: 2px;
+  height: 16px;
+  transform: translateX(-50%);
+}
+
+.art-pl-needle.is-now {
+  background: var(--pl-ink);
+}
+
+.art-pl-needle.is-est {
+  background: var(--pl-red-2);
+}
+
+.art-pl-outdoor {
+  position: absolute;
+  bottom: 0;
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--pl-ink-3);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.art-pl-scalehint {
+  margin: 6px 0 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--pl-ink-3);
+}
+
+/* ---- 取暖：刻度尺滑杆 ---- */
+.art-pl-scale {
+  margin-top: 7px;
+}
+
+.art-pl-scaletop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 1px;
+}
+
+.art-pl-rail {
+  position: relative;
+  display: block;
+  height: 30px;
+}
+
+.art-pl-rail-ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 15px;
+  transform: translateY(-50%);
+  border-bottom: 1.4px solid var(--pl-rule-2);
+  background-image: repeating-linear-gradient(90deg, var(--pl-rule-2) 0 1px, transparent 1px 10%);
+  background-size: 100% 6px;
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+}
+
+.art-pl-rail-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 7px;
+  width: var(--fill, 0%);
+  transform: translateY(-50%);
+}
+
+.art-pl-rail.is-elec .art-pl-rail-fill {
+  background: rgba(31, 58, 82, 0.34);
+}
+
+.art-pl-rail.is-fuel .art-pl-rail-fill {
+  background: rgba(92, 63, 10, 0.34);
+}
+
+.art-pl-rail.is-off {
+  opacity: 0.5;
+}
+
+.art-pl-range {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.art-pl-range:disabled {
+  cursor: not-allowed;
+}
+
+.art-pl-range::-webkit-slider-runnable-track {
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.art-pl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 22px;
+  margin-top: 4px;
+  border: 1.4px solid var(--pl-ink);
+  border-radius: 1px;
+  background: var(--pl-paper-hi);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.art-pl-range::-moz-range-track {
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.art-pl-range::-moz-range-thumb {
+  width: 16px;
+  height: 22px;
+  border: 1.4px solid var(--pl-ink);
+  border-radius: 1px;
+  background: var(--pl-paper-hi);
+}
+
+.art-pl-range:disabled::-webkit-slider-thumb {
+  border-style: dashed;
+  opacity: 0.5;
+}
+
+.art-pl-range:disabled::-moz-range-thumb {
+  border-style: dashed;
+  opacity: 0.5;
+}
+
+/* ---- 供电 ---- */
+.art-pl-prepinline {
+  margin: 0 0 8px;
+  padding: 5px 8px;
+  border-left: 3px solid var(--pl-green);
+  background: rgba(39, 73, 47, 0.09);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--pl-green);
+}
+
+.art-pl-gauge {
+  display: grid;
+  grid-template-columns: minmax(110px, 44%) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.art-pl-gaugesvg {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.art-pl-gaugesvg svg {
+  display: block;
+  width: 56px;
+  height: 64px;
+}
+
+.art-pl-gaugepct {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--pl-ink);
+}
+
+.art-pl-gaugeinfo {
+  min-width: 0;
+}
+
+.art-pl-gaugek {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--pl-ink);
+}
+
+.art-pl-factors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.art-pl-tag {
+  padding: 1px 6px;
+  border: 1px solid var(--pl-rule);
+  color: var(--pl-ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.art-pl-tag.is-ok {
+  border-color: var(--pl-green);
+  background: rgba(39, 73, 47, 0.16);
+  color: var(--pl-green);
+  font-weight: 700;
+}
+
+.art-pl-tag.is-bad {
+  border-color: var(--pl-red);
+  background: rgba(143, 42, 18, 0.16);
+  color: var(--pl-red);
+  font-weight: 700;
+}
+
+.art-pl-supply p {
+  margin: 0 0 2px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--pl-ink-2);
+}
+
+.art-pl-tonight {
+  margin-top: 5px !important;
+  padding-top: 5px;
+  border-top: 1px solid var(--pl-rule);
+  color: var(--pl-ink) !important;
+  font-weight: 600 !important;
+}
+
+.art-pl-tonight .num {
+  padding: 0 4px;
+  font-weight: 700;
+  color: var(--pl-red);
+}
+
+.art-pl-ledgerhead {
+  margin: 11px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--pl-rule);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--pl-ink);
+}
+
+.art-pl-ledger {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 负荷台账：一行一条，像手写的排班表 */
+.art-pl-load {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--pl-rule);
+}
+
+.art-pl-loadno {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-loadmain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.art-pl-loadtop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+}
+
+.art-pl-loadname {
+  font-family: var(--art-serif);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--pl-ink);
+}
+
+.art-pl-loadkwh {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-loadsub {
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-loadops {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.art-pl-rankbtn {
+  width: 19px;
+  height: 19px;
+  border: 1.1px solid var(--pl-rule-2);
+  background: var(--pl-card);
+  color: var(--pl-ink-2);
+  font-size: 8px;
+  line-height: 1;
+}
+
+.art-pl-rankbtn:hover:not(:disabled) {
+  border-color: var(--pl-ink-2);
+  background: var(--pl-detail);
+}
+
+.art-pl-rankbtn:disabled {
+  opacity: 0.35;
+}
+
+/* 供 / 断 戳记 */
+.art-pl-switch {
+  min-width: 30px;
+  padding: 2px 6px;
+  border: 1.2px solid rgba(143, 42, 18, 0.55);
+  background: rgba(143, 42, 18, 0.14);
+  color: var(--pl-red);
+  font-size: 11px;
+  font-weight: 700;
+  transition:
+    background 130ms ease,
+    border-color 130ms ease,
+    color 130ms ease;
+}
+
+.art-pl-switch.is-on {
+  border-color: var(--pl-green);
+  background: rgba(39, 73, 47, 0.18);
+  color: var(--pl-green);
+}
+
+.art-pl-switch:hover {
+  border-color: var(--pl-ink-2);
+}
+
+/* ---- 表底图签 ---- */
+.art-pl-tb {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 0.9fr;
+  border-top: 1.6px solid var(--pl-rule-3);
+}
+
+.art-pl-tbcell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 12px;
+  border-right: 1px solid var(--pl-rule-2);
+}
+
+.art-pl-tbcell:last-child {
+  border-right: 0;
+}
+
+.art-pl-tbk {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--pl-ink-3);
+}
+
+.art-pl-tbv {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pl-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 窄屏：三栅叠成一栏 ---- */
+@media (max-width: 1000px) {
+  .art-pl-sheet {
+    height: min(760px, 92vh);
+  }
+
+  .art-pl-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .art-pl-col {
+    padding: 0 14px 14px;
+  }
+
+  .art-pl-col:not(:last-child) {
+    border-right: 0;
+    border-bottom: 1.3px solid var(--pl-rule-2);
+    padding-bottom: 14px;
+    margin-bottom: 12px;
+  }
+
+  .art-pl-tb {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .art-pl-tbcell {
+    border-bottom: 1px solid var(--pl-rule);
+  }
+}
+
+/* ============================================================
+   笔记本纸面的动态污损（理智 / 人性）
+   ------------------------------------------------------------
+   贴图一律是「白底 + 深色损伤」，走 mix-blend-mode: multiply
+   （白 = 不变，深色 = 压暗），所以纸张肌理仍透得出来，也不需要抠透明。
+   层在 children 之后 → 压在文字上：破损与涂鸦遮住部分信息是**预期效果**，
+   但 pointer-events: none 保证点得到下面。
+   ============================================================ */
+
+/* 注意：这一层**不能**写 z-index —— 定位元素一旦带 z-index 就会形成 stacking context
+   （= 隔离组），里面的 mix-blend-mode 就只能跟"空背景"混合，白色部分会直接盖在文字上把内容糊掉。
+   z-index 一律写在下面每个 .art-wear 上，混合背景才是真正的"纸面 + 文字"。 */
+.art-wear-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.art-wear {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  mix-blend-mode: multiply;
+}
+
+/* 理智：中档轻皱 + 少量涂鸦；重档严重褶皱 + 破损 + 大量涂鸦。
+   透明度是**可读性闸门**：损伤层铺满整页，压太狠会把所有文字一起吃掉——用户要的是
+   "遮挡**部分**信息"，所以重档也留在大约 -14% 平均亮度这一档（皱褶与破口的深色仍清楚）。 */
+.art-wear.is-sanity2 {
+  opacity: 0.5;
+}
+
+.art-wear.is-sanity3 {
+  opacity: 0.52;
+}
+
+/* 人性：越低压得越重 */
+.art-wear.is-blood.is-b1 {
+  opacity: 0.4;
+}
+
+.art-wear.is-blood.is-b2 {
+  opacity: 0.55;
+}
+
+.art-wear.is-blood.is-b3 {
+  opacity: 0.72;
+}
+
+/* 血手印只贴一角，不铺满整页 */
+.art-wear.is-hand {
+  inset: auto 5% 6% auto;
+  width: 27%;
+  aspect-ratio: 1 / 1;
+  background-size: contain;
+  opacity: 0.72;
+  transform: rotate(-13deg);
+}
+
+/* ============================================================
+   事件书本：同一个本子翻开来，左页正文 / 右页选项
+   ============================================================ */
+
+.art-book-veil {
+  /* 承接 .art-nb-veil 的纸面 token 与整屏布局，这里只加书本特有的部分 */
+  z-index: 41;
+}
+
+.art-nb-sheet.is-book {
+  height: min(760px, 92vh);
+}
+
+/* 事件翻完 → 本子落到「今日待办」那两页。
+   纸不重新进场（那会看到本子又飞一次），只让新内容像翻过来的一页那样落定：
+   从中缝那一侧翻起 + 淡入，配合同一时刻扫过的 .art-book-leaf。 */
+.art-book-landed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  animation: art-book-settle 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes art-book-settle {
+  from {
+    opacity: 0.15;
+    transform: perspective(1400px) rotateY(-13deg) translateX(-1.2%);
+    transform-origin: left center;
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.art-nb-spread.is-book {
+  padding-bottom: 4px;
+}
+
+.art-book-intensity {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--nb-red);
+}
+
+.art-book-count,
+.art-book-rest {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--nb-ink-3);
+}
+
+.art-book-rest {
+  margin-left: 0;
+  flex: none;
+}
+
+.art-book-title {
+  margin: 0 0 7px;
+  font-family: var(--nb-hand);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.45;
+  letter-spacing: 0.04em;
+  color: var(--nb-ink);
+}
+
+.art-book-body p {
+  margin: 0 0 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.85;
+  color: var(--nb-ink-2);
+}
+
+/* 低理智：正文颜色偏冷紫，与经典版 text-psyche 同义（纸面上换成暗紫灰墨） */
+.art-book-body.is-unreliable p {
+  color: #4a3f63;
+}
+
+.art-book-scramble {
+  margin: 9px 0 0;
+  padding: 5px 9px;
+  border-left: 3px solid #6b5b8a;
+  background: rgba(107, 91, 138, 0.1);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.7;
+  color: #4a3f63;
+}
+
+/* ---- 结算：写在左页下方的手写批注 ---- */
+.art-book-result {
+  margin-top: 12px;
+  padding: 9px 11px 11px;
+  border: 1.4px solid var(--nb-red);
+  background: rgba(176, 42, 30, 0.06);
+}
+
+.art-book-resultk {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 5px;
+  font-family: var(--nb-hand);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--nb-red);
+}
+
+.art-book-resultk .is-ok {
+  color: #27492f;
+}
+
+.art-book-resultk .is-bad {
+  color: var(--nb-red);
+}
+
+.art-book-roll {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--nb-ink-3);
+}
+
+.art-book-resulttext {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.75;
+  color: var(--nb-ink);
+}
+
+.art-book-raid {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--nb-ink-2);
+}
+
+.art-book-raid.is-ok {
+  color: #27492f;
+}
+
+.art-book-raid.is-bad {
+  color: var(--nb-red);
+}
+
+.art-book-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 6px;
+}
+
+.art-book-chips em {
+  padding: 1px 6px;
+  border: 1px solid var(--nb-rule-2);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--nb-ink-2);
+}
+
+.art-book-chips em.is-bad {
+  border-color: rgba(176, 42, 30, 0.5);
+  color: var(--nb-red);
+}
+
+.art-book-continue {
+  margin-top: 3px;
+  padding: 5px 14px;
+  border: 1.3px solid var(--nb-ink);
+  background: var(--nb-ink);
+  color: #f2ece0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 0 1px rgba(246, 240, 225, 0.28);
+}
+
+.art-book-continue:hover {
+  background: #000;
+}
+
+/* ---- 右页：怎么做 ---- */
+.art-book-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.art-book-choices.is-locked {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.art-book-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1.2px solid var(--nb-rule-2);
+  background: var(--nb-card);
+  text-align: left;
+  transition:
+    border-color 130ms ease,
+    background 130ms ease,
+    transform 80ms ease;
+}
+
+.art-book-choice:hover:not(:disabled) {
+  border-color: var(--nb-ink);
+  background: var(--nb-detail);
+  transform: translateY(-1px);
+}
+
+.art-book-choice:disabled {
+  opacity: 0.5;
+}
+
+.art-book-choicelabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  font-family: var(--nb-hand);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--nb-ink);
+}
+
+.art-book-choicereason,
+.art-book-chance {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--nb-rule-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--nb-ink-3);
+}
+
+.art-book-choicereason {
+  border-color: rgba(176, 42, 30, 0.5);
+  color: var(--nb-red);
+}
+
+.art-book-choicenote {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--nb-ink-3);
+}
+
+.art-book-hint {
+  margin: 10px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--nb-rule-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--nb-ink-3);
+}
+
+/* ---- 翻页：一张纸从装订线往左翻过去 ---- */
+.art-book-leaf {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 50%;
+  z-index: 4;
+  pointer-events: none;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #d8d6c8 0%, #e6e4d7 45%, #efece0 100%);
+  box-shadow: -14px 0 26px -10px rgba(0, 0, 0, 0.45);
+  animation: art-book-turn 430ms cubic-bezier(0.42, 0, 0.3, 1) both;
+}
+
+@keyframes art-book-turn {
+  from {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-172deg);
+  }
+}
+
+
+/* ============================================================
+   三栅的手绘线稿（发电/配给/温度计）
+   ------------------------------------------------------------
+   线稿与 -mask 成对使用：填充层在下、线稿在上，色块被 mask 裁进形状内部。
+   父层**不带 z-index**——定位元素一旦有 z-index 就形成 stacking context（隔离组），
+   里面的 mask/clip 会失效，表现是"色块糊成一片、形状边界全无"。
+   ============================================================ */
+
+.art-pl-linefig {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.art-pl-fill {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/* 色带锚在底部，高度 = 该段占比；两层叠出"液体分层"的观感 */
+/* 色带：底边在 --fill-b、高度 --fill-h——**两段不重叠**才是两层液体；
+   早先让两段都从底部起、上层会把下层整个盖掉，看起来永远单色（踩过）。 */
+.art-pl-fill > i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--fill-b);
+  height: var(--fill-h);
+  background: var(--fill-c);
+}
+
+.art-pl-linefig-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- 取暖栅：竖温度计在左，两根刻度尺滑杆在右 ---- */
+.art-pl-heatgrid {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  margin-bottom: 2px;
+}
+
+.art-pl-thermo {
+  position: relative;
+}
+
+/* 生存/舒适刻度：标在温度计右侧，纵坐标由 linefigLayout 的 tube bbox 换算 */
+.art-pl-tmark {
+  position: absolute;
+  right: 2px;
+  z-index: 2;
+  transform: translateY(50%);
+  padding: 0 2px;
+  /* 压在刻度线上，垫一层纸色才读得清 */
+  background: rgba(214, 201, 168, 0.88);
+  white-space: nowrap;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.art-pl-tmark.is-survival {
+  color: var(--pl-red);
+}
+
+.art-pl-tmark.is-comfort {
+  color: var(--pl-green);
+}
+
+/* 固定刻度的三个数字标（-40 / 0 / +40），同样压在刻度板上 */
+.art-pl-tnum {
+  position: absolute;
+  right: 2px;
+  z-index: 2;
+  transform: translateY(50%);
+  padding: 0 2px;
+  background: rgba(214, 201, 168, 0.88);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--pl-ink-3);
+}
+
+/* 当前/预估读数针：从管腔左沿一直划到版面右沿，正好横跨刻度 */
+.art-pl-tneedle {
+  position: absolute;
+  right: 0;
+  height: 2px;
+}
+
+.art-pl-tneedle.is-now {
+  background: var(--pl-ink);
+}
+
+.art-pl-tneedle.is-est {
+  background: var(--pl-red-2);
+}
+
+.art-pl-heatright {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ---- 配给栅：口粮金字塔 / 水瓶堆并排 ---- */
+.art-pl-rationfigs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.art-pl-rationfig {
+  margin: 0;
+}
+
+.art-pl-rationfig figcaption {
+  margin-top: 3px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--pl-ink-3);
+}
+
+@media (max-width: 1000px) {
+  .art-pl-heatgrid {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+}
+
+/* 供电图的形状标注（发电机 / 蓄电池）：按量出的分割线宽度分配，与图上两形状对齐 */
+.art-pl-powerfig {
+  display: block;
+}
+
+.art-pl-powerfig-cap {
+  display: flex;
+  margin-top: 2px;
+}
+
+.art-pl-powerfig-cap em {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--pl-ink-3);
+}
+
+/* 供电图的形状标注（发电机 / 蓄电池）：按量出的分割线宽度分配，与图上两形状对齐 */
+.art-pl-powerfig {
+  display: block;
+}
+
+.art-pl-powerfig-cap {
+  display: flex;
+  margin-top: 2px;
+}
+
+.art-pl-powerfig-cap em {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--pl-ink-3);
+}
+
+/* 已选的那一项：朱红框 + 淡底，让人一眼看出"这条是我刚落的那手"。
+   结算没关掉之前，右页会一直停在这一件上（否则结果会跑到下一条正文下面）。 */
+.art-book-choice.is-picked {
+  border-color: var(--pl-red);
+  background: rgba(176, 42, 30, 0.09);
+  box-shadow: inset 0 0 0 1px rgba(176, 42, 30, 0.22);
 }

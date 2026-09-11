@@ -213,6 +213,42 @@ birefnet-general → birefnet-general-lite → isnet-general-use → u2net
 5. **功能一条不丢**：老面板的每个字段/按钮都要能在新布局里找到落点（列成对照表自查）。重构布局可以，删功能不行；新增的只允许是**只读**装帧信息（代号、日期、AP、状态章）。
 6. **`var(--art-serif)` 不继承**：浮层挂在 `.art-root` **外面**（`App.tsx` 与 body 平级渲染），要用 serif 得在 veil 上重新定义一次；`--font-mono` 来自 Tailwind `@theme`，全局可用。
 
+## 一个项目里做多个 diegetic 面板
+
+做完第一个（图纸）之后再做第二、第三个（笔记本、计划表）时，这六条是硬约束：
+
+1. **先查"这个面板的正文是不是公共组件"**。本项目里 `ArtPlanPanel` 只是壳，正文来自 `RationPanel`/`HeatThermometer`（同时内嵌在经典皮肤的三栏布局）与 `PowerPanel`（同时挂在经典供电浮层）——**改本体就会连带改另一个皮肤**。正确做法：新建专属子组件，只复制引擎数学与 store 动作，DOM 与配色全新。动任何"看起来是面板私有"的组件前，先 grep 它在别处的引用。
+2. **多张纸不能撞车**：同一项目里第二张纸必须换一套纸。靠六项叠加区分——横长比 / 纸温（冷调 vs 暖调）/ 线条方向（横格 vs 竖栏）/ 有没有装订（中缝针脚）/ 有没有束线表格 / 书写工具（楷体手写 vs 宋体制图笔 + 图章）。最忌"米白泛黄 + 深墨"再来一张。
+3. **格线与列线一律归 CSS，不要烤进贴图**。条目高度会随展开变化、列宽由栅格决定，烤进图的线必然与内容错位。做法：每条目自带一条底线（永远对齐）、竖栏线用 `:not(:last-child) { border-right }`、页面贴图只出**完全空白的纸**。这条比"让贴图带格线更像纸"重要得多。
+4. **表单类面板的滑杆做成"纸上刻度尺 + 游标"**：刻度用 `repeating-linear-gradient` 画在轨道底边，**游标就是重皮后的原生 thumb**（`::-webkit-slider-thumb` / `::-moz-range-thumb`）。不要另做一个 `left: var(--fill)` 的独立游标元素——原生 thumb 两端有半个 thumb 宽的内缩，独立游标必然与真值错位。
+5. **会写 store 的控件要保住 draft/commit 四环**：`onChange` 只写本地草稿 → `onPointerUp/onKeyUp/onBlur` 才提交一次 → 受控值变化的 `useEffect` 清草稿回读真值 → 显示值用 `draft ?? min(want, max)`。改成 `onChange` 直接提交就退回"每一步进都 clone 整棵树"的卡顿源。用无头浏览器做哨兵断言守住它（`input` 事件后持久化内容不变、`pointerup` 后才变）。
+6. **详情用"点击内联推挤"，别用 hover 浮层**。纸面上弹深色浮层正是要消灭的控制台感，而且浮层里的东西悬不稳、触屏直接失效。内联展开还有个附带好处：列表高度真的会变，可以用"展开后容器变高"当断言。
+7. **纸上的分级用"手写批注"而不是色块徽章**：红笔划定 = 两条略斜的 `linear-gradient` 叠成手绘下划线；马克笔 = 半透明色 + 微旋转 `skew` + `mix-blend-mode: multiply` 扫过标题带。注意**亮纸上橙色作文字色只有 ~2.2:1**，只能做底纹（文字仍用近黑墨），另需一个深赭色专供"预警"字样。
+8. 只在点「关闭」时走收回动画；App 层的 Esc 是直接关的（本项目两处面板都这样，属既有行为，不要在面板里再加第二个 keydown）。
+9. **同一个实物可以有多个状态**：本子既是「事件书本」也是「今日待办」。纸面（纸 + 装订 + 污损）要抽成共用组件（本项目 `NotebookSheet.tsx`），否则两处会长得不像同一本。翻页类界面**不要让组件自己维护页码**——本项目 `run.queue` 就是页，作答后队列被 filter 掉，`queue[0]` 自然变成下一页，"还剩几件"直接读长度（注意作答可能触发钩子**再塞进新事件**，所以别缓存）。
+10. **别把公共反馈弹窗整个换掉，加皮肤判断**：档案皮肤下把结算写进书页，是在 `App.tsx` 写 `{!(art && gameUi === 'art') && <ChoiceResultModal />}`，经典皮肤照旧。同时要处理一个边界——答完**最后一件**时队列已空但结算还在，该层不能因为"队列空了"就卸载，否则那一瞬结果再也看不到。
+11. **同类实物之间的切换，别用"卸载 A + 挂载 B"**。本项目"事件翻完 → 今日待办"是同一个本子的两种内容：若卸载书本再挂待办面板，待办会重播入场动画（本子又飞进来一次），像穿帮。正确做法是把正文抽成共用组件（`TodoSpread`），**就地换内容**，再给载体加一个"落定"动画（从中缝侧 `rotateY` + 淡入）。配套：父组件的渲染条件要放宽成"打开着就渲染"，由内部决定显示哪一页。
+12. **别用图例解释记号**。第一版在待办页头写了「红笔划的 · 要命 / 马克笔 · 预警」，被用户直斥"太蠢"。手写笔迹本身就是语言，加说明反而像说明书。
+
+### 图挂了要能查
+
+美术面板最容易遇到"整块图不见了"，而**静默隐藏破图**会让你完全无从下手（浏览器默认的破图标被藏掉，只剩一个空框）。做法：`onError` 里除了 `visibility:hidden`，**在开发模式下把失败的 URL 打到控制台**。排查顺序：素材文件在不在 → **唯一在跑的那个服务**能不能取到（`curl … | wc -c`）→ 浏览器是不是停在旧标签或缓存了旧的 404（Ctrl+Shift+R）。
+
+两个坑：Git Bash 下 `curl -o /dev/null` 会因写错误报 **0 字节**，那是假象，要改成管道 `| wc -c` 才准；本机常同时跑着多个工程的服务，**先扫一遍所有监听端口、按 `<title>` 认领**（本项目就撞上过 `:5174` 是另一个工程、`/art/*` 一律回退成它的 index.html），比盯着自己代码查快得多。
+
+### 叠加式素材层（污损 / 血迹 / 划痕这类）
+
+需要"按数值动态变化的污损"时，走这条路最省事：**素材生成成"白底 + 深色损伤"，全部用 `mix-blend-mode: multiply`**（白 = 不变、深色 = 压暗）。好处：纸的肌理仍透得出来、**完全不需要抠透明**、多层可直接叠。
+
+四个坑，一个都不能踩：
+
+1. **父层绝对不能带 `z-index`**。定位元素一旦有 z-index 就形成 stacking context = 隔离组，里面的 `mix-blend-mode` 只能跟"空背景"混合，于是白底部分**直接盖在文字上把内容糊掉**（诊断特征：字全没了但纸还在，特别容易误判成"层级太低"）。正确写法：父层只留 `position/inset/pointer-events`，`z-index` 写在每个素材层自己身上。
+2. **白点必须归一**。不归一的话背景那点灰会在 multiply 下把整页蒙一层灰纱（乘算 0.95 = 全页 -5% 亮度，很显眼）。取 85 分位当白、高出的裁成纯白（裁白无害，还能让淡损伤拉出对比）。
+3. **透明度是可读性闸门**。这种层是铺满整页的，压太狠会把文字一起吃掉。要求"遮挡**部分**信息"时，实测重档 0.82 完全不可读，降到 ~0.5 才既有明显损伤又留得住正文。
+4. **按"压暗面积"反求曲线参数，不要拍固定值**。模型画的"损伤"往往是铺满整幅的灰场，直接乘上去整页变灰球；要把中间调推向白、只留最深的（`a' = 1-(1-a)^k`），而同一个 k 对"细线型"（皱褶、涂鸦）和"整片型"（血渍）效果差极远——固定 k 会把轻档洗到看不见、又让重档比中档还淡。做法：定目标压暗面积（轻档 10%、重档 25%、血渍 6/15/24%），在该面积上二分求 k。这样每档的视觉分量是**可测的**。
+
+**变体选择要稳定**：同档多张素材按 `seed + day` 取模，同一天内不换（否则每次重渲染换一张会闪），跳天才换。
+
 ## 同一实物的分级配图（1→2→3 递进）
 
 游戏里很多实体是**分级的**（避难所 10 个家电各 3 级）。别给每级单独文生图——三级会长成三件不同的东西。做法：
@@ -242,11 +278,12 @@ birefnet-general → birefnet-general-lite → isnet-general-use → u2net
 1. **断言**：`python scripts/verify-art-layout.py` —— box/px 一致、alpha 不贴画布缘（豁免表除外）、poly 点数与坐标合法、HUD 锚点在位、同场景框重叠 report-only。必须全绿。
 2. **matte 目检**：`python scripts/preview-home-composite.py matte [key...]` —— 品红底 + 红色 poly 描边，脏边/孤岛/截断/clip 过紧一眼可见。
 3. **审计图**：`python scripts/audit-crops.py` —— 改框前量边界用（总览网格 + 2x 放大 + TRUNCATION-SUSPECT 探针）。
-4. **浏览器悬停 / 走完整流程**：`npm run dev` 后开档案版，逐件悬停看三点：光晕是否贴轮廓、tooltip 是否弹出、**点/悬停透明留白区必须无反应**。现成 **零依赖 CDP 脚本**（Node 22 自带全局 `WebSocket`，不用装 playwright）在 `.preview/pwtest/`：`shelter-shot.mjs`（开局→点热点→展开→滚到底→关闭 + 截图）、`shelter-states.mjs`（构造在建项目/崩溃日后等状态）、`probe.mjs`（页面渲染冒烟，可指 `classic.html` 查经典界面没被带偏）。四个环境坑记牢：
+4. **浏览器悬停 / 走完整流程**：`npm run dev` 后开档案版，逐件悬停看三点：光晕是否贴轮廓、tooltip 是否弹出、**点/悬停透明留白区必须无反应**。现成 **零依赖 CDP 脚本**（Node 22 自带全局 `WebSocket`，不用装 playwright）在 `.preview/pwtest/`：`shelter-shot.mjs`（开局→点热点→展开→滚到底→关闭 + 截图）、`shelter-states.mjs`（构造在建项目/崩溃日后等状态）、`todo-plan-shot.mjs`（待办/计划两面板 + 滑杆 draft-commit 哨兵）、`event-book-shot.mjs`（事件书本翻页全流程 + 污损分档）、`stage-showcase.mjs`（把各数值档位逐档截图，用来给用户看"分阶段的实际观感"，可改 CASES 表复用）、`probe.mjs`（页面渲染冒烟，可指 `classic.html` 查经典界面没被带偏）。五个环境坑记牢：
    - Chrome 必须加 `--no-proxy-server --proxy-bypass-list=*`——本机 `http_proxy` 有值，不加连 127.0.0.1 都拒；
    - `curl` 自检也要 `--noproxy '*'`（否则走代理拿到 502，误判服务没起）；
    - vite 默认只绑 `[::1]`，要 127.0.0.1 就 `--host 127.0.0.1`（端口被占会顺延，看启动输出）；
-   - profile 目录**别 `fs.rmSync`**（本机 shim 成 trash，二手目录被锁会抛 `Some operations were aborted`）——用带时间戳的唯一目录名，顺带天然隔离玩家存档。
+   - profile 目录**别 `fs.rmSync`**（本机 shim 成 trash，二手目录被锁会抛 `Some operations were aborted`）——用带时间戳的唯一目录名，顺带天然隔离玩家存档；
+   - 外部改档（写 localStorage 造状态）前先 `sleep(1300)`：**store 的 persist 是节流的**，刚做过的交互可能还有一笔待写回，不等它落盘就改档会被它覆盖（实测第二次改档被吃掉，白查半天）。
 
 存档安全（手测时）：开 `http://localhost:5180/`（端口被占会顺延，看启动输出）。**不要**为了截图去点「选择地点」/调用 `startRun`：会新建 run，覆盖玩家存档（曾有第 11 天档）。测完用「返回」，不要结束或开新局。局内只切视角；**床（休息/结束当天）与印章（弃局确认）绝不点**。CDP 脚本只做悬停 + 安全点击（打开 overlay 类）。
 
@@ -264,12 +301,44 @@ birefnet-general → birefnet-general-lite → isnet-general-use → u2net
 ## 本仓库文件地图
 
 - 生图：**优先 WorkBuddy ImageGen**（本机 `scripts/gen-art-*.py` 依赖的 `img-qwen-image.json` 已不存在，跑不了；要复活那套本机 API 得先补回配置）
-- 后处理/落盘：`scripts/make-shelter-paper.py`（纸面裁切 + 亮度定标）、`scripts/gen-art-modules.py`（批量抠图落盘）、`scripts/rename-modules.py`（模块改名的显式短语映射）
+- 后处理/落盘：`scripts/make-shelter-paper.py`（图纸纸面）、`scripts/make-art-paper.py <todo|plan>`（笔记本内页 / 计划表纸，两种参数一张表）、`scripts/make-notebook-wear.py`（污损层：裁水印 + 白点归一 + 按压暗面积反求稀疏指数）、`scripts/gen-art-modules.py`（批量抠图落盘）、`scripts/rename-modules.py`（模块改名的显式短语映射）
 - 抠图：`scripts/cut-art-home.py`（局内）、`scripts/cut-art-objects.py`（菜单）、`scripts/art_common.py`（共享库：tighten/extract_polygon/drop_border_fringe/keep_connected/sweep_dust/EDGE_EXEMPT/layout 读写）
 - 审计/校验：`scripts/audit-crops.py`、`scripts/verify-art-layout.py`、`scripts/preview-home-composite.py`
 - 摆放数据：`src/ui/art/artLayout.json`（生成物，勿手改）、`src/ui/art/windowPanes.json`（窗几何）、`src/ui/art/skin.ts`（派生 + `ART` 资源表）
-- 组件：`src/ui/art/ArtHotspot.tsx`、`ArtGame.tsx`、`ArtMainMenu.tsx`、`ArtSetup.tsx`、`ArtSiteSelect.tsx`、`ArtShelterPanel.tsx`（diegetic 图示范例）
+- 组件：`src/ui/art/ArtHotspot.tsx`、`ArtGame.tsx`、`ArtMainMenu.tsx`、`ArtSetup.tsx`、`ArtSiteSelect.tsx`、`ArtShelterPanel.tsx`、`ArtTodoPanel.tsx`、`ArtEventBook.tsx`、`NotebookSheet.tsx`（共用纸面）、`NotebookWear.tsx`（动态污损）、`ArtPlanPanel.tsx` + `ArtPlanSheet.tsx`（diegetic 图示范例：图纸／笔记本／计划表）
 - 样式：`src/ui/art/art.css`（`.art-cut`、`.is-clipped`、`.art-spot-tip`、`.art-shelter-*`）
 - 浏览器实测：`.preview/pwtest/*.mjs`（零依赖 CDP）
 - 产出：`public/art/*.jpg`、`public/art/cut-*.png`、`public/art/cut-h-*.png`
 - 交接文档：`HANDOVER-窗景与抠边.md`、`HANDOVER-热区与抠图.md`、`HANDOVER-避难所图纸面板.md`
+
+## 线稿类素材：抠图 + 「背后垫色块」表示比例
+
+做「温度计液柱 / 罐头余量 / 发电效率」这种**用色块占比表达数值**的图时，配方是固定的：
+
+1. **生图只出「纯白底 + 深灰蓝细线 + 形状内部完全留白」**。内部留白是硬要求（prompt 里明写"内部完全留白、不填任何颜色"），后面全靠它透色。
+2. **抠图不走 rembg**，用 `alpha = clamp((白点 − 亮度) / span)`：白底→全透明、深线→不透明。rembg 会把线稿内部当背景透掉、把线条切成碎块。
+3. **必须再产一张填充掩膜**：`binary_dilation(2)` → `binary_fill_holes` → `binary_erosion(2)`。
+   - **用 `fill_holes`、不要用形态学闭运算**：闭运算会把金字塔里相邻罐头的缝桥接起来，填充色就漏进罐与罐之间的空隙了。
+   - 掩膜的作用是把填充色**裁进形状内部**——不裁的话，白底让轮廓之外也透明，颜色会从形状外面渗出来糊成一片。
+4. **层序**：填充层在下 → 线稿在上；父层**不带 z-index**（隔离组坑，见上）。
+   填充高度用**百分比**（相对素材盒），与像素坐标无关，天然对齐；掩膜用 `mask-size: 100% 100%`（用 `contain` 会 letterbox 错位）。
+5. **裁掉透明边距**：按掩膜 bbox 裁一圈，素材更紧凑，液柱/形状在面板里就能放得更大更清楚。
+6. **bbox 由脚本量出来当唯一坐标真源**（写进 `linefigLayout.json`），填充、标尺、指针全由它换算，禁止手填百分比。
+   两个形状被一条线缆连成一个连通域时（如"发电机—电缆—蓄电池"），**不能按连通域分左右**，改用**列密度**在中间找最窄处当分割线。
+
+### 两个必踩的坑
+
+- **`np.round(x/10)*10` 会 uint8 溢出**：`round(255/10)*10 = 260 → 溢出成 4`。症状是"填充区明明是 255 却像完全没填充"，极难查。量化 alpha 一律 `np.clip(..., 0, 255)`。
+- **生成图的"白底"是带颗粒的近白**，不切底噪的话整片背景会变成 alpha 1~40 的极淡噪点：既像蒙了层雾，又让 alpha 通道全是噪声、PNG 完全压不动（实测 1.2MB → 切完 ~150KB）。做法：低于 `FLOOR≈0.22` 直接归零，其余线性拉回 0..1。
+- **「液体分层」必须画成两段不重叠的色带**：每段显式给 `from`／`to`（底边 = from、高度 = to − from），
+  下层 `[0, 次日剩余]`、上层 `[次日剩余, 今日剩余]`。**别让两段都从底部起**——上层会把下层整个盖掉，
+  症状是"永远单色"（本项目水瓶/罐头就这么中过招）。分色也别用没定义过的 CSS 变量（`--pl-info` 不存在，
+  整条 var 链失效后色块直接不显示）。
+- **百分比定位留意单位**：0..1 的归一化坐标换算成 CSS 百分比要 ×100。本项目温度计刻度写成
+  `(TB[3] - TB[1]) * (pct / 100)`，漏了乘 100，结果所有刻度与指针都被压到离底 5.5%（看起来"标签全挤在最下面"）。
+  排查很省事：**直接读 `getComputedStyle(el).bottom` 的 px 值**，除以容器高度就知道比例对不对。
+
+### 资产对账（"我是不是丢了素材"这类问题）
+
+别靠记忆或截图，**拿代码的引用去对磁盘**：扫 `src/**` 里的 `./art/<名字>` 与 css `url()`，加上 artLayout.json 的 `file` 字段，再按规则枚举（`mod-<id>-<lv>`、`cut-model-<site>`、`wear-*`、`line-*`），最后 `comm` 出"引用但不存在"。
+两个注意：① 从 `modules.ts` 抠 `id:` 时要限定缩进，否则会把 `skill: { id: 'mechanics' }` 这类嵌套技能 id 当成模块、报一堆假缺失；② `git log --diff-filter=D --name-only -- public/art` 能列出**曾被删过的**素材——那是"主动退役"还是"误删"一眼可辨。

@@ -131,7 +131,6 @@ export function applyProduction(run: RunState): LedgerNote[] {
   const garden = effectiveModule(run, 'garden');
   if (garden > 0) {
     let yieldAmt = CAPS.GARDEN_YIELD[garden] ?? 0;
-    if (run.world.airPollution > 60) yieldAmt *= 0.5;
     if (run.world.temperature < 0) yieldAmt *= 0.6;
     if (yieldAmt > 0) {
       run.res.foodFresh += yieldAmt;

@@ -62,10 +62,6 @@ export const FLAG_TAGS = [
   'heat:fuel',
 
   // --- 环境分档 ---
-  'air:good',
-  'air:poor',
-  'air:bad',
-  'air:lethal',
   'rad:none',
   'rad:low',
   'rad:high',
@@ -244,7 +240,6 @@ export const NUM_FACT_KEYS: string[] = [
   'world:temperature',
   'indoor:temperature',
   'streak:belowSurvival',
-  'world:airPollution',
   'world:radiation',
   'world:contagion',
   'world:lawOrder',
@@ -310,7 +305,6 @@ export const MUTUALLY_EXCLUSIVE: string[][] = [
   ['disaster:revealed', 'disaster:hidden'],
   ['temp:mild', 'temp:freezing'],
   ['temp:mild', 'temp:extreme'],
-  ['air:good', 'air:lethal'],
   ['weather:clear', 'weather:blizzard'],
   ['weather:clear', 'weather:storm'],
   ['weather:flooding', 'weather:blizzard'],

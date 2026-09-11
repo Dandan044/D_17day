@@ -197,7 +197,6 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       w.exposure = clamp(w.exposure + eff.world.exposure, 0, EXPOSURE.MAX);
       notes.push(t('ledger.effect.exposure', { delta: `${eff.world.exposure > 0 ? '+' : ''}${eff.world.exposure}` }));
     }
-    if (eff.world.airPollution) w.airPollution = clamp(w.airPollution + eff.world.airPollution, 0, 100);
     if (eff.world.radiation) w.radiation = clamp(w.radiation + eff.world.radiation, 0, 100);
     if (eff.world.contagion) w.contagion = clamp(w.contagion + eff.world.contagion, 0, 100);
     if (eff.world.temperature) w.temperature += eff.world.temperature;

@@ -258,7 +258,6 @@ export interface Effect {
     /** 待开发：社区系统未接入玩法；数值仅由事件记录，暂无结算意义 */
     neighborhood: number;
     exposure: number;
-    airPollution: number;
     radiation: number;
     contagion: number;
     temperature: number;
@@ -552,7 +551,6 @@ export interface WorldState {
   /** 核冬天锚点温度（严冬期首日骤降后的室外温），仅 nuclear 局存在 */
   nwStartTemp?: number;
   /** 以下三项均为"越高越糟" */
-  airPollution: number;
   radiation: number;
   contagion: number;
   waterTable: 'normal' | 'polluted' | 'flooded';

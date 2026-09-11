@@ -14,10 +14,9 @@ export interface DisasterDef {
   keyModules: ModuleId[];
   factions: FactionId[];
   /** 崩溃日一次性施加的世界状态 */
-  onset: Partial<Pick<WorldState, 'airPollution' | 'radiation' | 'contagion' | 'lawOrder' | 'scarcity' | 'waterTable' | 'powerGrid'>>;
+  onset: Partial<Pick<WorldState, 'radiation' | 'contagion' | 'lawOrder' | 'scarcity' | 'waterTable' | 'powerGrid'>>;
   /** 每日演化增量 */
   daily: (day: number, threat: number) => {
-    airPollution?: number;
     radiation?: number;
     contagion?: number;
     lawOrder?: number;
@@ -43,10 +42,9 @@ export const DISASTERS: DisasterDef[] = [
     keySupplies: ['碘片', '密封胶带', '盖革计数器', '瓶装水'],
     keyModules: ['airFilter', 'insulate', 'filter', 'fortify'],
     factions: ['gov', 'looter', 'militia'],
-    onset: { radiation: 48, airPollution: 40, lawOrder: 46, scarcity: 55, powerGrid: 'off', waterTable: 'polluted' },
+    onset: { radiation: 48, lawOrder: 46, scarcity: 55, powerGrid: 'off', waterTable: 'polluted' },
     daily: (_day, threat) => ({
       radiation: -2 + threat * 0.16,
-      airPollution: -0.5,
       lawOrder: -1.6,
       scarcity: 1.2,
     }),
@@ -106,9 +104,8 @@ export const DISASTERS: DisasterDef[] = [
     keySupplies: ['燃料', '厚衣物与睡袋', 'HEPA 滤芯', '耐储粮'],
     keyModules: ['insulate', 'airFilter', 'garden', 'power'],
     factions: ['refugee', 'gov', 'gang'],
-    onset: { airPollution: 52, lawOrder: 56, scarcity: 54, powerGrid: 'rolling' },
-    daily: (_day, threat) => ({
-      airPollution: 0.8 - threat * 0.05,
+    onset: { lawOrder: 56, scarcity: 54, powerGrid: 'rolling' },
+    daily: (_day, _threat) => ({
       lawOrder: -1.4,
       scarcity: 1.5,
     }),
@@ -148,10 +145,9 @@ export const DISASTERS: DisasterDef[] = [
     keySupplies: ['活性炭滤芯', '防毒面具', '密封胶带', '瓶装水'],
     keyModules: ['airFilter', 'insulate', 'filter', 'conceal'],
     factions: ['gov', 'quarantine', 'trader'],
-    onset: { airPollution: 70, lawOrder: 58, scarcity: 44, waterTable: 'polluted' },
-    daily: (day, _threat) => ({
-      // 毒云随风来回，不是单调衰减
-      airPollution: Math.sin(day * 0.7) * 7 - 0.4,
+    onset: { lawOrder: 58, scarcity: 44, waterTable: 'polluted' },
+    daily: (_day, _threat) => ({
+      // 毒云随风来回（原空气污染漂移已删）
       lawOrder: -1.2,
       scarcity: 1.1,
     }),

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { TIME } from '../../game/balance';
 import { BUILD_PATH_NAME } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
-import { MODULES, moduleHardEffect, moduleSpec } from '../../game/content/modules';
+import { MODULES, moduleHardEffect, moduleSpec, moduleTier } from '../../game/content/modules';
 import { SITE_BY_ID } from '../../game/content/sites';
 import {
   SALVAGE_TARGETS,
@@ -91,10 +91,10 @@ export function ArtShelterPanel({ run }: { run: RunState }) {
             ? t('ui.shelter.stateBlocked')
             : t('ui.shelter.stateOpen');
 
-    const nowFx = moduleHardEffect(id, level, site.waterCapMult) || t('ui.common.none');
-    const nextFx = target ? moduleHardEffect(id, target, site.waterCapMult) : '';
+    const nowFx = moduleHardEffect(id, level) || t('ui.common.none');
+    const nextFx = target ? moduleHardEffect(id, target) : '';
     const effectLine =
-      moduleHardEffect(id, level, site.waterCapMult) ||
+      moduleHardEffect(id, level) ||
       (level > 0 ? (moduleSpec(id, level)?.desc ?? m.desc) : m.zero);
 
     const portion = project?.path === 'diy' ? nextWorkPortion(run, id) : null;
@@ -183,6 +183,9 @@ export function ArtShelterPanel({ run }: { run: RunState }) {
 
       <p className="art-shelter-desc">{m.desc}</p>
 
+      {/* 当前等级的"构成"：0 级说现状有多寒酸，1/2/3 级说材料与做法——随等级变化的那一段 */}
+      <p className="art-shelter-build">{d.level === 0 ? m.zero : (moduleSpec(d.id, d.level)?.desc ?? m.desc)}</p>
+
       <p className="art-shelter-effect">
         <span className="is-now">{t('ui.shelter.current', { fx: d.nowFx })}</span>
         {d.target ? <span className="is-next">{t('ui.shelter.next', { fx: d.nextFx })}</span> : null}
@@ -266,7 +269,9 @@ export function ArtShelterPanel({ run }: { run: RunState }) {
               ))}
             </div>
           )}
-          {d.spec.power ? <p className="art-shelter-note num">{t('ui.shelter.power', { n: d.spec.power })}</p> : null}
+          {d.spec.power ? (
+            <p className="art-shelter-note">{t('ui.shelter.power', { tier: moduleTier(d.target ?? 0) })}</p>
+          ) : null}
         </div>
       )}
 

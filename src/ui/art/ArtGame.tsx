@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 
 import { NUCLEAR_WINTER, RAD, TIME } from '../../game/balance';
+import { TIER_NAMES } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
+import { exposureTier } from '../../game/engine/exposure';
 import { currentIndoor } from '../../game/engine/climate';
 import { effectiveModule, iodineActive, radiationShield, threatName } from '../../game/engine/tags';
 import { todoTier } from '../../game/engine/todos';
 import { WEATHER_NAME } from '../../game/engine/world';
 import { useGame } from '../../game/store';
-import EventCard from '../EventCard';
+import { ArtEventBook } from './ArtEventBook';
 import { cachedPower } from '../derived';
 import { Chip } from '../kit';
 import { ArtCutout, ArtSceneFrame } from './ArtHotspot';
@@ -17,6 +19,9 @@ import './art.css';
 
 type View = 'desk' | 'side';
 
+/** 暴露度分档配色（0 无人注意 → 4 被猎捕），与经典侧 ExposurePanel 保持一致 */
+const EXPOSURE_TONES = ['good', 'info', 'warn', 'bad', 'bad'] as const;
+
 export default function ArtGame() {
   const run = useGame((s) => s.run);
   const overlay = useGame((s) => s.overlay);
@@ -25,22 +30,24 @@ export default function ArtGame() {
   const endDay = useGame((s) => s.endDay);
   const goMenu = useGame((s) => s.goMenu);
   const toast = useGame((s) => s.toast);
+  const lastChoice = useGame((s) => s.lastChoice);
 
   const [view, setView] = useState<View>('desk');
   const [leaving, setLeaving] = useState<View | null>(null);
   const [zoomEvent, setZoomEvent] = useState(false);
 
-  useEffect(() => {
-    if (run && run.queue.length === 0) setZoomEvent(false);
-  }, [run]);
+  // 事件读完后**不换组件**：书本自己翻到「今日待办」那两页（同一张纸，只换内容），
+  // 这样"翻完最后一件"是连续的翻页，而不是本子又飞进来一次。
+  // 所以这里只需要让书本一直挂在 zoomEvent 上，由它决定显示事件页还是待办页。
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && zoomEvent && !overlay) setZoomEvent(false);
+      // 有结算没关掉时不给 Esc 走——否则档案皮肤下那段结果就再也看不到了
+      if (e.key === 'Escape' && zoomEvent && !overlay && !lastChoice) setZoomEvent(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [zoomEvent, overlay]);
+  }, [zoomEvent, overlay, lastChoice]);
 
   if (!run) return null;
 
@@ -192,8 +199,15 @@ export default function ArtGame() {
             <span>
               {WEATHER_NAME[run.world.weather]} · {t('ui.game.outdoor', { out: run.world.temperature, in: indoorNow })}
             </span>
-            {!isPrep && (
+            {/* 暴露度灾前也得看得见：灾前只有事件会加它，玩家看不见就等于白扣 */}
+            {(!isPrep || run.world.exposure > 0) && (
               <span className="art-hud-sill-chips">
+                {run.world.exposure > 0 && (
+                  <Chip tone={EXPOSURE_TONES[exposureTier(run.world.exposure)]}>
+                    {t('ui.game.exposure')} {Math.round(run.world.exposure)} ·{' '}
+                    {TIER_NAMES[exposureTier(run.world.exposure)]}
+                  </Chip>
+                )}
                 <Chip>{t('ui.common.threatLv', { n: run.threat })}</Chip>
                 <Chip>{threatName(run.threat)}</Chip>
                 {run.world.radiation > 8 && (
@@ -205,7 +219,6 @@ export default function ArtGame() {
                   <Chip tone="bad">{t('ui.game.filterOff')}</Chip>
                 )}
                 {iodineActive(run) && <Chip tone="good">{t('ui.game.iodine')}</Chip>}
-                {run.world.airPollution > 30 && <Chip tone="warn">{t('ui.game.air', { n: Math.round(run.world.airPollution) })}</Chip>}
                 {run.world.contagion > 20 && <Chip tone="psyche">{t('ui.game.contagion', { n: Math.round(run.world.contagion) })}</Chip>}
                 {run.world.lawOrder < 45 && <Chip tone="bad">{t('ui.game.law', { n: Math.round(run.world.lawOrder) })}</Chip>}
               </span>
@@ -280,16 +293,8 @@ export default function ArtGame() {
         </button>
       )}
 
-      {zoomEvent && run.queue.length > 0 && (
-        <div className="art-event-layer">
-          <div className="art-event-card">
-            <EventCard run={run} />
-          </div>
-          <button type="button" className="art-link art-event-back" onClick={() => setZoomEvent(false)}>
-            {t('ui.game.eventBack')}
-          </button>
-        </div>
-      )}
+      {/* 事件读法：同一本本子翻开来（左页正文 / 右页选项）；读完后它自己翻到今日待办那两页 */}
+      {zoomEvent && <ArtEventBook run={run} onBack={() => setZoomEvent(false)} />}
 
       <div className="art-dock">
         <button type="button" className="art-link" onClick={goMenu}>

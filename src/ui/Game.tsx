@@ -21,6 +21,9 @@ import EventCard from './EventCard';
 import { cachedPower, cachedTonightHeat } from './derived';
 import { Bar, Chip, Gauge, HelpHint, Panel, SectionLabel, Stat } from './kit';
 
+/** 暴露度分档配色（0 无人注意 → 4 被猎捕），与经典侧 ExposurePanel 保持一致 */
+const EXPOSURE_TONES = ['good', 'info', 'warn', 'bad', 'bad'] as const;
+
 const RES_ORDER: ResourceId[] = [
   'water',
   'foodStaple',
@@ -113,10 +116,16 @@ function DayHeader({ run }: { run: RunState }) {
         </div>
 
         {/* 环境 */}
-        {!isPrep && (
+        {/* 暴露度灾前也得看得见（灾前只有事件会加它） */}
+        {(!isPrep || run.world.exposure > 0) && (
           <div className="hidden sm:block">
             <div className="label">{t('ui.game.env')}</div>
             <div className="flex flex-wrap gap-1.5">
+              {run.world.exposure > 0 && (
+                <Chip tone={EXPOSURE_TONES[exposureTier(run.world.exposure)]}>
+                  {t('ui.game.exposure')} {Math.round(run.world.exposure)} · {TIER_NAMES[exposureTier(run.world.exposure)]}
+                </Chip>
+              )}
               {run.world.radiation > 8 && (
                 <Chip tone={run.world.radiation > tol ? 'bad' : 'warn'}>
                   {t('ui.game.rad', { n: Math.round(run.world.radiation), tol })}
@@ -132,7 +141,6 @@ function DayHeader({ run }: { run: RunState }) {
                   })}
                 </Chip>
               )}
-              {run.world.airPollution > 30 && <Chip tone="warn">{t('ui.game.air', { n: Math.round(run.world.airPollution) })}</Chip>}
               {run.world.contagion > 20 && <Chip tone="psyche">{t('ui.game.contagion', { n: Math.round(run.world.contagion) })}</Chip>}
               {run.world.lawOrder < 45 && <Chip tone="bad">{t('ui.game.law', { n: Math.round(run.world.lawOrder) })}</Chip>}
             </div>

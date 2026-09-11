@@ -272,7 +272,6 @@ export interface NightReport {
   kwhBudget?: number;
   kwhSpent?: number;
   exposureAdded: number;
-  exposureDecay?: number;
   exposureAfter?: number;
   died: boolean;
   cause?: string;

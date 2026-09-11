@@ -5,7 +5,7 @@
  * 事件只读标签，标签只读这里，所以气温曲线一改，整个事件池的语气会跟着变。
  */
 
-import { EXPOSURE, COLD, NUCLEAR_WINTER, PRICE, SEASON_TEMP, TIME, threatOfDay } from '../balance';
+import { COLD, NUCLEAR_WINTER, PRICE, SEASON_TEMP, TIME, threatOfDay } from '../balance';
 import { WEATHER_DESC, WEATHER_NAME } from '../copy/names';
 import { DISASTER_BY_ID } from '../content/disasters';
 import type { Rng } from '../rng';
@@ -69,7 +69,6 @@ export function createWorld(disaster: DisasterId, rng: Rng): WorldState {
     forecast: [tomorrow, rng.pick(PREP_WEATHER)],
     temperature: Math.round(baseTemperature(1) + WEATHER_TEMP[weather]),
     season: 'autumn',
-    airPollution: 8,
     radiation: 2,
     contagion: 2,
     waterTable: 'normal',
@@ -160,15 +159,6 @@ export function tickClimate(run: RunState, rng: Rng, forDay?: number): void {
   }
 }
 
-export function decayExposure(run: RunState): number {
-  const w = run.world;
-  let decay = EXPOSURE.DECAY;
-  if (w.weather === 'snow' || w.weather === 'blizzard' || w.weather === 'fog') decay += EXPOSURE.WEATHER_COVER;
-  const before = w.exposure;
-  w.exposure = clamp(w.exposure - decay, 0, EXPOSURE.MAX);
-  return Math.round((before - w.exposure) * 10) / 10;
-}
-
 /** 准备期的物价/秩序（不含天候，天候在抽完次日事件后再掷） */
 export function tickPrepEconomy(run: RunState, rng: Rng): void {
   const w = run.world;
@@ -194,7 +184,6 @@ export function tickSurvivalPressures(run: RunState, rng: Rng): void {
   const threat = threatOfDay(run.day);
   const d = def.daily(run.day, threat);
 
-  w.airPollution = clamp(w.airPollution + (d.airPollution ?? 0) + rng.float(-1.5, 1.5), 0, 100);
   w.radiation = clamp(w.radiation + (d.radiation ?? 0), 0, 100);
   w.contagion = clamp(w.contagion + (d.contagion ?? 0), 0, 100);
   w.lawOrder = clamp(w.lawOrder + (d.lawOrder ?? 0) + rng.float(-0.8, 0.8), 0, 100);

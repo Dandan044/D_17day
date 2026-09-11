@@ -5,10 +5,10 @@
  * 与 hooks.ts 的阈值事件弧共用同一套常量阈值，但职责不同：
  * 阈值弧负责「讲故事」，这里只负责「报状态」。
  */
-import { AP, FOOD_NEED, HEALTH, RAD, WATER_NEED, WEAR } from '../balance';
+import { AP, EXPOSURE, FOOD_NEED, HEALTH, RAD, TIME, WATER_NEED, WEAR } from '../balance';
 import { CONDITION_BY_ID } from '../content/conditions';
 import type { ActionHook, ConditionId, RunState } from '../types';
-import { computePower } from './power';
+import { LOAD_NAME, computePower } from './power';
 import { radiationShield } from './tags';
 
 export type TodoLevel = 'red' | 'orange';
@@ -122,6 +122,21 @@ export function collectTodos(run: RunState): TodoItem[] {
     });
   }
 
+  // 人性低落是"预警"而不是"损失"：它不直接扣什么，但接下来会开始有代价。
+  // 阈值 20 与笔记本纸面的血污档位（<20 起加重、<10 出重档）对齐，纸和清单互相印证。
+  if (run.stats.humanity < HEALTH.HUMANITY_OMEN) {
+    orange.push({
+      id: 'humanity-low',
+      level: 'orange',
+      title: '罪孽爬上了你的脊背',
+      lines: [
+        `人性 ${Math.round(run.stats.humanity)}/100。`,
+        '你做过的事开始回头找你——接下来会接连碰上不善的遭遇，别人也不再愿意轻易信你。',
+      ],
+      fix: '还来得及补：把手里有的分出去一份，别再为了省事把麻烦推给别人。',
+    });
+  }
+
   if (run.stats.stamina < HEALTH.STAMINA_LOW) {
     orange.push({
       id: 'stamina-low',
@@ -200,8 +215,10 @@ export function collectTodos(run: RunState): TodoItem[] {
   }
 
   const power = computePower(run);
-  if (power.offline.length > 0) {
-    const names = [...new Set(power.offline)].join('、');
+  // 双重保险：灾前市电在供，根本不该出现这一条（computePower 灾前也不会再把负载判离线）。
+  // 名单走 LOAD_NAME 出中文，别把 lights、fridge 这种 id 直接拼给玩家看。
+  if (run.day >= TIME.COLLAPSE_DAY && power.offline.length > 0) {
+    const names = [...new Set(power.offline)].map((id) => LOAD_NAME[id] ?? id).join('、');
     orange.push({
       id: 'power-offline',
       level: 'orange',
@@ -217,27 +234,24 @@ export function collectTodos(run: RunState): TodoItem[] {
     orange.push({
       id: 'radiation-high',
       level: 'orange',
-      title: '辐射超耐受',
-      lines: [`辐射 ${Math.round(run.world.radiation)}，高于屏蔽耐受 ${tol}。`, '暴露在外的身体会积累辐射病。'],
-      fix: '服碘片、升级屏蔽，辐射天别外出。',
+      title: '核污染',
+      lines: [
+        `辐射 ${Math.round(run.world.radiation)}，高于当前屏蔽能挡的 ${tol}。`,
+        '屏蔽挡不住的放射性微粒会随呼吸进来，身体在慢慢积累辐射病。',
+      ],
+      fix: '服碘片；升级空气过滤器与保温（它们都算进屏蔽），辐射天别外出。',
     });
   }
-  if (run.world.exposure >= 40) {
+  // 灾前只有事件会加暴露度（每天 1 个事件、+3~+6），按 40 判永远够不到——
+  // 用分档首档（22 = 被人看见）让灾前也能提示「你已经被注意到了」。
+  const exposureWarn = run.day < TIME.COLLAPSE_DAY ? EXPOSURE.TIERS[0] : 40;
+  if (run.world.exposure >= exposureWarn) {
     orange.push({
       id: 'exposure-high',
       level: 'orange',
       title: '高暴露度',
       lines: [`暴露度 ${Math.round(run.world.exposure)}/100。`, '被盯上的风险在上升，袭击与麻烦会找上门。'],
       fix: '升级遮光帘，减少喧闹的行为。',
-    });
-  }
-  if (run.world.airPollution > 30) {
-    orange.push({
-      id: 'air-bad',
-      level: 'orange',
-      title: '空气污浊',
-      lines: [`空气污染 ${Math.round(run.world.airPollution)}。`, '不加过滤会伤肺，霉菌肺病就是从这来的。'],
-      fix: '升级空气过滤器，污染天减少开窗与外出。',
     });
   }
   if (run.world.lawOrder < 45) {

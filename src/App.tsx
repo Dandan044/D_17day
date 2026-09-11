@@ -142,7 +142,9 @@ export default function App() {
       {run && openShop && <ShopModal run={run} locationId={openShop} />}
       {run && haul && <HaulModal run={run} />}
       {run && nightReport && <NightReportModal run={run} />}
-      <ChoiceResultModal />
+      {/* 档案皮肤的事件在书页里就地结算（结果写成页上手写批注），所以屏蔽这个公共弹窗；
+          经典皮肤照旧。 */}
+      {!(art && gameUi === 'art') && <ChoiceResultModal />}
 
       <Toasts />
 
