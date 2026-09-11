@@ -211,6 +211,58 @@ export const LOCATIONS: Location[] = [
       { res: 'ammo', min: 0, max: 4, chance: 0.3, weight: RES_WEIGHT.ammo },
     ],
   },
+  // ============ 信号点：hidden，靠频道/事件给出坐标后才出现，整局限一次 ============
+  {
+    id: 'sig_basement',
+    name: '七号楼地下室',
+    desc: '有人把这里当家住过一阵，然后没能走出去。',
+    descSurvival: '铁门是从里面反锁的，锁扣被撬开了。地上有一张床垫、一截绳子，和几个没来得及拆的纸箱。',
+    hidden: true,
+    distance: 1,
+    danger: 18,
+    stock: 80,
+    tags: ['loc:ruin'],
+    loot: [
+      { res: 'foodStaple', min: 8, max: 20, chance: 0.9, weight: RES_WEIGHT.foodStaple },
+      { res: 'water', min: 8, max: 20, chance: 0.85, weight: RES_WEIGHT.water },
+      { res: 'meds', min: 2, max: 6, chance: 0.6, weight: RES_WEIGHT.meds },
+      { res: 'parts', min: 1, max: 5, chance: 0.5, weight: RES_WEIGHT.parts },
+    ],
+  },
+  {
+    id: 'sig_depot',
+    name: '城北物资投放点',
+    desc: '民防部门在广播里报过这个坐标，说这里有配给。',
+    descSurvival: '门口堆着几只没拆封的托盘，塑料膜上落了灰。里面没有人，也没有人动过。',
+    hidden: true,
+    distance: 2,
+    danger: 30,
+    stock: 80,
+    tags: ['loc:bulk'],
+    loot: [
+      { res: 'foodStaple', min: 10, max: 24, chance: 0.9, weight: RES_WEIGHT.foodStaple },
+      { res: 'water', min: 10, max: 26, chance: 0.85, weight: RES_WEIGHT.water },
+      { res: 'meds', min: 3, max: 8, chance: 0.6, weight: RES_WEIGHT.meds },
+      { res: 'fuel', min: 4, max: 12, chance: 0.5, weight: RES_WEIGHT.fuel },
+    ],
+  },
+  {
+    id: 'sig_route',
+    name: '绕城老路边的货场',
+    desc: '跑车的人才会走的一条线，地图上不标。',
+    descSurvival: '两台抛锚的货车堵在门口，油箱盖都开着。里面那台还有半罐油。',
+    hidden: true,
+    distance: 3,
+    needsVehicle: false,
+    danger: 26,
+    stock: 80,
+    tags: ['loc:fuel', 'loc:bulk'],
+    loot: [
+      { res: 'fuel', min: 14, max: 34, chance: 0.9, weight: RES_WEIGHT.fuel },
+      { res: 'parts', min: 4, max: 12, chance: 0.7, weight: RES_WEIGHT.parts },
+      { res: 'foodStaple', min: 4, max: 12, chance: 0.5, weight: RES_WEIGHT.foodStaple },
+    ],
+  },
 ];
 
 for (const loc of LOCATIONS) {

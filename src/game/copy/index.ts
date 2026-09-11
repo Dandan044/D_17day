@@ -10,6 +10,7 @@ import './zh/intel';
 import './zh/world';
 import './zh/ledger';
 import './zh/ui';
+import './zh/channels/index';
 import './zh/events/index';
 
 export { t, tList, hasCopy, allCopy, pickCopy, flatten, register, registerTree } from './t';

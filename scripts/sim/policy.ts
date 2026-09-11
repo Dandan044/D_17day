@@ -322,6 +322,8 @@ function tryBuild(s: Session, persona: Persona, counters: PlayCounters): boolean
 function pickScavengeLoc(s: Session, persona: Persona, prefer: ResourceId[], urgent = false) {
   const cap = exposureCap(s.run, persona, urgent);
   const candidates = LOCATIONS.filter((l) => {
+    // 隐藏信号点要先被坐标解锁。玩家只能去地图上列出来的地方，模拟人格也一样。
+    if (l.hidden && !s.run.locations.some((x) => x.id === l.id)) return false;
     if (l.needsVehicle && !s.run.hasVehicle) return false;
     if (l.danger > cap) return false;
     const st = s.run.locations.find((x) => x.id === l.id);

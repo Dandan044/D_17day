@@ -477,6 +477,9 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 200px;
   }
+  /* 频道会话故意不加 content-visibility：
+     气泡正在逐字长高时，跳过屏外块的渲染会让滚动位置跳、气泡被切掉半截。
+     会话本身有 LOG_CAP 封顶，没有优化的必要。 */
 }
 
 @keyframes seven-in {
@@ -557,5 +560,220 @@
   }
   50% {
     opacity: 1;
+  }
+}
+
+/* ============================================================
+   无线电 · 频段网络（RadioPanel）
+   ============================================================ */
+
+.ch-row {
+  display: flex;
+  gap: 10px;
+  padding: 9px 11px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background-color 120ms linear;
+}
+
+.ch-row:hover {
+  background-color: var(--color-panel2);
+}
+
+.ch-row.on {
+  background-color: var(--color-panel2);
+  border-left-color: var(--color-amber);
+}
+
+.ch-row.dead {
+  opacity: 0.5;
+}
+
+.ch-av {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ch-av.org {
+  background-color: rgba(74, 159, 181, 0.16);
+  border: 0.5px solid rgba(74, 159, 181, 0.42);
+  color: var(--color-infohi);
+}
+
+.ch-av.per {
+  background-color: rgba(224, 161, 18, 0.14);
+  border: 0.5px solid rgba(224, 161, 18, 0.42);
+  color: var(--color-amberhi);
+}
+
+.ch-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background-color: var(--color-amber);
+}
+
+.ch-name {
+  font-size: 12.5px;
+  color: var(--color-paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ch-sub {
+  font-size: 11px;
+  color: var(--color-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ch-badge {
+  align-self: center;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background-color: var(--color-amberdim);
+  color: var(--color-amberhi);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+.ch-opt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 11px;
+  border: 0.5px solid var(--color-line2);
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--color-paper);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ch-opt:hover:not(:disabled) {
+  border-color: var(--color-amber);
+  color: var(--color-amberhi);
+}
+
+.ch-opt:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ch-opt-cost {
+  font-size: 11px;
+  color: var(--color-faint);
+  white-space: nowrap;
+}
+
+.chat-day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 8px;
+  font-size: 11px;
+  color: var(--color-faint);
+}
+
+.chat-day::before,
+.chat-day::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-line);
+}
+
+.chat-row {
+  display: flex;
+  margin: 7px 0;
+}
+
+.chat-row.you {
+  justify-content: flex-end;
+}
+
+.chat-bub {
+  max-width: 76%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border-bottom-left-radius: 3px;
+  background-color: var(--color-panel3);
+  border: 0.5px solid var(--color-line2);
+  color: var(--color-paper);
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+  animation: chat-in 220ms ease-out both;
+}
+
+.chat-bub.you {
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 3px;
+  background-color: #2a2213;
+  border-color: rgba(224, 161, 18, 0.38);
+  color: #f0e2c2;
+}
+
+.chat-bub.typing::after {
+  content: '▍';
+  margin-left: 1px;
+  color: var(--color-amber);
+  animation: chat-caret 900ms steps(1) infinite;
+}
+
+.chat-sys {
+  margin: 8px 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--color-faint);
+}
+
+.chat-sys.silent {
+  color: var(--color-line2);
+  letter-spacing: 0.06em;
+}
+
+.chat-sys.narrate {
+  color: var(--color-dim);
+  padding: 0 6px;
+}
+
+@keyframes chat-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chat-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 系统设置里关掉动效时，气泡直接出现（打字机在 JS 侧另有开关） */
+@media (prefers-reduced-motion: reduce) {
+  .chat-bub,
+  .chat-bub.typing::after {
+    animation: none;
   }
 }

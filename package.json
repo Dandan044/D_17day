@@ -12,7 +12,8 @@
     "lint:content": "tsx scripts/lint-content.ts",
     "dump-copy": "tsx scripts/dump-copy.ts",
     "sim": "tsx scripts/simulate.ts",
-    "verify": "tsx scripts/verify.ts"
+    "verify": "tsx scripts/verify.ts",
+    "probe:channels": "tsx scripts/channel-probe.ts"
   },
   "license": "ISC",
   "dependencies": {

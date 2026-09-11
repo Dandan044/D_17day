@@ -5,6 +5,7 @@
 
 import './copy';
 import { HEALTH, RAD, STAMINA, TIME, WEAR } from './balance';
+import { CHANNEL_BY_ID } from './content/channels';
 import { FAMILY_BY_ID } from './content/events';
 import { LOCATION_BY_ID } from './content/locations';
 import { t } from './copy/t';
@@ -33,6 +34,11 @@ import {
   type Haul,
   type HaulItem,
 } from './engine/economy';
+import {
+  openChannel as engineOpenChannel,
+  replyChannel as engineReplyChannel,
+  searchChannel as engineSearchChannel,
+} from './engine/channels';
 import { applyScavengeDanger } from './engine/exposure';
 import { medicateCondition } from './engine/health';
 import { emitHook } from './engine/hooks';
@@ -54,6 +60,7 @@ import {
 import { makeRng } from './rng';
 import type {
   BuildPath,
+  ChatLine,
   ConditionId,
   HeatMode,
   ModuleId,
@@ -160,6 +167,10 @@ export function scavenge(s: Session, locationId: string, night: boolean): Sessio
   if (run.day < TIME.COLLAPSE_DAY) return fail(t('ledger.toast.shopOpen'));
   const loc = LOCATION_BY_ID[locationId];
   if (!loc) return fail(t('ledger.toast.empty'));
+  // 隐藏地点（信号点）只有被坐标解锁后才存在；没写进 run.locations 就是还没找到
+  if (loc.hidden && !run.locations.some((l) => l.id === locationId)) {
+    return fail(t('ledger.toast.empty'));
+  }
   if (run.ap < 1) return fail(t('ledger.toast.noAp'));
   if (loc.needsVehicle && !run.hasVehicle) return fail(t('ledger.toast.needCar'));
   const shelf = run.locations.find((l) => l.id === locationId)?.stock ?? loc.stock;
@@ -382,6 +393,36 @@ export function verifyIntel(s: Session, intelId: string): SessionResult {
   const r = engineVerifyIntel(s.run, intelId);
   if (!r.ok) return fail(r.reason ?? t('ledger.toast.noIntel'));
   hook(s.run, 'verifyIntel');
+  return ok();
+}
+
+// ============================================================
+// 无线电频道
+// ============================================================
+
+/** 搜索频道：1 AP + 蓄电，抽一个还没发现的频段 */
+export function searchChannel(s: Session): SessionResult<{ found: string | null }> {
+  const r = engineSearchChannel(s.run);
+  if (!r.ok) return fail(r.reason ?? t('channels.err.searchOnce'));
+  if (!r.found) return ok({ found: null }, [{ text: t('channels.ui.searchEmpty'), tone: 'neutral' }]);
+  const name = t(CHANNEL_BY_ID[r.found]?.name ?? r.found);
+  return ok({ found: r.found }, [{ text: t('channels.ui.searchFound', { name }), tone: 'good' }]);
+}
+
+/**
+ * 打开频道：把未读搬进会话记录并结算 onRead。
+ * 读不需要电——没电时玩家仍然能看到对方说过什么，只是回不了。
+ */
+export function openChannel(s: Session, id: string): SessionResult<{ lines: ChatLine[]; from: number }> {
+  const r = engineOpenChannel(s.run, id);
+  return ok({ lines: r.lines, from: r.from });
+}
+
+/** 回一条消息：耗电，不占 AP；1 级电台只能听 */
+export function replyChannel(s: Session, id: string, choiceId: string): SessionResult {
+  const r = engineReplyChannel(s.run, id, choiceId);
+  if (!r.ok) return fail(r.reason ?? t('channels.err.noChoice'));
+  // 回话本身不写日记（会话里已经有一条自己的气泡），只回报成功
   return ok();
 }
 

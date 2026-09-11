@@ -12,6 +12,7 @@ import { PERK_BY_ID, UNLOCK_COST } from './content/perks';
 import { addLog } from './engine/effects';
 import { carryCapacity, type Haul, type HaulItem } from './engine/economy';
 import { settle, resolveEnding, type Settlement } from './engine/endings';
+import { ensureChannelDefaults } from './engine/channels';
 import { ensureRunDefaults } from './engine/power';
 import { createRun, type NightReport, type ResolveChoiceResult } from './engine/run';
 import { randomSeed } from './rng';
@@ -29,6 +30,9 @@ import {
   discardHaul as sessionDiscardHaul,
   endDay as sessionEndDay,
   maintain as sessionMaintain,
+  openChannel as sessionOpenChannel,
+  replyChannel as sessionReplyChannel,
+  searchChannel as sessionSearchChannel,
   rest as sessionRest,
   resolveChoice as sessionResolveChoice,
   salvage as sessionSalvage,
@@ -52,6 +56,7 @@ import {
 } from './session';
 import type {
   BuildPath,
+  ChatLine,
   ConditionId,
   Difficulty,
   HeatMode,
@@ -89,6 +94,14 @@ export interface Toast {
   id: number;
   text: string;
   tone: 'good' | 'bad' | 'neutral';
+}
+
+/** withSession 的返回形状。返回值的 action 用它给 UI 传回数据 */
+export interface SessionOutcome<T = void> {
+  ok: boolean;
+  reason?: string;
+  notes: Array<{ text: string; tone: 'good' | 'bad' | 'neutral' }>;
+  value?: T;
 }
 
 const EMPTY_META: MetaState = {
@@ -216,6 +229,12 @@ interface GameState {
   medicate: (conditionId: ConditionId) => void;
   verifyIntel: (intelId: string) => void;
 
+  // --- 无线电频道 ---
+  searchChannel: () => SessionOutcome<{ found: string | null }> | undefined;
+  /** 打开频道：搬走未读、结算 onRead，并把「新读到的行」与「从哪里开始播」交给 UI */
+  openChannel: (id: string) => SessionOutcome<{ lines: ChatLine[]; from: number }> | undefined;
+  replyChannel: (id: string, choiceId: string) => SessionOutcome | undefined;
+
   // --- 设置 ---
   setRation: (r: RationLevel) => void;
   setWaterUse: (w: WaterLevel) => void;
@@ -250,7 +269,7 @@ export const useGame = create<GameState>()(
         setTimeout(() => get().dropToast(t.id), 3600);
       };
 
-      const withSession = <T,>(fn: (s: ReturnType<typeof createSession>) => { ok: boolean; reason?: string; notes: Array<{ text: string; tone: Toast['tone'] }>; value?: T }) => {
+      const withSession = <T,>(fn: (s: ReturnType<typeof createSession>) => SessionOutcome<T>) => {
         const run = get().run;
         if (!run) return undefined;
         const next = structuredClone(run) as RunState;
@@ -500,6 +519,12 @@ export const useGame = create<GameState>()(
           withSession((s) => sessionVerifyIntel(s, intelId));
         },
 
+        searchChannel: () => withSession((s) => sessionSearchChannel(s)),
+
+        openChannel: (id) => withSession((s) => sessionOpenChannel(s, id)),
+
+        replyChannel: (id, choiceId) => withSession((s) => sessionReplyChannel(s, id, choiceId)),
+
         // ============================================================
         setRation: (ration) => {
           withSession((s) => sessionSetRation(s, ration));
@@ -567,7 +592,8 @@ export const useGame = create<GameState>()(
     },
     {
       name: 'seven-days-save-v1',
-      version: 4,
+      // v5：无线电频道网络（run.channels / run.channelPool）
+      version: 5,
       storage: createThrottledStorage(),
       migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<GameState>;
@@ -579,6 +605,8 @@ export const useGame = create<GameState>()(
           p.run.medicated = p.run.medicated ?? [];
           p.run.immunity = p.run.immunity ?? {};
           ensureRunDefaults(p.run);
+          // v5：无线电频道网络。旧档没有 channels / channelPool
+          ensureChannelDefaults(p.run);
         }
         if (p.meta) {
           p.meta.seenVariants = p.meta.seenVariants ?? [];
@@ -591,7 +619,10 @@ export const useGame = create<GameState>()(
       partialize: (s) => ({ run: s.run, meta: s.meta, screen: s.screen, gameUi: s.gameUi }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<GameState>;
-        if (p.run) ensureRunDefaults(p.run);
+        if (p.run) {
+          ensureRunDefaults(p.run);
+          ensureChannelDefaults(p.run);
+        }
         const gameUi: GameUi = p.gameUi === 'classic' ? 'classic' : 'art';
         return { ...current, ...p, gameUi };
       },
