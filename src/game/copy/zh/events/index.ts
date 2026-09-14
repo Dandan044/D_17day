@@ -14,6 +14,7 @@ import './nuke_build_checks';
 import './nuclear_winter';
 import './prep';
 import './prep_slice';
+import './radio';
 import './stat_arcs';
 import './surv_beats';
 import './survival';

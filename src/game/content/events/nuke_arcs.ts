@@ -233,6 +233,7 @@ export const NUKE_ARC_EVENTS: EventFamily[] = [
 
     choices: [
       ch('copy', { stats: { sanity: 2 }, setFlags: ['flag:knowsNorthRoute', 'flag:copiedCoords'], schedule: [{ familyId: 'nuke_arc_radio_north_2', waitFor: 'verifyIntel' }],  tone: 'good' }),
+      ch('triangulate', { stats: { sanity: 3 }, world: { exposure: 5 }, setFlags: ['flag:knowsNorthRoute', 'flag:radioBeaconFix'],  tone: 'neutral' }, { requires: { modules: { radio: 2 }, reason: '需要 2 级电台（收发机）才能测向' } }),
       ch('reply', { world: { exposure: 6 }, stats: { sanity: -3 }, setFlags: ['flag:radioReplied'], schedule: [{ familyId: 'nuke_arc_radio_north_2', inDays: 2 }],  tone: 'neutral' }),
       skip({ setFlags: ['flag:ignoredCoords'], schedule: [{ familyId: 'nuke_arc_radio_north_2', inDays: 4 }] }),
     ],

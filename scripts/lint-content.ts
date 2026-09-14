@@ -648,8 +648,9 @@ for (const [sig, ids] of bodyDup) {
 
 {
   const { CHANNEL_DEFS } = await import('../src/game/content/channels');
+  const { channelEvents } = await import('../src/game/engine/channels');
   const MAX_LINE = 45;
-  const CORE_MIN_BEATS = 18;
+  const CORE_MIN_EVENTS = 8;
 
   const seenIds = new Set<string>();
   for (const def of CHANNEL_DEFS) {
@@ -660,49 +661,19 @@ for (const [sig, ids] of bodyDup) {
       if (!hasCopy(key)) err(`频道 ${def.id} 缺少文案键：${key}`);
     }
 
-    // ---- 拍数下限：核心频道要能横跨整个末世 ----
-    if (def.core && def.beats.length < CORE_MIN_BEATS) {
-      err(`核心频道 ${def.id} 只有 ${def.beats.length} 拍，需要 >= ${CORE_MIN_BEATS}`);
-    }
-    if (def.beats.length === 0) err(`频道 ${def.id} 没有任何拍`);
-
-    const beatIds = new Set<string>();
-    for (const b of def.beats) {
-      if (beatIds.has(b.id)) err(`频道 ${def.id} 有重复的 beat id：${b.id}`);
-      beatIds.add(b.id);
-    }
-
-    // ---- at 必须递增且不重复：firstDueBeat 按数组顺序取第一个到点的，乱序会跨拍 ----
-    let lastAt = -Infinity;
-    for (const b of def.beats) {
-      if (b.at === undefined) continue;
-      if (b.at <= lastAt) {
-        err(`频道 ${def.id} 的 at 必须按数组顺序严格递增：${b.id} 的 at=${b.at} <= 前一个 ${lastAt}`);
-      }
-      lastAt = b.at;
+    // 一律按**事件表**校验。13 个频道已全部迁到 `events[]`，适配层已删除：
+    // 谁再把内容写成旧的平铺 `beats[]`，这里会直接因为 events 为空而报错。
+    const events = channelEvents(def);
+    if (events.length === 0) err(`频道 ${def.id} 没有任何事件`);
+    if (def.core && events.length < CORE_MIN_EVENTS) {
+      err(`核心频道 ${def.id} 只有 ${events.length} 个事件，需要 >= ${CORE_MIN_EVENTS}`);
     }
 
     const checkKey = (key: string | undefined, what: string) => {
-      if (!key) return;
-      if (!hasCopy(key)) err(`${what} 缺少文案键：${key}`);
+      if (key && !hasCopy(key)) err(`${what} 缺少文案键：${key}`);
     };
-
-    for (const b of def.beats) {
-      const where = `频道 ${def.id} / ${b.id}`;
-      for (const n of b.need ?? []) {
-        if (!beatIds.has(n)) err(`${where} 的 need 指向不存在的 beat：${n}`);
-      }
-      if (b.elseBeat && !beatIds.has(b.elseBeat)) {
-        err(`${where} 的 elseBeat 指向不存在的 beat：${b.elseBeat}`);
-      }
-      if (b.expectReply && !(b.choices && b.choices.length > 0)) {
-        err(`${where} 声明了 expectReply 却没有 choices，玩家永远无法推进`);
-      }
-      if (b.silence && b.choices?.length) {
-        warn(`${where} 同时有 silence 和 choices：choices 会先接管，silence 只在这拍没有选择时生效`);
-      }
-
-      for (const [i, line] of b.out.entries()) {
+    const checkLines = (lines: { text: string; sys?: string }[] | undefined, where: string) => {
+      for (const [i, line] of (lines ?? []).entries()) {
         checkKey(line.text, `${where} 的第 ${i + 1} 条消息`);
         if (!line.sys && hasCopy(line.text)) {
           const text = copyT(line.text);
@@ -711,35 +682,98 @@ for (const [sig, ids] of bodyDup) {
           }
         }
       }
+    };
 
-      for (const c of b.choices ?? []) {
-        const cwhere = `${where} / 选项 ${c.id}`;
-        checkKey(c.label, cwhere);
-        checkKey(c.note, cwhere);
-        checkKey(c.say, `${cwhere} 的 say`);
-        if (c.reply && !beatIds.has(c.reply)) {
-          err(`${cwhere} 的 reply 指向不存在的 beat：${c.reply}`);
+    const evIds = new Set(events.map((e) => e.id));
+    let lastAt = -Infinity;
+    for (const e of events) {
+      if (e.at === undefined) continue;
+      if (e.at <= lastAt) {
+        err(`频道 ${def.id} 的事件 at 必须按顺序严格递增：${e.id} 的 at=${e.at} <= 前一个 ${lastAt}`);
+      }
+      lastAt = e.at;
+    }
+
+    for (const ev of events) {
+      const where = `频道 ${def.id} / 事件 ${ev.id}`;
+      const roundIds = new Set(ev.rounds.map((r) => r.id));
+      if (!roundIds.has(ev.first)) err(`${where} 的 first 指向本事件内不存在的轮：${ev.first}`);
+      for (const n of ev.need ?? []) {
+        if (!evIds.has(n)) err(`${where} 的 need 指向不存在的事件：${n}`);
+      }
+      if (ev.elseEvent && !evIds.has(ev.elseEvent)) {
+        err(`${where} 的 elseEvent 指向不存在的事件：${ev.elseEvent}`);
+      }
+      if (ev.awaitPlayerOpen && !(ev.openChoices && ev.openChoices.length > 0)) {
+        err(`${where} 声明了 awaitPlayerOpen 却没有 openChoices，玩家永远开不了口`);
+      }
+      checkLines(ev.opening, `${where} 的开场`);
+      for (const c of ev.openChoices ?? []) {
+        checkKey(c.label, `${where} / 开场选项 ${c.id}`);
+        checkKey(c.note, `${where} / 开场选项 ${c.id}`);
+        checkKey(c.say, `${where} / 开场选项 ${c.id} 的 say`);
+        if (c.next && !roundIds.has(c.next)) {
+          err(`${where} / 开场选项 ${c.id} 的 next 指向本事件内不存在的轮：${c.next}`);
         }
-        if (c.say && c.affinity === undefined) {
-          warn(`${cwhere} 是一句说出去的话，却没有声明 affinity：好感度不会变`);
+      }
+
+      const roundSeen = new Set<string>();
+      for (const r of ev.rounds) {
+        if (roundSeen.has(r.id)) err(`${where} 有重复的轮 id：${r.id}`);
+        roundSeen.add(r.id);
+        const rw = `${where} / 轮 ${r.id}`;
+        checkLines(r.out, rw);
+        if (r.elseRound && !roundIds.has(r.elseRound)) {
+          err(`${rw} 的 elseRound 指向本事件内不存在的轮：${r.elseRound}`);
         }
+        for (const c of r.choices ?? []) {
+          const cw = `${rw} / 选项 ${c.id}`;
+          checkKey(c.label, cw);
+          checkKey(c.note, cw);
+          checkKey(c.say, `${cw} 的 say`);
+          if (c.next && !roundIds.has(c.next)) {
+            err(`${cw} 的 next 指向本事件内不存在的轮：${c.next}`);
+          }
+          if (c.say && c.affinity === undefined) {
+            warn(`${cw} 是一句说出去的话，却没有声明 affinity：好感度不会变`);
+          }
+        }
+      }
+
+      // ---- 每个事件必须能结束 ----
+      // ① 至少有一个没有选项的轮，或者某个选项没有 next → 有出口
+      const hasTerminalRound = ev.rounds.some((r) => !r.choices?.length);
+      const hasExitChoice = ev.rounds.some((r) => (r.choices ?? []).some((c) => !c.next));
+      if (!hasTerminalRound && !hasExitChoice) {
+        err(`${where} 没有任何终止路径：每一轮都有选项、且每个选项都写了 next，玩家永远走不出去`);
+      }
+      // ② next 图不得成环：从 first 可达的路径必须能在有限步内出去
+      {
+        const adj = new Map<string, string[]>();
+        for (const r of ev.rounds) {
+          adj.set(
+            r.id,
+            (r.choices ?? []).map((c) => c.next).filter((x): x is string => !!x),
+          );
+        }
+        const state = new Map<string, number>();
+        let cyclic = false;
+        const dfs = (id: string) => {
+          const s = state.get(id) ?? 0;
+          if (s === 2 || cyclic) return;
+          if (s === 1) {
+            cyclic = true;
+            return;
+          }
+          state.set(id, 1);
+          for (const nx of adj.get(id) ?? []) dfs(nx);
+          state.set(id, 2);
+        };
+        dfs(ev.first);
+        if (cyclic) err(`${where} 的 next 图里成环，玩家会卡在这一段对话里出不去`);
       }
     }
 
-    // ---- elseBeat 不得成环 ----
-    const elseOf = new Map(def.beats.filter((b) => b.elseBeat).map((b) => [b.id, b.elseBeat!]));
-    for (const b of def.beats) {
-      const path = new Set<string>([b.id]);
-      let cur = elseOf.get(b.id);
-      while (cur) {
-        if (path.has(cur)) {
-          err(`频道 ${def.id} 的 elseBeat 成环：${[...path].join(' → ')} → ${cur}`);
-          break;
-        }
-        path.add(cur);
-        cur = elseOf.get(cur);
-      }
-    }
   }
 
   // ---- UI 侧用到的 bond 档位必须都有文案（模板字符串拼出来的，静态扫不到） ----

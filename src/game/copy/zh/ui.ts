@@ -472,6 +472,10 @@ export const data = {
     tbAp: '行动点',
     tbNo: '表号',
     tbNoValue: 'PL-01',
+    // 配给图悬停/点击的详情（amount 已带好单位量纲，days 是字符串）
+    rationTipFood: '存粮 {amount} 份 · 按当前口粮档约 {days} 天',
+    rationTipWater: '饮水 {amount} L · 按当前用水档约 {days} 天',
+    rationTipOver: '90 天以上',
   },
   map: {
     shop: '采购',
@@ -625,6 +629,21 @@ export const data = {
     radio: '没电则情报和预报不准',
     nuclear: '核沉降',
     disasterGeneric: '灾难',
+  },
+  supplies: {
+    kicker: '实物清点',
+    subtitle: '架上还剩多少，一眼看得见',
+    /** 货架热点悬停时的副标题：两层的可撑天数 */
+    shelfSub: '口粮 {food} 天 · 水 {water} 天',
+    days: '约够 {n} 天（单人标准）',
+    daysInf: '约够 100 天以上（单人标准）',
+    ledgerTitle: '另存物资',
+    battery: '蓄电池余量',
+    kwh: 'kWh',
+    items: '特殊物品',
+    crew: '同伴',
+    tbSite: '据点',
+    tbDate: '日期',
   },
 };
 

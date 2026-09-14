@@ -2817,6 +2817,11 @@ button.art-link {
   --pl-ochre: #5c3f0a;
   --pl-green: #27492f;
   --pl-blue: #1f3a52;
+  /* 配给图专用的浅色：--pl-ochre/-green/-blue 同时被温度计填色与供电图复用（调浅会连带改它们），
+     所以配给那两张图（口粮金字塔 / 水瓶堆）另用一套 -lt 变量，互不串色。 */
+  --pl-ochre-lt: #b08a3c;
+  --pl-green-lt: #6f9e78;
+  --pl-blue-lt: #5f86a6;
   /* 兜底纸色（比避难所 #c6b491 略亮，好让两张公文纸也分得开） */
   --pl-paper: #c9b994;
   --pl-paper-hi: #cfc09a;
@@ -3948,6 +3953,9 @@ button.art-link {
 }
 
 .art-book-chips em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 1px 6px;
   border: 1px solid var(--nb-rule-2);
   font-size: 10.5px;
@@ -4063,32 +4071,37 @@ button.art-link {
   color: var(--nb-ink-3);
 }
 
-/* ---- 翻页：一张纸从装订线往左翻过去 ---- */
+/* ---- 翻页：一张纸从装订线往左翻过去，**整页**盖住 ----
+   必须盖满整张纸（inset:0）而不是只盖右半页：翻页途中左页正文会换成下一件，
+   只盖右页的话新正文会从左边提前露出来。纸全幅覆盖 → 换内容 → 再掀开，才是翻书的样子。 */
 .art-book-leaf {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 50%;
-  z-index: 4;
+  inset: 0;
+  z-index: 6;
   pointer-events: none;
   transform-origin: left center;
   background: linear-gradient(90deg, #d8d6c8 0%, #e6e4d7 45%, #efece0 100%);
-  box-shadow: -14px 0 26px -10px rgba(0, 0, 0, 0.45);
+  box-shadow: 14px 0 26px -10px rgba(0, 0, 0, 0.45);
   animation: art-book-turn 430ms cubic-bezier(0.42, 0, 0.3, 1) both;
 }
 
 @keyframes art-book-turn {
   from {
     opacity: 1;
-    transform: perspective(1400px) rotateY(0deg);
+    transform: perspective(1600px) rotateY(0deg);
   }
-  60% {
+  70% {
     opacity: 1;
   }
   to {
     opacity: 0;
-    transform: perspective(1400px) rotateY(-172deg);
+    transform: perspective(1600px) rotateY(-172deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-book-leaf {
+    display: none;
   }
 }
 
@@ -4140,7 +4153,7 @@ button.art-link {
 /* ---- 取暖栅：竖温度计在左，两根刻度尺滑杆在右 ---- */
 .art-pl-heatgrid {
   display: grid;
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
   align-items: start;
   gap: 14px;
   margin-bottom: 2px;
@@ -4173,18 +4186,35 @@ button.art-link {
   color: var(--pl-green);
 }
 
-/* 固定刻度的三个数字标（-40 / 0 / +40），同样压在刻度板上 */
-.art-pl-tnum {
+/* 刻度尺：左端贴管腔右沿（管腔右沿约在容器 x=40% 处），整 10° 画长一点。
+   竖坐标由 ArtPlanSheet 的 scalePct 给出（0° 以上稀、0° 以下越往下越密），这里只负责画。 */
+.art-pl-ttick {
   position: absolute;
-  right: 2px;
-  z-index: 2;
+  left: 42%;
+  width: 6%;
+  height: 1px;
+  background: var(--pl-rule-2);
   transform: translateY(50%);
-  padding: 0 2px;
-  background: rgba(214, 201, 168, 0.88);
+}
+
+.art-pl-ttick.is-major {
+  width: 10%;
+  height: 1.4px;
+  background: var(--pl-rule-3);
+}
+
+/* 数字标放在管腔左侧的空带上（右对齐）——右侧留给生存/舒适线与读数针，两边不打架 */
+.art-pl-ttnum {
+  position: absolute;
+  right: 78%;
+  width: 22%;
+  text-align: right;
+  transform: translateY(50%);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   color: var(--pl-ink-3);
+  white-space: nowrap;
 }
 
 /* 当前/预估读数针：从管腔左沿一直划到版面右沿，正好横跨刻度 */
@@ -4231,9 +4261,52 @@ button.art-link {
   color: var(--pl-ink-3);
 }
 
+/* 配给图详情：鼠标悬停 / 键盘聚焦 / 触屏点击都展开（触屏由 is-open 兜底） */
+.art-pl-rationfig {
+  position: relative;
+  cursor: help;
+  outline: none;
+}
+
+.art-pl-rationfig:hover .art-pl-rationtip,
+.art-pl-rationfig:focus-visible .art-pl-rationtip,
+.art-pl-rationfig.is-open .art-pl-rationtip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.art-pl-rationtip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  z-index: 3;
+  width: max-content;
+  max-width: 200px;
+  padding: 5px 8px 4px;
+  border: 1px solid var(--pl-rule-3);
+  background: var(--pl-paper-hi);
+  color: var(--pl-ink);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-align: center;
+  box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 3px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-pl-rationtip {
+    transition: none;
+  }
+}
+
 @media (max-width: 1000px) {
   .art-pl-heatgrid {
-    grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-columns: 104px minmax(0, 1fr);
   }
 }
 
@@ -4283,4 +4356,398 @@ button.art-link {
   border-color: var(--pl-red);
   background: rgba(176, 42, 30, 0.09);
   box-shadow: inset 0 0 0 1px rgba(176, 42, 30, 0.22);
+}
+
+/* ============================================================
+   物资货架（ArtSupplyShelf）：点局内木货架热点，整屏摊开成「正面实拍 + 按库存码放」的实物清点。
+   上排码口粮罐头、中排码水瓶；档位与坐标只认 shelfLayout.json。
+   纸面语义色与 ArtPlanPanel / ArtShelterPanel 同族；浮层挂在 .art-root 之外，
+   故在此重新定义一份 --art-serif 与墨色变量（与 .art-pl-veil 同一组 hex）。
+   ============================================================ */
+
+.art-shelf-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3.2vh 3vw;
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  --sh-ink: #191b1c;
+  --sh-ink-2: #33352f;
+  --sh-ink-3: #3f3e37;
+  --sh-rule: rgba(20, 22, 21, 0.3);
+  --sh-rule-2: rgba(20, 22, 21, 0.58);
+  --sh-rule-3: rgba(20, 22, 21, 0.86);
+  --sh-red: #8f2a12;
+  --sh-ochre: #5c3f0a;
+  --sh-green: #27492f;
+  --sh-paper: #c9b994;
+  --sh-paper-hi: #cfc09a;
+  --sh-card: rgba(20, 22, 21, 0.05);
+  --sh-stage: #241d16;
+  color: var(--sh-ink);
+  font-weight: 500;
+}
+
+.art-shelf-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.33) saturate(0.7);
+  animation: art-shelf-lift 460ms ease both;
+}
+
+.art-shelf-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.3) 24%, rgba(4, 6, 8, 0.86) 100%);
+  animation: art-shelf-lift 400ms ease both;
+}
+
+@keyframes art-shelf-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.art-shelf-sheet {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 96vw);
+  height: min(780px, 90vh);
+  background: var(--sh-paper);
+  box-shadow:
+    0 40px 88px -26px rgba(0, 0, 0, 0.8),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: art-shelf-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.art-shelf-paper {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(40, 30, 15, 0.38),
+    inset 0 0 150px rgba(50, 36, 16, 0.26);
+}
+
+@keyframes art-shelf-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 26vh, 0) scale(0.2);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-shelf-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-shelf-veil.is-closing .art-shelf-sheet {
+  animation: art-shelf-out 240ms ease-in both;
+}
+
+.art-shelf-veil.is-closing .art-shelf-room,
+.art-shelf-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-shelf-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 22vh, 0) scale(0.22);
+  }
+}
+
+/* ---- 纸边框 / 表头 / 图签 ---- */
+.art-shelf-frame {
+  position: absolute;
+  inset: 1.6% 1.5%;
+  display: flex;
+  flex-direction: column;
+  border: 1.6px solid var(--sh-rule-3);
+}
+
+.art-shelf-frame::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 0.8px solid rgba(20, 22, 21, 0.38);
+  pointer-events: none;
+}
+
+.art-shelf-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 20px 10px;
+  border-bottom: 1.6px solid var(--sh-rule-3);
+}
+
+.art-shelf-stamp {
+  padding: 1px 7px;
+  border: 1px solid var(--sh-rule-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.art-shelf-headmain {
+  min-width: 0;
+}
+
+.art-shelf-title {
+  margin: 0;
+  font-family: var(--art-serif);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--sh-ink);
+}
+
+.art-shelf-sub {
+  margin: 3px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--sh-ink-3);
+}
+
+.art-shelf-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.3px solid var(--sh-rule-2);
+  background: var(--sh-card);
+  color: var(--sh-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-shelf-close:hover {
+  background: var(--sh-ink);
+  border-color: var(--sh-ink);
+  color: #f2ece0;
+}
+
+/* ---- 正文：左实物货架 / 右纸面台账 ---- */
+.art-shelf-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 12px;
+}
+
+/* 面板现在只剩台账：窄栏居中，读起来像一张夹在框里的清单 */
+.art-shelf-body.is-ledger .art-shelf-ledger {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* 图签最后一格放入口按钮：两个并排，撑满该格 */
+.art-shelf-tbcell.is-entry {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* 注：货架的主视觉已搬回**场景里**（局内那个货架贴图按「口粮档 × 用水档」切成 25 态），
+   这里不再画码放舞台——本面板只剩纸面台账。 */
+
+/* 口粮/饮水两行的「约够 N 天（单人标准）」小注 */
+.art-shelf-rowdays {
+  margin-left: 7px;
+  padding-left: 7px;
+  border-left: 1px solid var(--sh-rule);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--sh-ochre);
+}
+
+.art-shelf-ledger {
+  padding: 10px 14px 12px;
+  border: 1.3px solid var(--sh-rule-2);
+  background: var(--sh-card);
+}
+
+.art-shelf-ledgerhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.art-shelf-ledgertitle {
+  font-family: var(--art-serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--sh-ink);
+}
+
+.art-shelf-ledgerrule {
+  flex: 1;
+  height: 1px;
+  background: var(--sh-rule);
+}
+
+.art-shelf-list {
+  margin: 0;
+}
+
+.art-shelf-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 2px;
+  border-bottom: 1px dashed rgba(20, 22, 21, 0.24);
+}
+
+.art-shelf-row:last-child {
+  border-bottom: 0;
+}
+
+.art-shelf-row dt {
+  font-family: var(--art-serif);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--sh-ink-2);
+}
+
+.art-shelf-row dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sh-ink);
+}
+
+.art-shelf-row.is-batt dd {
+  color: var(--sh-green);
+}
+
+.art-shelf-unit {
+  margin-left: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sh-ink-3);
+}
+
+/* ---- 入口按钮：特殊物品 / 同伴 ---- */
+/* 入口按钮挪进图签最后一格（.is-entry），这里只保留按钮自身样式 */
+.art-shelf-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1.3px solid var(--sh-rule-2);
+  background: var(--sh-paper-hi);
+  color: var(--sh-ink);
+  font-family: var(--art-serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-shelf-btn:hover {
+  background: var(--sh-ink);
+  border-color: var(--sh-ink);
+  color: #f2ece0;
+}
+
+.art-shelf-btn.is-warn {
+  border-color: var(--sh-red);
+  color: var(--sh-red);
+}
+
+.art-shelf-btn.is-warn:hover {
+  background: var(--sh-red);
+  border-color: var(--sh-red);
+  color: #f2ece0;
+}
+
+/* ---- 图签 ---- */
+.art-shelf-tb {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  border-top: 1.6px solid var(--sh-rule-3);
+}
+
+.art-shelf-tbcell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 14px;
+  border-right: 1px solid var(--sh-rule);
+}
+
+.art-shelf-tbcell:last-child {
+  border-right: 0;
+}
+
+.art-shelf-tbk {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--sh-ink-3);
+}
+
+.art-shelf-tbv {
+  font-family: var(--art-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sh-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-shelf-sheet,
+  .art-shelf-room,
+  .art-shelf-veil::before {
+    animation: none;
+  }
 }

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import './game/copy';
 import { rebuildSettlement, useGame } from './game/store';
@@ -15,8 +15,9 @@ import ArtMainMenu from './ui/art/ArtMainMenu';
 import ArtSetup from './ui/art/ArtSetup';
 import ArtSiteSelect from './ui/art/ArtSiteSelect';
 import ArtGame from './ui/art/ArtGame';
-import { ArtBodyPanel, ArtPlanPanel, ArtSuppliesPanel } from './ui/art/ArtPlanPanel';
+import { ArtBodyPanel, ArtPlanPanel } from './ui/art/ArtPlanPanel';
 import { ArtShelterPanel } from './ui/art/ArtShelterPanel';
+import { ArtSupplyShelf } from './ui/art/ArtSupplyShelf';
 import { ArtTodoPanel } from './ui/art/ArtTodoPanel';
 import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
@@ -96,6 +97,37 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [overlay, screen, run, nightReport, lastChoice, haul, openShop, setOverlay, endDay]);
 
+  /**
+   * 隐藏指令：在游玩界面连着敲出 "dandan"。
+   *
+   * 用 ref 存累积缓冲区而不是 state——每敲一个字母都 setState 会让整棵路由树
+   * 重渲染一次，而这里只想在某一个瞬间做一次动作。
+   *
+   * 只收单字符键（e.key.length === 1），跳过修饰键组合与输入框里的正常打字，
+   * 否则玩家在起名/输入的地方打 "dandan" 也会被吃掉。
+   */
+  const devBuf = useRef('');
+  useEffect(() => {
+    if (screen !== 'game') {
+      devBuf.current = '';
+      return;
+    }
+    const secret = 'dandan';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (e.key.length !== 1) return;
+      devBuf.current = (devBuf.current + e.key.toLowerCase()).slice(-secret.length);
+      if (devBuf.current === secret) {
+        devBuf.current = '';
+        useGame.getState().devCheat();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [screen]);
+
   const art = isArtSkin();
   const body = () => {
     if (screen === 'menu') return art ? <ArtMainMenu /> : <MainMenu />;
@@ -139,7 +171,7 @@ export default function App() {
       {run && overlay === 'plan' && <ArtPlanPanel run={run} />}
       {run && overlay === 'body' && <ArtBodyPanel run={run} />}
       {run && overlay === 'todo' && <ArtTodoPanel run={run} />}
-      {run && overlay === 'supplies' && <ArtSuppliesPanel run={run} />}
+      {run && overlay === 'supplies' && <ArtSupplyShelf run={run} />}
       {overlay === 'meta' && <MetaPanel />}
       {overlay === 'codex' && <CodexPanel />}
       {overlay === 'help' && <HelpPanel />}

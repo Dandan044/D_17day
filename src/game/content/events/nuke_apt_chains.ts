@@ -728,6 +728,14 @@ export const NUKE_APT_CHAIN_EVENTS: EventFamily[] = [
 
         tone: 'good',
       }),
+      ch('lock_freq', {
+        stats: { sanity: 3 },
+        world: { exposure: 4 },
+        setFlags: ['flag:calledColleagueOnAir'],
+        schedule: [{ familyId: 'nuke_chain_voice_2', inDays: 3 }],
+
+        tone: 'neutral',
+      }, { requires: { modules: { radio: 2 }, reason: '需要 2 级电台（收发机）才能锁住频率' } }),
       ch('call_out', {
         world: { exposure: 4 },
         stats: { sanity: -3 },

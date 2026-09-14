@@ -1458,6 +1458,27 @@ beat({
             },
           },
           {
+            id: 'relay_call',
+
+            requires: { modules: { radio: 3 }, reason: '需要 3 级电台才能把信号打回去' },
+            check: {
+              skill: 'mechanics',
+              dc: 13,
+              ok: {
+                stats: { sanity: 12, humanity: 4 },
+                setFlags: ['flag:familyFound'],
+
+                tone: 'good',
+              },
+              bad: {
+                stats: { sanity: -6 },
+                setFlags: ['flag:familyUnknown'],
+
+                tone: 'grim',
+              },
+            },
+          },
+          {
             id: 'listen',
 
             effect: {

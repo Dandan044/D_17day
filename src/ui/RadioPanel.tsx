@@ -12,12 +12,11 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { CHANNEL } from '../game/balance';
 import { CHANNEL_BY_ID } from '../game/content/channels';
 import { t } from '../game/copy/t';
-import { bondOf, channelUnread } from '../game/engine/channels';
+import { activeEvent, activeRound, bondOf, channelUnread } from '../game/engine/channels';
 import { checkRequirement, deriveFacts, effectiveModule } from '../game/engine/tags';
 import { WEATHER_NAME } from '../game/engine/world';
 import { useGame } from '../game/store';
-import type { ChannelDef, ChannelState, ChatLine, RunState, WeatherId } from '../game/types';
-import { Modal } from './kit';
+import type { ChannelDef, ChannelState, ChatChoice, ChatLine, RunState, WeatherId } from '../game/types';
 
 /** 流式与节奏常量，集中在这里方便调手感 */
 const TYPING = {
@@ -62,6 +61,7 @@ export function RadioPanel({ run }: { run: RunState }) {
   const searchChannel = useGame((s) => s.searchChannel);
   const openChannel = useGame((s) => s.openChannel);
   const replyChannel = useGame((s) => s.replyChannel);
+  const hailChannel = useGame((s) => s.hailChannel);
 
   // 模块级记住上次看的是哪个频道：面板关了会卸载，state 留不住
   const [sel, setSel] = useState<string | null>(lastChannelId);
@@ -109,7 +109,8 @@ export function RadioPanel({ run }: { run: RunState }) {
   const onPick = (choiceId: string) => {
     if (!activeId || !active) return;
     const before = active.log.length;
-    const r = replyChannel(activeId, choiceId);
+    // 「等你先开口」的事件走 hail，其余走 reply——UI 不必区分，这里分派
+    const r = active.awaiting === 'open' ? hailChannel(activeId, choiceId) : replyChannel(activeId, choiceId);
     if (!r?.ok) return;
     const after = useGame.getState().run?.channels.find((c) => c.id === activeId)?.log.length ?? before;
     if (after > before) {
@@ -126,38 +127,70 @@ export function RadioPanel({ run }: { run: RunState }) {
   const unread = channels.reduce((n, c) => n + channelUnread(c), 0);
 
   return (
-    <Modal
-      title={t('channels.ui.title')}
-      subtitle={t('channels.ui.subtitle', { n: channels.length, unread })}
-      onClose={() => setOverlay(null)}
-      width="max-w-5xl"
-    >
-      {/* 固定高度：对话再长也只让两侧各自滚动。
-          不固定的话整个弹窗会被内容撑高，往下拉时左侧联系人会被拉出视野。 */}
-      <div className="flex h-[min(72vh,620px)] gap-3">
-        <ChannelList
-          channels={channels}
-          sel={activeId}
-          onPick={(id) => setSel(id)}
-          run={run}
-          onSearch={onSearch}
-        />
-        {active ? (
-          <ChatSession
-            key={`${active.id}:${playKey}`}
-            run={run}
-            def={CHANNEL_BY_ID[active.id]!}
-            st={active}
-            playFrom={playFrom}
-            onPick={onPick}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center px-6 text-center text-[12.5px] leading-relaxed text-faint">
-            {t('channels.ui.empty')}
+    /* 外壳是**一台旧短波机的机身**，不是通用弹窗：顶板铭牌 + 电源开关、中间嵌一块凹进去的
+       调谐显示窗（灰绿反射液晶，频段与会话都在屏里）、底下喇叭格栅与旋钮。
+       液晶的配色靠 .lcd-screen 作用域覆盖 --color-* 令牌，屏内的 tailwind 工具类自动跟着变，
+       所以布局与逐字流式一行都不用动。 */
+    <div className="radio-veil" role="dialog" aria-modal="true" aria-label={t('channels.ui.title')}>
+      <div className="radio-set">
+        <div className="radio-top">
+          <span className="radio-plate">
+            <b>{t('channels.ui.title')}</b>
+            <em className="num">{t('channels.ui.model')}</em>
+          </span>
+          <span className="radio-readout num">
+            {t('channels.ui.subtitle', { n: channels.length, unread })}
+          </span>
+          <button type="button" className="radio-power" onClick={() => setOverlay(null)}>
+            <i className="radio-led" aria-hidden />
+            {t('channels.ui.powerOff')}
+          </button>
+        </div>
+
+        <div className="radio-face">
+          <div className="radio-scale" aria-hidden />
+          <div className="lcd-bezel">
+            <div className="lcd-screen">
+              {/* min-h-0 + flex-1：对话再长也只让两侧各自滚动，机身高度不被内容撑破 */}
+              <div className="flex min-h-0 flex-1 gap-3">
+                <ChannelList
+                  channels={channels}
+                  sel={activeId}
+                  onPick={(id) => setSel(id)}
+                  run={run}
+                  onSearch={onSearch}
+                />
+                {active ? (
+                  <ChatSession
+                    key={`${active.id}:${playKey}`}
+                    run={run}
+                    def={CHANNEL_BY_ID[active.id]!}
+                    st={active}
+                    playFrom={playFrom}
+                    onPick={onPick}
+                  />
+                ) : (
+                  <div className="flex flex-1 items-center justify-center px-6 text-center text-[12.5px] leading-relaxed text-faint">
+                    {t('channels.ui.empty')}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        )}
+        </div>
+
+        <div className="radio-bottom">
+          <span className="radio-grille" aria-hidden />
+          <span className="radio-knob is-tune" aria-hidden>
+            <i />
+          </span>
+          <span className="radio-knob is-vol" aria-hidden>
+            <i />
+          </span>
+          <span className={`radio-lamp${unread > 0 ? ' is-on' : ''}`} aria-hidden />
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -261,10 +294,20 @@ function ChatSession({
   playFrom: number;
   onPick: (choiceId: string) => void;
 }) {
-  const beat = st.awaitingBeat ? def.beats.find((b) => b.id === st.awaitingBeat) : undefined;
+  const ev = activeEvent(def, st);
+  const round = activeRound(def, st);
   const facts = useMemo(() => deriveFacts(run), [run]);
   // 引用必须稳定，否则 memo 化的气泡每帧都会重渲染
   const vars = useMemo(() => forecastVars(run.world.forecast), [run.world.forecast]);
+
+  // 页脚状态机。五档要能一眼分清，否则"等你选""等他回""这段结束了"
+  // 在界面上会长得一模一样：
+  //   ① 已永久静默 ② 等你动手（选项 / 先开口）③ 他被 delayDays 压着，等回音
+  //   ④ 在等但这一头没给你东西 ⑤ 没你的事
+  const openMode = st.awaiting === 'open';
+  const choices: ChatChoice[] | undefined = openMode ? ev?.openChoices : round?.choices;
+  const hasChoices = !!choices?.length;
+  const lastMine = st.log.length > 0 && st.log[st.log.length - 1]!.from === 'you';
 
   return (
     <div className="flex min-w-0 flex-1 flex-col border border-line bg-void">
@@ -284,20 +327,19 @@ function ChatSession({
       <div className="border-t border-line px-3.5 py-2.5">
         {st.status === 'lost' ? (
           <div className="text-[11.5px] text-faint">{t('channels.err.lost')}</div>
-        ) : beat?.choices?.length ? (
+        ) : hasChoices ? (
           <>
-            <div className="mb-1.5 text-[10.5px] text-faint">{t('channels.ui.hint')}</div>
-            {beat.choices.map((c) => {
+            <div className="mb-1.5 flex items-baseline gap-2 text-[10.5px] text-faint">
+              <span>{openMode ? t('channels.ui.hintOpen') : t('channels.ui.hint')}</span>
+              {st.active && st.active.round > 0 && (
+                <span className="num">{t('channels.ui.roundN', { n: st.active.round })}</span>
+              )}
+            </div>
+            {choices!.map((c) => {
               const req = checkRequirement(c.requires, run, facts);
-              const sends = !!c.say;
               // requires.reason 在频道内容里是文案键（没走事件层 hydrate），要过 t()
-              const reason = !req.ok
-                ? t(req.reason ?? '')
-                : sends && effectiveModule(run, 'radio') < 2
-                  ? t('channels.err.needRadio2')
-                  : sends && run.wear.batteryCharge < CHANNEL.SEND_KWH
-                    ? t('channels.err.noPower')
-                    : null;
+              // 1 级电台已能收发、发送也不再耗电——这里只剩「内容自身的高等级门槛」。
+              const reason = !req.ok ? t(req.reason ?? '') : null;
               return (
                 <button key={c.id} className="ch-opt" disabled={reason !== null} onClick={() => onPick(c.id)}>
                   <span>{t(c.label)}</span>
@@ -306,6 +348,16 @@ function ChatSession({
               );
             })}
           </>
+        ) : st.waitUntilDay !== undefined ? (
+          <div className="text-[11.5px] text-faint">{t('channels.ui.holding')}</div>
+        ) : st.awaiting ? (
+          <div className="text-[11.5px] text-faint">
+            {def.kind === 'person' ? t('channels.ui.awaitingReply') : t('channels.ui.awaitingOrg')}
+          </div>
+        ) : lastMine ? (
+          <div className="text-[11.5px] text-faint">
+            {def.kind === 'person' ? t('channels.ui.noAnswerPerson') : t('channels.ui.noAnswerOrg')}
+          </div>
         ) : (
           <div className="text-[11.5px] text-faint">{t('channels.ui.none')}</div>
         )}

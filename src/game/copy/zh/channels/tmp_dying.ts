@@ -19,7 +19,7 @@ export const data = {
       choice: {
         reply: {
           label: '回话',
-          note: '耗电 0.15 kWh',
+          note: '发射 · 会被测向',
           say: '我在。你撑多久了。',
         },
         off: {
@@ -43,7 +43,7 @@ export const data = {
         },
         note: {
           label: '只说我记下了',
-          note: '耗电 0.15 kWh',
+          note: '发射 · 会被测向',
           say: '我记下了。你保重。',
         },
         stop: {

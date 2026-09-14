@@ -19,7 +19,7 @@ export const data = {
       choice: {
         ask: {
           label: '回话：把你见过的告诉她',
-          note: '耗电 0.15 kWh',
+          note: '发射 · 会被测向',
           say: '我在三号楼那边见过一个穿红外套的小孩，往东走的。',
         },
         no: {

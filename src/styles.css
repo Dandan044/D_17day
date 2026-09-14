@@ -563,9 +563,429 @@
   }
 }
 
+/* 数值图标（结算 chips / 夜间报表行首）：尺寸随字号，颜色随 currentColor。
+   两套皮肤共用，所以放在这里而不是某个皮肤专属的样式表里。 */
+.val-ico {
+  width: 1.2em;
+  height: 1.2em;
+  flex: 0 0 auto;
+  vertical-align: -0.2em;
+}
+
 /* ============================================================
-   无线电 · 频段网络（RadioPanel）
+   无线电 · 一台旧短波机（RadioPanel）
+   ------------------------------------------------------------
+   刻意**不用通用弹窗**：那套"圆角面板 + 大写字标题栏 + 关闭按钮"是网页的形，
+   套在无线电上就像在网页里嵌了块屏。这里整块做成机身的形——四角螺丝、金属机身、
+   顶板铭牌与电源开关、凹进去的调谐显示窗、底部喇叭格栅与旋钮。
+   屏内仍用 .lcd-screen 作用域覆盖 --color-* 令牌，所以屏里的 tailwind 工具类
+   （bg-ink / text-paper / border-line…）一行都不用改就跟着翻色。
    ============================================================ */
+
+.radio-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3vh 3vw;
+  background: rgba(7, 9, 11, 0.88);
+  animation: radio-in 200ms ease both;
+}
+
+@keyframes radio-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 机身：四角螺丝用四层 radial-gradient 画在背景上，不必加 DOM */
+.radio-set {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1080px, 94vw);
+  height: min(86vh, 760px);
+  border: 1px solid #04070a;
+  border-radius: 5px;
+  background-color: #10161d;
+  background-image:
+    radial-gradient(circle, #4d5967 0 2.4px, #1c242c 2.4px 3.2px, transparent 3.2px),
+    radial-gradient(circle, #4d5967 0 2.4px, #1c242c 2.4px 3.2px, transparent 3.2px),
+    radial-gradient(circle, #4d5967 0 2.4px, #1c242c 2.4px 3.2px, transparent 3.2px),
+    radial-gradient(circle, #4d5967 0 2.4px, #1c242c 2.4px 3.2px, transparent 3.2px),
+    linear-gradient(180deg, #242e38 0%, #161d25 36%, #10161d 100%);
+  background-size:
+    30px 30px,
+    30px 30px,
+    30px 30px,
+    30px 30px,
+    100% 100%;
+  background-position:
+    5px 5px,
+    calc(100% - 5px) 5px,
+    5px calc(100% - 5px),
+    calc(100% - 5px) calc(100% - 5px),
+    0 0;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 2px 0 5px rgba(0, 0, 0, 0.35),
+    inset -2px 0 5px rgba(0, 0, 0, 0.35),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.7),
+    0 26px 64px -18px rgba(0, 0, 0, 0.92);
+}
+
+/* ---- 顶板：铭牌 / 读数 / 电源开关 ---- */
+.radio-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding: 11px 18px;
+  border-bottom: 1px solid #05080b;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.radio-plate {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 10px 4px;
+  border: 1px solid #070b0f;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #3c4756, #222a33);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  font-family: var(--font-mono);
+}
+
+.radio-plate b {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #e6edf3;
+}
+
+.radio-plate em {
+  font-size: 9.5px;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  color: var(--color-amber);
+}
+
+.radio-readout {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #7d8b98;
+}
+
+.radio-power {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border: 1px solid #070b0f;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #2b343f, #171e26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: #97a4b1;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.radio-power:hover {
+  color: #e6edf3;
+  border-color: var(--color-amberdim);
+}
+
+.radio-power:active {
+  transform: translateY(1px);
+}
+
+.radio-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5a1c16;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.75);
+}
+
+.radio-power:hover .radio-led {
+  background: var(--color-alarm);
+  box-shadow: 0 0 7px rgba(222, 74, 63, 0.7);
+}
+
+/* ---- 面板：刻度尺 + 调谐显示窗 ---- */
+.radio-face {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 18px 10px;
+}
+
+/* 频段刻度尺（装饰）：长短刻度 + 一根琥珀指针 */
+.radio-scale {
+  position: relative;
+  flex: 0 0 auto;
+  height: 17px;
+  border: 1px solid #070b0f;
+  border-radius: 2px;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(224, 161, 18, 0.5) 0 1.5px, transparent 1.5px 50px),
+    repeating-linear-gradient(90deg, rgba(224, 161, 18, 0.2) 0 1px, transparent 1px 10px),
+    linear-gradient(180deg, #0c1217, #151c23);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
+.radio-scale::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 46%;
+  width: 2px;
+  background: linear-gradient(180deg, var(--color-amberhi), var(--color-amber));
+  box-shadow: 0 0 7px rgba(224, 161, 18, 0.55);
+}
+
+/* 显示窗：凹进机身，内嵌灰绿反射液晶 */
+.lcd-bezel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 9px;
+  border: 1px solid #04070a;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #0a1015 0%, #0c1217 100%);
+  box-shadow:
+    inset 0 3px 10px rgba(0, 0, 0, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.lcd-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px;
+  /* 反射式液晶：屏底是灰绿，字段是近黑的"字"，没有背光 */
+  background: #aebfa7;
+  color: #16241a;
+
+  /* 覆盖令牌：屏内所有 tailwind 颜色类跟着变 */
+  --color-void: #a3b69c; /* 会话区（右列） */
+  --color-ink: #b2c3aa; /* 频段列表（左列） */
+  --color-panel: #a9bba2;
+  --color-panel2: #9aad94;
+  --color-panel3: #8fa389;
+  --color-line: #7d9077;
+  --color-line2: #687c63;
+
+  --color-paper: #16241a; /* 正文 = 近黑绿 */
+  --color-dim: #3b4d39;
+  --color-faint: #4d604a;
+
+  --color-amber: #3f2c10; /* "警示/关键数据"改成屏上的深琥珀字 */
+  --color-amberhi: #241609;
+  --color-amberdim: #6b7d66;
+
+  --color-alarm: #7a2418;
+  --color-alarmhi: #5c1a10;
+  --color-alarmdim: #8a9b83;
+
+  --color-safe: #1f4a30;
+  --color-safehi: #163a24;
+  --color-info: #1f3f4a;
+  --color-infohi: #16323b;
+  --color-psyche: #3a3560;
+}
+
+/* 玻璃反光 + 扫描线：用 multiply 压暗而不是发光，才像"靠环境光看的"液晶 */
+.lcd-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background:
+    radial-gradient(130% 80% at 16% 6%, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 58%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.055) 0 1px, rgba(0, 0, 0, 0) 1px 3px);
+}
+
+/* 屏内的字走等宽体，更像字段读出 */
+.lcd-screen .ch-name,
+.lcd-screen .ch-sub,
+.lcd-screen .ch-badge,
+.lcd-screen .chat-day,
+.lcd-screen .ch-opt-cost {
+  font-family: var(--font-mono);
+}
+
+/* 频道行 / 选项：液晶上不用色块高亮，改成"反白"——底色近黑、字反成屏色 */
+.lcd-screen .ch-row.on {
+  background: #16241a;
+  border-left-color: #16241a;
+}
+
+.lcd-screen .ch-row.on .ch-name,
+.lcd-screen .ch-row.on .ch-sub {
+  color: #aebfa7;
+}
+
+.lcd-screen .ch-row.on .ch-badge {
+  color: #16241a;
+  background: #aebfa7;
+}
+
+.lcd-screen .ch-av.org,
+.lcd-screen .ch-av.per {
+  color: #aebfa7;
+  background: #16241a;
+}
+
+.lcd-screen .ch-opt {
+  border-radius: 3px;
+  background: rgba(22, 36, 26, 0.06);
+}
+
+.lcd-screen .ch-opt:not(:disabled):hover {
+  background: rgba(22, 36, 26, 0.14);
+}
+
+/* 对话气泡：对方 = 屏底色描边；自己 = 反白块 */
+.lcd-screen .chat-bub {
+  border-color: rgba(22, 36, 26, 0.45);
+  border-radius: 4px;
+  background: rgba(22, 36, 26, 0.05);
+}
+
+.lcd-screen .chat-bub.you {
+  background: #16241a;
+  border-color: #16241a;
+  color: #aebfa7;
+}
+
+.lcd-screen .chat-bub.typing::after {
+  color: #16241a;
+}
+
+/* ---- 底板：喇叭格栅 + 两个旋钮 + 未读指示灯 ---- */
+.radio-bottom {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding: 10px 18px 13px;
+  border-top: 1px solid #05080b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.radio-grille {
+  flex: 1;
+  height: 22px;
+  border: 1px solid #070b0f;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, #04070a 0 3px, #2b3540 3px 5px);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.9);
+}
+
+/* 旋钮：外圈齿纹 + 内盘 + 琥珀指针（指向靠旋转内盘实现了差异化） */
+.radio-knob {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #04070a;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#2c353f 0 6deg, #19212a 6deg 12deg);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.7),
+    0 1px 2px rgba(0, 0, 0, 0.65);
+}
+
+.radio-knob > i {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #3e4956, #1b232b 72%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.radio-knob > i::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--color-amber);
+  transform-origin: 50% 100%;
+}
+
+.radio-knob.is-tune > i::after {
+  transform: rotate(-42deg);
+}
+
+.radio-knob.is-vol > i::after {
+  transform: rotate(66deg);
+}
+
+/* 未读指示灯：有未读就点着并慢闪 */
+.radio-lamp {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2a1a12;
+  box-shadow: inset 0 0 3px rgba(0, 0, 0, 0.85);
+}
+
+.radio-lamp.is-on {
+  background: var(--color-amber);
+  box-shadow: 0 0 10px rgba(224, 161, 18, 0.75);
+  animation: radio-lamp-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes radio-lamp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radio-veil,
+  .radio-lamp.is-on {
+    animation: none;
+  }
+}
+
+/* ============================================================ */
 
 .ch-row {
   display: flex;

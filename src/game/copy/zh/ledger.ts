@@ -88,6 +88,7 @@ export const data = {
     filterGone: '王老板把最后一只滤芯卖给了你',
     haulNoWater: '水箱已满（上限 {cap} L），水没装下',
     haulPartial: '只装了 {take} L 水，桶满了',
+    devCheat: '【调试】已跳到第 {day} 天：物资满仓、建筑满级',
   },
   haul: {
     filterFound: '货架最里侧的角落里摸到一只未拆封的滤芯。整只，还密封着。',
@@ -348,8 +349,7 @@ export const data = {
     treated: '处理完了',
     noIntel: '无法核实',
     noRelic: '遗物不够',
-    unlocked: '已解锁',
-    perkReq: '需要先点前置天赋',
+    unlocked: '已解锁',    perkReq: '需要先点前置天赋',
     perkGot: '已获得：{name}',
     siteWip: '这个住所还在开发中，请另选一处。',
     diaryCopied: '日记已复制到剪贴板',

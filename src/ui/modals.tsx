@@ -11,6 +11,7 @@ import { waterCapacity } from '../game/engine/tags';
 import { carryCap, useGame } from '../game/store';
 import type { ResourceId, RunState } from '../game/types';
 import { Bar, Chip, Modal, Panel, SectionLabel } from './kit';
+import { ValueIcon } from './icons';
 
 // ============================================================
 // 崩溃日
@@ -161,11 +162,16 @@ export function NightReportModal({ run }: { run: RunState }) {
             {r.notes.map((n, i) => (
               <div
                 key={i}
-                className={`text-[12.5px] leading-snug ${
+                className={`flex items-start gap-1.5 text-[12.5px] leading-snug ${
                   n.tone === 'good' ? 'text-safehi' : n.tone === 'bad' ? 'text-alarmhi' : 'text-dim'
                 }`}
               >
-                · {n.text}
+                {n.icon ? (
+                  <ValueIcon id={n.icon} className="mt-[2px]" />
+                ) : (
+                  <span aria-hidden>·</span>
+                )}
+                <span>{n.text}</span>
               </div>
             ))}
           </div>
@@ -499,11 +505,22 @@ export function ChoiceResultModal() {
           </div>
           <p className="text-[13px] leading-relaxed text-paper">{raid.narrative}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {raid.hpLost > 0 && <Chip tone="bad">{t('ui.result.hp', { n: raid.hpLost })}</Chip>}
-            {raid.usedAmmo > 0 && <Chip tone="warn">{t('ui.result.ammo', { n: raid.usedAmmo })}</Chip>}
+            {raid.hpLost > 0 && (
+              <Chip tone="bad">
+                <ValueIcon id="hp" />
+                {t('ui.result.hp', { n: raid.hpLost })}
+              </Chip>
+            )}
+            {raid.usedAmmo > 0 && (
+              <Chip tone="warn">
+                <ValueIcon id="ammo" />
+                {t('ui.result.ammo', { n: raid.usedAmmo })}
+              </Chip>
+            )}
             {raid.moduleDamaged && <Chip tone="bad">{t('ui.result.module', { name: raid.moduleDamaged })}</Chip>}
             {Object.entries(raid.lost).map(([k, v]) => (
               <Chip key={k} tone="bad">
+                <ValueIcon id={k as ResourceId} />
                 {RES_NAME[k as ResourceId]} -{v}
               </Chip>
             ))}
@@ -517,16 +534,17 @@ export function ChoiceResultModal() {
             <Chip
               key={i}
               tone={
-                n.includes('还没有结束') || n.includes('续篇将在你')
+                n.text.includes('还没有结束') || n.text.includes('续篇将在你')
                   ? 'info'
-                  : n.includes('-') || n.includes('受损') || n.includes('失去')
+                  : n.text.includes('-') || n.text.includes('受损') || n.text.includes('失去')
                     ? 'bad'
-                    : n.includes('+')
+                    : n.text.includes('+')
                       ? 'good'
                       : 'default'
               }
             >
-              {n}
+              {n.icon && <ValueIcon id={n.icon} />}
+              {n.text}
             </Chip>
           ))}
         </div>

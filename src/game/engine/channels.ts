@@ -1,13 +1,24 @@
 /**
- * 频道调度：把守护频段的故事节拍投进每个频道自己的信箱。
+ * 频道调度：**事件驱动**的通讯网络。
  *
- * 两条铁律，动了这里就会静默出事：
+ * ## 三层单位：频道 → 事件 → 轮
  *
- * 1. **不走 run.queue**。队列有 4 层限流，且非空就挡住「结束这一天」。
+ * - 一个**事件**＝开场 + 若干轮 + 明确结局。`at` / `afterDays` **只管事件什么时候开始**。
+ * - 事件一旦开始，**轮与轮之间即时推进**，日历不再插手；想表达"他几天没回"，
+ *   在该轮写 `delayDays`。
+ * - 一轮 ＝ 对方说一段 + 给你若干选项；**没有 `choices` 的轮 ＝ 本事件的最后一轮**。
+ *
+ * 旧模型把"日历拍"和"轮"混在同一个 `beats[]` 里，只靠有没有 `at` 区分，于是：
+ * 日历会在对话中途插进来、没有"这件事一共几轮"这个概念、节奏规则只能靠频道 kind 兜。
+ * 分层之后那些补丁（pendingBeat / awaitingBeat / immediate / expectReply）全都不需要了。
+ *
+ * ## 两条铁律，动了会静默出事
+ *
+ * 1. **不走 `run.queue`**：队列有 4 层限流、非空就挡住「结束这一天」，
  *    一条横跨 40 天的主线塞进去会挤掉常规事件。信箱独立配额、不挡睡觉。
- * 2. **不消耗共享 RNG**。endDay 用 makeRng(run.seed, run.rngCursor) 重建序列，
- *    任何额外抽签都会推后其后所有抽签，720 局 sim 基线整体漂移且存档不可复盘。
- *    需要概率的地方一律用 derivedRng(run)：按 (seed, day) 派生，不读写 rngCursor。
+ * 2. **不消耗共享 RNG**：`endDay` 用 `makeRng(run.seed, run.rngCursor)` 重建序列，
+ *    任何额外抽签都会推后其后所有抽签（720 局 sim 基线整体漂移、存档不可复盘）。
+ *    需要概率一律用 `derivedRng(run)`。
  */
 
 import { CHANNEL, TIME } from '../balance';
@@ -16,8 +27,9 @@ import { CHANNEL_BY_ID, CHANNEL_DEFS, CHANNEL_POOL } from '../content/channels';
 import { makeRng, type Rng } from '../rng';
 import type {
   BondLevel,
-  ChannelBeat,
   ChannelDef,
+  ChannelEvent,
+  ChannelRound,
   ChannelState,
   ChatChoice,
   ChatLine,
@@ -37,12 +49,62 @@ export function derivedRng(run: RunState): Rng {
   return makeRng((run.seed + run.day * 7919) >>> 0);
 }
 
+// ============================================================
+// 事件表
+// ============================================================
+
+const NORMALIZED = new Map<string, ChannelEvent[]>();
+
+/**
+ * 频道的事件表。
+ *
+ * 13 个频道已全部改成 `events[]`，旧的平铺 `beats[]` 与那层适配层已经删除，
+ * 所以这里只做一次「按频道缓存」——事件表是静态内容，没必要每次重算。
+ * 内容没写 `events` 就是内容写错了：`lint:content` 会以「没有任何事件」报出来。
+ */
+export function channelEvents(def: ChannelDef): ChannelEvent[] {
+  let evs = NORMALIZED.get(def.id);
+  if (!evs) {
+    evs = def.events ?? [];
+    NORMALIZED.set(def.id, evs);
+  }
+  return evs;
+}
+
+export function eventById(def: ChannelDef, id: string): ChannelEvent | undefined {
+  return channelEvents(def).find((e) => e.id === id);
+}
+
+export function roundById(ev: ChannelEvent, id: string): ChannelRound | undefined {
+  return ev.rounds.find((r) => r.id === id);
+}
+
+/** 当前正在进行的事件（UI 用） */
+export function activeEvent(def: ChannelDef, st: ChannelState): ChannelEvent | undefined {
+  return st.active ? eventById(def, st.active.eventId) : undefined;
+}
+
+/** 当前这一轮（UI 用） */
+export function activeRound(def: ChannelDef, st: ChannelState): ChannelRound | undefined {
+  const ev = activeEvent(def, st);
+  return ev && st.active ? roundById(ev, st.active.roundId) : undefined;
+}
+
+// ============================================================
+// 状态
+// ============================================================
+
 /** 旧存档补齐。放这里而不是 power.ts：power → channels → tags → power 会成环 */
 export function ensureChannelDefaults(run: RunState): void {
   if (!Array.isArray(run.channels)) run.channels = [];
   if (!Array.isArray(run.channelPool)) {
     const owned = new Set(run.channels.map((c) => c.id));
     run.channelPool = CHANNEL_POOL.filter((id) => !owned.has(id));
+  }
+  for (const st of run.channels) {
+    // 事件制之前的老档：doneBeats 与拍 id 对应，新模型按事件记，直接从头开始（频道是第 8 天后的内容）
+    if (!Array.isArray(st.doneEvents)) st.doneEvents = [];
+    if (st.awaiting === undefined) st.awaiting = null;
   }
 }
 
@@ -63,12 +125,13 @@ function makeState(def: ChannelDef): ChannelState {
     id: def.id,
     status: 'active',
     affinity: def.kind === 'org' ? CHANNEL.AFF_INIT_ORG : CHANNEL.AFF_INIT_PERSON,
-    doneBeats: [],
+    doneEvents: [],
     inbox: [],
     log: [],
     missed: 0,
     repliedCount: 0,
     lastContactDay: 0,
+    awaiting: null,
   };
 }
 
@@ -76,88 +139,171 @@ function pushSys(st: ChannelState, run: RunState, key: string): void {
   st.inbox.push({ from: 'peer', sys: 'silent', text: key, day: run.day });
 }
 
+function deliverLines(run: RunState, st: ChannelState, lines: ChatLine[] | undefined): void {
+  if (!lines || lines.length === 0) return;
+  st.inbox.push(...lines.map((l) => ({ ...l, day: run.day })));
+  st.lastContactDay = run.day;
+  st.offlineSinceDay = undefined;
+}
+
+// ============================================================
+// 事件推进
+// ============================================================
+
 /**
- * 时间锚判定。
+ * 事件到点了没有。
  *
- * **只有数组第一拍可以是「无锚开场拍」**——剩下的无锚拍是分支专用
- * （靠选项的 reply 指定，如「去了之后」那种），
- * 如果也按"无锚即到点"处理，它们会在任意一天被兜底逻辑捞出来直接播，
- * 于是一条本该等三天的支线会当场兑现（还会顺手把频道静默掉）。
+ * `at`（绝对日）> `afterDays`（距上次联系）。两个都没有的事件只能被 `elseEvent` 带出来。
+ * `isFirst`：频道的第一条事件允许"无锚开场"——被搜到的频道应当当场说话，而不是等第二天。
  */
-function timeDue(beat: ChannelBeat, isOpening: boolean, st: ChannelState, run: RunState): boolean {
-  if (beat.at !== undefined) return run.day >= beat.at;
-  if (beat.afterDays !== undefined) return run.day - st.lastContactDay >= beat.afterDays;
-  return isOpening;
+function eventDue(ev: ChannelEvent, st: ChannelState, run: RunState, isFirst: boolean): boolean {
+  if (ev.at !== undefined) return run.day >= ev.at;
+  if (ev.afterDays !== undefined) return run.day - st.lastContactDay >= ev.afterDays;
+  return isFirst;
 }
 
-/** pendingBeat 的分支拍：自带 afterDays 时从设定日起算，否则立刻上 */
-function pendingDue(beat: ChannelBeat, st: ChannelState, run: RunState): boolean {
-  if (beat.afterDays === undefined) return true;
-  return run.day - (st.pendingSinceDay ?? run.day) >= beat.afterDays;
-}
-
-function gatesFail(beat: ChannelBeat, st: ChannelState, facts: Facts): boolean {
-  if (beat.need && !beat.need.every((n) => st.doneBeats.includes(n))) return true;
-  if (beat.minAffinity !== undefined && st.affinity < beat.minAffinity) return true;
-  if (beat.require && !matchQuery(beat.require, facts)) return true;
+function eventGatesFail(ev: ChannelEvent, st: ChannelState, facts: Facts): boolean {
+  if (ev.need && !ev.need.every((n) => st.doneEvents.includes(n))) return true;
+  if (ev.minAffinity !== undefined && st.affinity < ev.minAffinity) return true;
+  if (ev.require && !matchQuery(ev.require, facts)) return true;
   return false;
 }
 
-function beatById(def: ChannelDef, id: string): ChannelBeat | null {
-  return def.beats.find((b) => b.id === id) ?? null;
+function roundGatesFail(round: ChannelRound, st: ChannelState, facts: Facts): boolean {
+  if (round.minAffinity !== undefined && st.affinity < round.minAffinity) return true;
+  if (round.require && !matchQuery(round.require, facts)) return true;
+  return false;
 }
 
-/**
- * 沿着 elseBeat 链一路走到第一个条件成立的替代拍。
- *
- * 只走一跳是不够的：三岔结局（合作者 / 可疑分子 / 无人应答）要靠
- * `elseBeat: 下一个分支` 串起来，链尾必须是那个没有任何前置的兜底拍。
- * guard 防成环（lint 也会拦，这里是第二道）。
- */
-function resolveElse(
+/** 沿 elseEvent 一路走到第一个条件成立的替代事件（旧 resolveElse 的事件级版本） */
+function resolveElseEvent(
   def: ChannelDef,
-  from: ChannelBeat,
+  ev: ChannelEvent,
   st: ChannelState,
   facts: Facts,
-): ChannelBeat | null {
-  let cur = from.elseBeat ? beatById(def, from.elseBeat) : null;
+): ChannelEvent | undefined {
+  let cur = ev.elseEvent ? eventById(def, ev.elseEvent) : undefined;
   let guard = 0;
   while (cur && guard++ < 16) {
-    if (!gatesFail(cur, st, facts)) return cur;
-    cur = cur.elseBeat ? beatById(def, cur.elseBeat) : null;
+    if (!eventGatesFail(cur, st, facts)) return cur;
+    cur = cur.elseEvent ? eventById(def, cur.elseEvent) : undefined;
   }
-  return null;
+  return undefined;
 }
 
-function deliver(run: RunState, st: ChannelState, def: ChannelDef, beat: ChannelBeat): void {
-  st.inbox.push(...beat.out.map((l) => ({ ...l, day: run.day })));
-  st.doneBeats.push(beat.id);
+/** 事件收场。`silence` / `lost` 会让频道永久静默 */
+function endEvent(
+  run: RunState,
+  st: ChannelState,
+  def: ChannelDef,
+  ev: ChannelEvent,
+  outcome: NonNullable<ChatChoice['outcome']> = 'resolved',
+  opts: { sysKey?: string } = {},
+): void {
+  if (!st.doneEvents.includes(ev.id)) st.doneEvents.push(ev.id);
+  st.active = undefined;
+  st.awaiting = null;
+  st.waitUntilDay = undefined;
   st.lastContactDay = run.day;
-  st.offlineSinceDay = undefined;
-  if (beat.choices?.length) {
-    st.awaitingBeat = beat.id;
-    st.awaitSinceDay = run.day;
-  }
-  if (beat.silence) {
+  if (opts.sysKey) pushSys(st, run, opts.sysKey);
+  if (outcome === 'silent' || outcome === 'lost' || ev.silence) {
     st.status = 'lost';
     addLog(run, t('channels.log.lost', { name: t(def.name) }), 'grim');
-  } else if (beat.choices?.length) {
-    addLog(run, t('channels.log.arrived', { name: t(def.name) }), 'neutral');
   }
 }
 
-/**
- * 刚被搜到的频道立刻把开场拍投出来。
- *
- * 不这么做的话，玩家花 1 AP 搜出一个新频段，打开只看到一片空白，
- * 得等到第二天夜间结算才有第一条消息——发现新频道的那一下就没有了。
- */
-function deliverOpening(run: RunState, st: ChannelState, def: ChannelDef): void {
-  const first = def.beats[0];
-  if (!first || st.doneBeats.includes(first.id)) return;
-  if (first.at !== undefined && run.day < first.at) return;
-  if (gatesFail(first, st, deriveFacts(run))) return;
-  deliver(run, st, def, first);
+/** 投一轮：说话 → 有选项就等玩家选；没选项就收场 */
+function deliverRound(
+  run: RunState,
+  st: ChannelState,
+  def: ChannelDef,
+  ev: ChannelEvent,
+  round: ChannelRound,
+  facts: Facts,
+): void {
+  if (roundGatesFail(round, st, facts)) {
+    if (round.elseRound) {
+      enterRound(run, st, def, ev, round.elseRound, facts);
+      return;
+    }
+    endEvent(run, st, def, ev, 'resolved');
+    return;
+  }
+
+  deliverLines(run, st, round.out);
+  const active = st.active ?? {
+    eventId: ev.id,
+    roundId: round.id,
+    round: 0,
+    startedDay: run.day,
+    lastActionDay: run.day,
+  };
+  st.active = { ...active, roundId: round.id, round: active.round + 1 };
+  st.waitUntilDay = undefined;
+
+  if (round.choices?.length) {
+    st.awaiting = 'choice';
+    addLog(run, t('channels.log.arrived', { name: t(def.name) }), 'neutral');
+    return;
+  }
+  // 没有选项的这一轮 = 本事件的最后一轮
+  endEvent(run, st, def, ev, round.silence ? 'silent' : 'resolved');
+}
+
+/** 进入某一轮。带 `delayDays` 就挂起，到点由 tick 投 */
+function enterRound(
+  run: RunState,
+  st: ChannelState,
+  def: ChannelDef,
+  ev: ChannelEvent,
+  roundId: string,
+  facts: Facts,
+): void {
+  const round = roundById(ev, roundId);
+  if (!round) {
+    endEvent(run, st, def, ev, 'resolved');
+    return;
+  }
+  const active = st.active ?? {
+    eventId: ev.id,
+    roundId,
+    round: 0,
+    startedDay: run.day,
+    lastActionDay: run.day,
+  };
+  st.active = { ...active, roundId };
+  if ((round.delayDays ?? 0) > 0) {
+    st.waitUntilDay = run.day + round.delayDays!;
+    st.awaiting = null;
+    return;
+  }
+  deliverRound(run, st, def, ev, round, facts);
+}
+
+/** 开一个新事件：投开场白 → 等玩家先开口，或直接进第一轮 */
+function startEvent(run: RunState, st: ChannelState, def: ChannelDef, ev: ChannelEvent, facts: Facts): void {
+  st.active = { eventId: ev.id, roundId: ev.first, round: 0, startedDay: run.day, lastActionDay: run.day };
+  st.waitUntilDay = undefined;
+  deliverLines(run, st, ev.opening);
+  if (ev.awaitPlayerOpen) {
+    st.awaiting = 'open';
+    return;
+  }
+  st.awaiting = null;
+  enterRound(run, st, def, ev, ev.first, facts);
+}
+
+/** 说出来 + 结算 effect + 累积暴露度（发射会被人测向） */
+function registerSend(run: RunState, st: ChannelState, choice: ChatChoice, rng: Rng): void {
+  if (choice.say) {
+    st.log.push({ from: 'you', text: choice.say, day: run.day });
+    if (st.log.length > CHANNEL.LOG_CAP) st.log = st.log.slice(-CHANNEL.LOG_CAP);
+  }
+  if (choice.effect) applyEffect(run, choice.effect, rng);
+  if (choice.say) {
+    const [lo, hi] = CHANNEL.TX_EXPOSURE;
+    run.world.exposure = Math.min(100, run.world.exposure + rng.float(lo, hi));
+  }
 }
 
 /**
@@ -191,83 +337,63 @@ export function tickChannels(run: RunState): void {
     }
     if (st.status !== 'active') continue;
 
-    // ---- 超期未回 ----
-    if (
-      st.awaitingBeat &&
-      st.awaitSinceDay !== undefined &&
-      run.day - st.awaitSinceDay > def.replyWindowDays
-    ) {
-      st.missed += 1;
-      st.affinity = clamp(st.affinity + CHANNEL.AFF_MISSED, 0, 100);
-      st.awaitingBeat = undefined;
-      st.awaitSinceDay = undefined;
-      st.pendingBeat = undefined;
-      st.pendingSinceDay = undefined;
-      // 「晾太久会失去联系」只对个人成立。
-      // 组织是广播性质：你不理它，它照播不误——所以忽略官方频道不会把它弄没，
-      // 只会让你在它的账本上留不下名字（好感度低 → 走「无人应答」结局）。
-      if (
-        def.kind === 'person' &&
-        st.missed >= CHANNEL.MISSED_LIMIT &&
-        st.affinity < CHANNEL.LOST_AFFINITY
-      ) {
-        st.status = 'lost';
-        pushSys(st, run, 'channels.sys.timeout');
-        addLog(run, t('channels.log.lost', { name: t(def.name) }), 'grim');
+    // ---------- 事件进行中：日历不插手，只有"超时"和"delayDays 到点"能动它 ----------
+    if (st.active) {
+      const ev = eventById(def, st.active.eventId);
+      if (!ev || st.doneEvents.includes(ev.id)) {
+        st.active = undefined;
+        st.awaiting = null;
+        st.waitUntilDay = undefined;
+        continue;
+      }
+
+      // 在等你回应，等太久 → 这个事件以超时收场
+      if (st.awaiting && run.day - st.active.lastActionDay > def.replyWindowDays) {
+        st.missed += 1;
+        st.affinity = clamp(st.affinity + CHANNEL.AFF_MISSED, 0, 100);
+        const active = st.active;
+        endEvent(run, st, def, ev, 'timedout', { sysKey: 'channels.sys.timeout' });
+        // 「晾太久会失去联系」只对个人成立。组织是广播性质：你不理它，它照播不误
+        if (
+          def.kind === 'person' &&
+          st.missed >= CHANNEL.MISSED_LIMIT &&
+          st.affinity < CHANNEL.LOST_AFFINITY
+        ) {
+          st.status = 'lost';
+          addLog(run, t('channels.log.lost', { name: t(def.name) }), 'grim');
+        }
+        void active;
+        continue;
+      }
+
+      // delayDays 压着的那一轮到点了
+      if (st.waitUntilDay !== undefined && run.day >= st.waitUntilDay) {
+        const round = roundById(ev, st.active.roundId);
+        st.waitUntilDay = undefined;
+        if (round) deliverRound(run, st, def, ev, round, facts);
+        else endEvent(run, st, def, ev, 'resolved');
       }
       continue;
     }
 
-    // ---- 取一拍 ----
-    let beat: ChannelBeat | null = null;
-    // 分支在等时间（如「三天后信号消失」）时不做兜底：
-    // 否则兜底会把别的带时间锚的拍捞出来，分支就串了。
-    let branchWaiting = false;
-
-    if (st.pendingBeat) {
-      const nb = beatById(def, st.pendingBeat);
-      if (nb && pendingDue(nb, st, run)) {
-        st.pendingBeat = undefined;
-        st.pendingSinceDay = undefined;
-        // 分支拍同样过前置门：这是「同一拍按条件分成两个结局」的唯一手段
-        // （选项只能指向一个 beat id，条件分叉靠 require + elseBeat 完成）
-        if (gatesFail(nb, st, facts)) {
-          beat = resolveElse(def, nb, st, facts);
-          if (!beat) branchWaiting = true;
-        } else {
-          beat = nb;
-        }
-      } else if (!nb) {
-        st.pendingBeat = undefined;
-        st.pendingSinceDay = undefined;
-      } else {
-        branchWaiting = true;
+    // ---------- 空闲：按日历挑一个事件开始 ----------
+    // 到点但门槛不满足时：有 elseEvent 就走替代事件；没有就**跳过它继续往后看**，
+    // 不做"整线停滞"（一条只在特定条件下才该出现的事件不该把后面永久堵死）。
+    const evs = channelEvents(def);
+    for (let i = 0; i < evs.length; i++) {
+      const ev = evs[i]!;
+      if (st.doneEvents.includes(ev.id)) continue;
+      if (!eventDue(ev, st, run, i === 0)) continue;
+      if (!eventGatesFail(ev, st, facts)) {
+        startEvent(run, st, def, ev, facts);
+        break;
       }
-    }
-
-    if (!beat && !branchWaiting) {
-      // 扫描到点且未完成的第一拍。前置不满足时：
-      //   有 elseBeat → 走替代拍（这一拍就算处理过了）
-      //   没有 elseBeat → **跳过它继续往后看**，不做"整线停滞"。
-      // 曾经的"停滞"语义是个陷阱：一条 `at: 26` 的条件拍（只在玩家全程没回时才该出现）
-      // 会把后面所有拍永久堵死，而且不报任何错——小桃的求救就是这样被吃掉的。
-      // 代价是顺序不再由数组位置保证，所以**该保序的地方必须靠 need 显式声明**。
-      for (let i = 0; i < def.beats.length; i++) {
-        const b = def.beats[i]!;
-        if (st.doneBeats.includes(b.id)) continue;
-        if (!timeDue(b, i === 0, st, run)) continue;
-        if (gatesFail(b, st, facts)) {
-          beat = resolveElse(def, b, st, facts);
-          if (beat) break;
-          continue;
-        }
-        beat = b;
+      const alt = resolveElseEvent(def, ev, st, facts);
+      if (alt && !st.doneEvents.includes(alt.id)) {
+        startEvent(run, st, def, alt, facts);
         break;
       }
     }
-
-    if (!beat) continue;
-    deliver(run, st, def, beat);
   }
 }
 
@@ -315,6 +441,21 @@ export function searchChannel(run: RunState): SearchResult {
   return { ok: true, found: id };
 }
 
+/**
+ * 刚被搜到的频道立刻把第一条事件投出来。
+ *
+ * 不这么做的话，玩家花 1 AP 搜出一个新频段，打开只看到一片空白，
+ * 得等到第二天夜间结算才有第一条消息——发现新频道的那一下就没有了。
+ */
+function deliverOpening(run: RunState, st: ChannelState, def: ChannelDef): void {
+  const first = channelEvents(def)[0];
+  if (!first || st.doneEvents.includes(first.id)) return;
+  if (!eventDue(first, st, run, true)) return;
+  const facts = deriveFacts(run);
+  if (eventGatesFail(first, st, facts)) return;
+  startEvent(run, st, def, first, facts);
+}
+
 export interface OpenResult {
   /** 本次新读到的行 */
   lines: ChatLine[];
@@ -357,7 +498,15 @@ export interface ReplyResult {
   said?: string;
 }
 
-/** 回一条消息。发送要有电，且电台至少 2 级（1 级「能听，不能说」） */
+/**
+ * 回一条消息（在"等你选"的那一轮里选一个）。
+ *
+ * 1 级电台即可收发——改频段靠的是耐心，不是设备等级。
+ * 发送不耗蓄电，但每一句都会被测向：所有发射都累积暴露度。
+ *
+ * 选项带 `next` → 在同一事件里进下一轮（**即时**，不等天）；
+ * 不带 → 这个事件到此结束。
+ */
 export function replyChannel(run: RunState, id: string, choiceId: string): ReplyResult {
   ensureChannelDefaults(run);
   const st = run.channels.find((c) => c.id === id);
@@ -365,10 +514,12 @@ export function replyChannel(run: RunState, id: string, choiceId: string): Reply
   const def = CHANNEL_BY_ID[id];
   if (!def) return { ok: false, reason: t('channels.err.noChannel') };
   if (st.status === 'lost') return { ok: false, reason: t('channels.err.lost') };
+  if (!st.active || st.awaiting !== 'choice') return { ok: false, reason: t('channels.err.noChoice') };
 
-  const beat = st.awaitingBeat ? beatById(def, st.awaitingBeat) : null;
-  const choice: ChatChoice | undefined = beat?.choices?.find((c) => c.id === choiceId);
-  if (!beat || !choice) return { ok: false, reason: t('channels.err.noChoice') };
+  const ev = eventById(def, st.active.eventId);
+  const round = ev ? roundById(ev, st.active.roundId) : undefined;
+  const choice: ChatChoice | undefined = round?.choices?.find((c) => c.id === choiceId);
+  if (!ev || !round || !choice) return { ok: false, reason: t('channels.err.noChoice') };
 
   const facts = deriveFacts(run);
   const req = checkRequirement(choice.requires, run, facts);
@@ -376,48 +527,64 @@ export function replyChannel(run: RunState, id: string, choiceId: string): Reply
   // 这里必须过一次 t()——否则玩家会看到 channels.xxx.yyy 这样的原始键名。
   if (!req.ok) return { ok: false, reason: t(req.reason ?? 'channels.err.noChoice') };
 
-  const sends = !!choice.say;
-  // 1 级电台只能收：想说话得先升到收发机
-  if (sends && effectiveModule(run, 'radio') < 2) {
-    return { ok: false, reason: t('channels.err.needRadio2') };
-  }
-  const cost = sends ? CHANNEL.SEND_KWH : 0;
-  if (cost > 0 && (run.wear.batteryCharge ?? 0) < cost) {
-    return { ok: false, reason: t('channels.err.noPower') };
-  }
   const apCost = choice.effect?.ap ?? 0;
-  if (apCost < 0 && run.ap < -apCost) {
-    return { ok: false, reason: t('channels.err.noAp') };
-  }
+  if (apCost < 0 && run.ap < -apCost) return { ok: false, reason: t('channels.err.noAp') };
 
   const rng = derivedRng(run);
-  if (cost > 0) run.wear.batteryCharge = Math.max(0, run.wear.batteryCharge - cost);
-  if (sends) {
-    st.log.push({ from: 'you', text: choice.say!, day: run.day });
-    if (st.log.length > CHANNEL.LOG_CAP) st.log = st.log.slice(-CHANNEL.LOG_CAP);
-  }
-  if (choice.effect) applyEffect(run, choice.effect, rng);
-  if (sends && effectiveModule(run, 'radio') >= 2) {
-    // 发射会被人测向：暴露度代价
-    const [lo, hi] = CHANNEL.TX_EXPOSURE;
-    run.world.exposure = Math.min(100, run.world.exposure + rng.float(lo, hi));
-  }
-
-  // 自己刚说的话当然算看过，否则关掉再打开会把自己那句再念一遍
+  registerSend(run, st, choice, rng);
   st.seenLines = st.log.length;
   st.affinity = clamp(st.affinity + (choice.affinity ?? 0), 0, 100);
   st.repliedCount += 1;
-  st.awaitingBeat = undefined;
-  st.awaitSinceDay = undefined;
+  st.active = { ...st.active, lastActionDay: run.day };
+  st.awaiting = null;
 
   if (choice.silence) {
-    st.status = 'lost';
-    st.pendingBeat = undefined;
-    st.pendingSinceDay = undefined;
-  } else if (choice.reply) {
-    st.pendingBeat = choice.reply;
-    st.pendingSinceDay = run.day;
+    endEvent(run, st, def, ev, 'silent');
+  } else if (choice.next) {
+    enterRound(run, st, def, ev, choice.next, deriveFacts(run));
+  } else {
+    endEvent(run, st, def, ev, choice.outcome ?? 'resolved');
   }
+  return { ok: true, said: choice.say };
+}
 
+/**
+ * 主动先开口。
+ *
+ * 有些事件的开场是**等玩家先说话**的（`awaitPlayerOpen`）：对方在那一头听着，
+ * 你不开口，这件事就不开始。这几句话的选项来自 `ChannelEvent.openChoices`。
+ */
+export function hailChannel(run: RunState, id: string, choiceId: string): ReplyResult {
+  ensureChannelDefaults(run);
+  const st = run.channels.find((c) => c.id === id);
+  if (!st) return { ok: false, reason: t('channels.err.noChannel') };
+  const def = CHANNEL_BY_ID[id];
+  if (!def) return { ok: false, reason: t('channels.err.noChannel') };
+  if (st.status === 'lost') return { ok: false, reason: t('channels.err.lost') };
+  if (!st.active || st.awaiting !== 'open') return { ok: false, reason: t('channels.err.noChoice') };
+
+  const ev = eventById(def, st.active.eventId);
+  const choice: ChatChoice | undefined = ev?.openChoices?.find((c) => c.id === choiceId);
+  if (!ev || !choice) return { ok: false, reason: t('channels.err.noChoice') };
+
+  const facts = deriveFacts(run);
+  const req = checkRequirement(choice.requires, run, facts);
+  if (!req.ok) return { ok: false, reason: t(req.reason ?? 'channels.err.noChoice') };
+  const apCost = choice.effect?.ap ?? 0;
+  if (apCost < 0 && run.ap < -apCost) return { ok: false, reason: t('channels.err.noAp') };
+
+  const rng = derivedRng(run);
+  registerSend(run, st, choice, rng);
+  st.seenLines = st.log.length;
+  st.affinity = clamp(st.affinity + (choice.affinity ?? 0), 0, 100);
+  st.repliedCount += 1;
+  st.active = { ...st.active, lastActionDay: run.day };
+  st.awaiting = null;
+
+  if (choice.silence) {
+    endEvent(run, st, def, ev, 'silent');
+  } else {
+    enterRound(run, st, def, ev, choice.next ?? ev.first, deriveFacts(run));
+  }
   return { ok: true, said: choice.say };
 }

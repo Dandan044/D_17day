@@ -38,8 +38,8 @@ export const data = {
         '3': '请具备接收条件的市民调至 6180 kHz 接收完整报文。',
       },
       choice: {
-        tune: { label: '调频接收完整报文', note: '耗电 0.5 kWh' },
-        scan: { label: '〔天线〕先比对载波', note: '耗电 0.5 kWh · 需要无线电 3 级' },
+        tune: { label: '调频接收完整报文', note: '蓄电 −0.5' },
+        scan: { label: '〔天线〕先比对载波', note: '蓄电 −0.5' },
         skip: { label: '不接收', note: '不消耗' },
       },
     },
@@ -78,8 +78,8 @@ export const data = {
         '2': '请各户上报所在片区与实际留驻人数。',
       },
       choice: {
-        report: { label: '上报片区与人数', note: '暴露 +12' },
-        fake: { label: '虚报一个片区', note: '需要无线电 2 级' },
+        report: { label: '上报片区与人数', note: '暴露 +12 · 蓄电 −0.3' },
+        fake: { label: '虚报一个片区', note: '蓄电 −0.3' },
         ignore: { label: '不回复', note: '不消耗' },
       },
     },
@@ -96,7 +96,7 @@ export const data = {
         '3': '"那你说怎么办。总不能一直说还有。"',
       },
       choice: {
-        copy: { label: '把这段录下来', note: '耗电 0.15 kWh' },
+        copy: { label: '把这段录下来', note: '不消耗' },
         off: { label: '关掉电台', note: '不消耗' },
       },
     },
@@ -124,9 +124,9 @@ export const data = {
         '3': '报了的今天有补给。不报的我们自己去。',
       },
       choice: {
-        report: { label: '上报真实坐标', note: '暴露 +14 · 人性 −8' },
-        fake: { label: '上报一个假坐标', note: '需要无线电 2 级' },
-        scan: { label: '〔天线〕比对载波', note: '需要无线电 3 级' },
+        report: { label: '上报真实坐标', note: '暴露 +14 · 人性 −8 · 蓄电 −0.3' },
+        fake: { label: '上报一个假坐标', note: '蓄电 −0.3' },
+        scan: { label: '〔天线〕比对载波', note: '蓄电 −0.5' },
         silent: { label: '不回', note: '不消耗' },
       },
     },
@@ -136,7 +136,7 @@ export const data = {
         '2': '（还是那段稿子。念的人换了一个。）',
       },
       choice: {
-        reply: { label: '问一句：编号是多少', note: '耗电 0.15 kWh' },
+        reply: { label: '问一句：编号是多少', note: '不消耗' },
         quiet: { label: '不回', note: '不消耗' },
       },
     },

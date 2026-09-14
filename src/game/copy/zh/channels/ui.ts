@@ -4,6 +4,10 @@ import { registerTree } from '../../t';
 export const data = {
   ui: {
     title: '无线电',
+    /** 机身上的型号铭牌 */
+    model: 'R-7',
+    /** 电源开关（关掉面板） */
+    powerOff: '关机',
     subtitle: '{n} 个频段 · {unread} 条未读',
     search: '搜索频道',
     searchCost: '1 行动点 · 0.4 kWh',
@@ -23,7 +27,18 @@ export const data = {
       reliant: '依赖',
     },
     hint: '对方在等你回话。',
+    /** 事件的开场在等你先开口 */
+    hintOpen: '他在听。你先说。',
+    /** 事件里的轮次进度，跟在 hint 后面 */
+    roundN: '第 {n} 轮',
     sending: '发送中',
+    /** 你说完话之后的状态提示：让玩家分得清"等回音 / 不会有回音"，而不是一片沉默 */
+    awaitingReply: '已发出。对方还没接话。',
+    awaitingOrg: '已提交。广播要等明天才有下文。',
+    noAnswerPerson: '对方没有回话。',
+    noAnswerOrg: '单向广播：这里不会有回音。',
+    /** 这一轮被 delayDays 压着（他过几天才回） */
+    holding: '他在那一头没有马上开口。',
   },
   err: {
     noChannel: '没有这个频段',
@@ -33,7 +48,9 @@ export const data = {
     noAp: '行动点不足',
     offline: '电台不在线，收不到东西',
     noPower: '蓄电不够。想听想发，就得把电台排到供电表前面',
-    needRadio2: '1 级电台只能听。要说话，得有收发机。',
+    // 1 级已能收发，这两个键现在只用于「高等级才解锁的选项」的门槛原因
+    needRadio2: '需要 2 级电台（收发机）才能这样做。',
+    needRadio3: '需要 3 级电台（定向天线阵）才能这样做。',
     noRadio: '你还没有无线电',
   },
   log: {

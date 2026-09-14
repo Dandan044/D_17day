@@ -27,11 +27,13 @@ import {
   chooseSite as sessionChooseSite,
   closeShop as sessionCloseShop,
   createSession,
+  devCheat as sessionDevCheat,
   discardHaul as sessionDiscardHaul,
   endDay as sessionEndDay,
   maintain as sessionMaintain,
   openChannel as sessionOpenChannel,
   replyChannel as sessionReplyChannel,
+  hailChannel as sessionHailChannel,
   searchChannel as sessionSearchChannel,
   rest as sessionRest,
   resolveChoice as sessionResolveChoice,
@@ -199,6 +201,8 @@ interface GameState {
   endDay: () => void;
   /** 清掉指向已不存在家族/变体的队列项：否则玩家既看不到选项，也结束不了这一天 */
   pruneQueue: () => void;
+  /** 开发者指令：跳到崩溃日 + 物资满仓 + 建筑满级（游玩界面输入 "dandan" 触发） */
+  devCheat: () => void;
   dismissNight: () => void;
   acknowledgeCollapse: () => void;
   claimSettlement: () => void;
@@ -234,6 +238,8 @@ interface GameState {
   /** 打开频道：搬走未读、结算 onRead，并把「新读到的行」与「从哪里开始播」交给 UI */
   openChannel: (id: string) => SessionOutcome<{ lines: ChatLine[]; from: number }> | undefined;
   replyChannel: (id: string, choiceId: string) => SessionOutcome | undefined;
+  /** 主动先开口：事件的开场在等你先说第一句时用 */
+  hailChannel: (id: string, choiceId: string) => SessionOutcome | undefined;
 
   // --- 设置 ---
   setRation: (r: RationLevel) => void;
@@ -381,6 +387,18 @@ export const useGame = create<GameState>()(
           if (run?.phase === 'ended') set({ screen: 'summary' });
         },
 
+        /**
+         * 开发者指令。彩蛋性质，所以顺手把挡路的浮层/弹窗清掉——
+         * 否则跳到崩溃日后，旧的商店/搜刮浮层还挂在上面，看起来像卡住了。
+         * phase 可能在 endDay 里被改成 'ended'（连跳七天里死过一次），
+         * 那种情况交给 App 的结算路由，这里不做额外处理。
+         */
+        devCheat: () => {
+          withSession((s) => sessionDevCheat(s));
+          set({ overlay: null, openShop: null, haul: null, nightReport: null, lastChoice: null });
+          useGame.setState({ screen: 'game' });
+        },
+
         acknowledgeCollapse: () => {
           withSession((s) => sessionAckCollapse(s));
         },
@@ -524,6 +542,8 @@ export const useGame = create<GameState>()(
         openChannel: (id) => withSession((s) => sessionOpenChannel(s, id)),
 
         replyChannel: (id, choiceId) => withSession((s) => sessionReplyChannel(s, id, choiceId)),
+
+        hailChannel: (id, choiceId) => withSession((s) => sessionHailChannel(s, id, choiceId)),
 
         // ============================================================
         setRation: (ration) => {

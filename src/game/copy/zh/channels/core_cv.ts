@@ -18,7 +18,7 @@ export const data = {
         '3': '愿意的话报个户号，我们好排班值班。',
       },
       choice: {
-        join: { label: '登记户号', note: '耗电 0.15 kWh', say: '五号楼，我登记一下。' },
+        join: { label: '登记户号', note: '蓄电 −0.3 · 会被测向', say: '五号楼，我登记一下。' },
         decline: { label: '不登记', note: '不消耗' },
       },
     },
@@ -81,11 +81,11 @@ export const data = {
       choice: {
         publish: {
           label: '把官方频道的录音放出来',
-          note: '耗电 0.15 kWh',
+          note: '发射 · 会被测向',
           reason: '你手上没有能放给大家听的东西',
           say: '我这有一段录音，你们放给大家听。',
         },
-        keep: { label: '说自己没有', note: '耗电 0.15 kWh', say: '我手上没有这种东西。' },
+        keep: { label: '说自己没有', note: '发射 · 会被测向', say: '我手上没有这种东西。' },
       },
     },
     cv_notice: {
@@ -105,7 +105,7 @@ export const data = {
         '3': '需要一个人作证。谁看见的，说一声。',
       },
       choice: {
-        witness: { label: '作证', note: '耗电 0.15 kWh · 人性 −6', say: '我看见了。是他。' },
+        witness: { label: '作证', note: '发射 · 会被测向 · 人性 −6', say: '我看见了。是他。' },
         silent: { label: '不说话', note: '不消耗' },
         defend: { label: '替他说话', note: '暴露 +8 · 名声 −8', say: '那天他是去换东西的，我跟他一起去的。' },
       },

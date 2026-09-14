@@ -652,7 +652,7 @@ console.log('\n  暴露度单源 / 袭击 waitFor / 储电反馈');
   // 这里用 barricade 以外的 talk：需要技能检定。改用把 pending 挂上后 resolve hide（也是袭击），另测 talk 成功路径：
   run.skills.negotiation = 20;
   const result = resolveChoice(run, 'raid_attempt', 'crowbar', 'talk');
-  check('谈成袭击不致死', !result.died, result.notes.join('|'));
+  check('谈成袭击不致死', !result.died, result.notes.map((n) => n.text).join('|'));
   check(
     '谈成袭击仍触发 waitFor raid 链',
     run.queue.some((q) => q.familyId === 'nuke_chain_ashkid_3') ||
@@ -682,8 +682,8 @@ console.log('\n  暴露度单源 / 袭击 waitFor / 储电反馈');
   const notes = applyEffect(run, { wear: { batteryCharge: 2 }, log: '测' }, makeRng(1, 0));
   check(
     '储电反馈含 + 与现存量',
-    notes.some((n) => n.includes('储电') && n.includes('+') && n.includes('kWh')),
-    notes.join(' | '),
+    notes.some((n) => n.text.includes('储电') && n.text.includes('+') && n.text.includes('kWh')),
+    notes.map((n) => n.text).join(' | '),
   );
 }
 
@@ -1307,12 +1307,13 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     id,
     status: 'active',
     affinity: 20,
-    doneBeats: [],
+    doneEvents: [],
     inbox: [],
     log: [],
     missed: 0,
     repliedCount: 0,
     lastContactDay: 0,
+    awaiting: null,
     ...extra,
   });
 
@@ -1358,7 +1359,11 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
       r.day === TIME.COLLAPSE_DAY && st.inbox.length >= 3,
       `day=${r.day} inbox=${st.inbox.length}`,
     );
-    check('开场拍被标记为等回复', st.awaitingBeat === 'd_open', String(st.awaitingBeat));
+    check(
+      '开场事件被标记为等回复',
+      st.active?.eventId === 'd_open' && st.awaiting === 'choice',
+      `active=${st.active?.eventId}/${st.active?.roundId} awaiting=${st.awaiting}`,
+    );
   }
 
   // ---- 未读搬进会话记录 + onRead 结算 ----
@@ -1390,10 +1395,14 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     check('回话进了会话记录', st.log.some((l) => l.from === 'you'), `log=${st.log.length}`);
     check('好感度按选项声明增加', st.affinity === 20 + 4, String(st.affinity));
 
-    // 下一拍挂起，且没有 afterDays → 次日立刻到
-    const pending = st.pendingBeat;
+    // 事件内的轮是即时接线：回复后立刻进下一轮，不再挂到次日
+    const pendingRound = st.active?.roundId;
     tickChannels(r);
-    check('pendingBeat 次日整点投递', st.log.length + st.inbox.length > 0 && pending === 'd_ask' && st.awaitingBeat === 'd_ask', `awaiting=${st.awaitingBeat}`);
+    check(
+      '下一轮接线后即时投递并等回复',
+      st.log.length + st.inbox.length > 0 && pendingRound === 'd_ask' && st.active?.roundId === 'd_ask' && st.awaiting === 'choice',
+      `round=${st.active?.roundId} awaiting=${st.awaiting}`,
+    );
 
     openChannel(r, 'tmp_dying');
     const apBefore = r.ap;
@@ -1420,7 +1429,11 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     openChannel(r, 'tmp_dying');
     replyChannel(r, 'tmp_dying', 'note');
     const st = r.channels[0]!;
-    check('记下之后进入三日等待', st.pendingBeat === 'd_note_after' && st.status === 'active', `${st.pendingBeat} / ${st.status}`);
+    check(
+      '记下之后进入三日等待',
+      st.active?.roundId === 'd_note_after' && st.waitUntilDay === r.day + 3 && st.awaiting === null && st.status === 'active',
+      `${st.active?.roundId} wait=${st.waitUntilDay}/${r.day + 3} awaiting=${st.awaiting} / ${st.status}`,
+    );
     r.day += 2;
     tickChannels(r);
     check('等待期内不提前兑现', st.status === 'active', st.status);
@@ -1435,12 +1448,12 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     r.channels = [mkChannel('tmp_dying')];
     tickChannels(r);
     const st = r.channels[0]!;
-    st.awaitSinceDay = r.day - 99; // 早就该回了
+    st.active!.lastActionDay = r.day - 99; // 早就该回了
     const aff = st.affinity;
     tickChannels(r);
     check('超期未回记一次 missed', st.missed === 1, String(st.missed));
     check('超期未回扣好感度', st.affinity === aff + CHANNEL.AFF_MISSED, `${aff} -> ${st.affinity}`);
-    check('超期后不再挂着等回复', st.awaitingBeat === undefined, String(st.awaitingBeat));
+    check('超期后不再挂着等回复', st.active === undefined && st.awaiting === null, `active=${st.active?.eventId} awaiting=${st.awaiting}`);
   }
 
   // ---- lost 之后彻底不再投递 ----
@@ -1452,35 +1465,55 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
       tickChannels(r);
     }
     const st = r.channels[0]!;
-    check('lost 频道不再投递任何拍', st.inbox.length === 0 && st.doneBeats.length === 0, `inbox=${st.inbox.length} done=${st.doneBeats.length}`);
+    check('lost 频道不再投递任何事件', st.inbox.length === 0 && st.doneEvents.length === 0, `inbox=${st.inbox.length} done=${st.doneEvents.length}`);
   }
 
-  // ---- 蓄电不足：拒绝发送，且一分钱都不扣 ----
+  // ---- 发送契约：不校验蓄电、不耗电、不扣行动点（设计变更后的正向断言） ----
+  // 旧版是「蓄电不足 → 发送被拒」「发送扣 0.15 kWh」，两条都已被设计移除
+  // （见 engine/channels.ts：1 级即可收发、发送只累积暴露度）。原来那 3 条
+  // 「被拒时不扣 AP / 不推进剧情」的断言前提已经不成立，这里改成守住新契约：
+  // 蓄电见底照样能发话、而且发话本身不产生任何消耗。
   {
     const r = survivalRun(6108);
     r.channels = [mkChannel('tmp_dying')];
     tickChannels(r);
     openChannel(r, 'tmp_dying');
-    r.wear.batteryCharge = 0;
-    const ap = r.ap;
-    const deny = replyChannel(r, 'tmp_dying', 'reply');
-    check('蓄电不足时发送被拒', deny.ok === false, deny.reason);
-    check('被拒时不扣行动点、不扣电', r.ap === ap && r.wear.batteryCharge === 0, `ap=${r.ap} kwh=${r.wear.batteryCharge}`);
     const st = r.channels[0]!;
-    check('被拒时不推进剧情', st.awaitingBeat === 'd_open' && st.log.every((l) => l.from !== 'you'), String(st.awaitingBeat));
+    check('事件已开始、正等玩家回话', st.awaiting === 'choice', `awaiting=${st.awaiting} event=${st.active?.eventId}`);
+
+    r.wear.batteryCharge = 0; // 蓄电见底，照样要能发话
+    const ap = r.ap;
+    const kwh = r.wear.batteryCharge;
+    const lines = st.log.length;
+    const sent = replyChannel(r, 'tmp_dying', 'reply');
+    check('蓄电为 0 时照样能发话（发送不校验蓄电）', sent.ok, sent.reason);
+    check('发话不扣蓄电', r.wear.batteryCharge === kwh, `${kwh} -> ${r.wear.batteryCharge}`);
+    check('发话不扣行动点', r.ap === ap, `${ap} -> ${r.ap}`);
+    check(
+      '发话照常推进剧情',
+      st.log.length > lines && st.log.some((l) => l.from === 'you'),
+      `log ${lines} -> ${st.log.length} round=${st.active?.roundId}`,
+    );
   }
 
-  // ---- 1 级电台只能听不能说 ----
+  // ---- 1 级电台即可收发（等级只用于「搜到频道」与选项自身的门槛，不再是发话前提） ----
   {
     const r = survivalRun(6109);
     r.modules.radio = 1;
     r.channels = [mkChannel('tmp_dying')];
     tickChannels(r);
     openChannel(r, 'tmp_dying');
-    const deny = replyChannel(r, 'tmp_dying', 'reply');
-    check('1 级电台发不出话', deny.ok === false, deny.reason);
-    const quiet = replyChannel(r, 'tmp_dying', 'off'); // 不说话的那条应该仍然可选
-    check('1 级电台仍然可以「不回」', quiet.ok, quiet.reason);
+    const sent = replyChannel(r, 'tmp_dying', 'reply');
+    check('1 级电台也能发话', sent.ok, sent.reason);
+
+    // 「不说话的那条永远可选」这条契约与电台等级无关，仍应成立 → 单独验证
+    const r2 = survivalRun(6109);
+    r2.modules.radio = 1;
+    r2.channels = [mkChannel('tmp_dying')];
+    tickChannels(r2);
+    openChannel(r2, 'tmp_dying');
+    const quiet = replyChannel(r2, 'tmp_dying', 'off'); // 不说话的那条应该仍然可选
+    check('不发话的选项仍然可选', quiet.ok, quiet.reason);
   }
 
   // ---- 搜索频道：每日一次、池子有限、命中率按等级 ----
@@ -1538,7 +1571,7 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
       r.rngCursor === cursor0,
       `${cursor0} -> ${r.rngCursor}（动了就意味着 720 局 sim 基线会漂移）`,
     );
-    check('30 天后频道确实发生了推进（不是空转）', r.channels.some((c) => c.doneBeats.length > 0), r.channels.map((c) => `${c.id}:${c.doneBeats.length}`).join(' '));
+    check('30 天后频道确实发生了推进（不是空转）', r.channels.some((c) => c.doneEvents.length > 0), r.channels.map((c) => `${c.id}:${c.doneEvents.length}`).join(' '));
   }
 
   // ---- 旧存档自愈 ----
@@ -1561,16 +1594,17 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     id: 'xt',
     status: 'active',
     affinity: 60,
-    doneBeats: [],
+    doneEvents: [],
     inbox: [],
     log: [],
     missed: 0,
     repliedCount: 0,
     lastContactDay: 0,
+    awaiting: null,
     ...extra,
   });
 
-  /** 第 32 天之前该走完的主线拍（测试里直接标成已完成，免得一天只投一拍的节奏把用例拖长） */
+  /** 第 32 天之前该走完的主线事件（测试里直接标成已完成，免得一天只投一件的节奏把用例拖长） */
   const PRIOR = [
     'xt_hello', 'xt_power', 'xt_daily_a', 'xt_share', 'xt_daily_b',
     'xt_daily_c', 'xt_daily_d', 'xt_request', 'xt_gift', 'xt_reconnect', 'xt_afraid',
@@ -1592,7 +1626,7 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     r.res.water = 60;
     r.res.foodStaple = 40;
     // 前置：主线走到第 28 天（试音、交心、求助都已完成）
-    r.channels = [mk({ affinity, doneBeats: [...PRIOR], lastContactDay: 28 })];
+    r.channels = [mk({ affinity, doneEvents: [...PRIOR], lastContactDay: 28 })];
     r.queue = [];
     return r;
   };
@@ -1602,12 +1636,12 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     const r = atAmbush(6201, 60);
     tickChannels(r);
     const st = r.channels[0]!;
-    check('第 32 天按时收到求救', st.awaitingBeat === 'xt_ambush', String(st.awaitingBeat));
+    check('第 32 天按时收到求救事件', st.active?.eventId === 'xt_ambush' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
     openChannel(r, 'xt');
     check('答应出门成功', replyChannel(r, 'xt', 'go').ok);
     tickChannels(r);
     openChannel(r, 'xt');
-    check('到达分支进入楼道', st.awaitingBeat === 'xt_go', String(st.awaitingBeat));
+    check('到达分支进入楼道那一轮', st.active?.eventId === 'xt_ambush' && st.active?.roundId === 'r_go', `round=${st.active?.roundId}`);
     replyChannel(r, 'xt', 'upstairs');
     tickChannels(r);
     openChannel(r, 'xt');
@@ -1616,10 +1650,10 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     // 存活线：第 36 天还能收到日常
     r.day = 36;
     tickChannels(r);
-    check('存活线后续节拍正常投递', st.doneBeats.includes('xt_live_a'), st.doneBeats.join(','));
+    check('存活线后续事件正常投递', st.doneEvents.includes('xt_live_a'), st.doneEvents.join(','));
   }
 
-  // ---- 结局二：好感度不够 + 上楼 → 她死了（条件分叉走 elseBeat） ----
+  // ---- 结局二：好感度不够 + 上楼 → 她死了（条件分叉走轮级 elseRound） ----
   {
     const r = atAmbush(6202, 60);
     tickChannels(r);
@@ -1627,11 +1661,18 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     replyChannel(r, 'xt', 'go');
     tickChannels(r);
     openChannel(r, 'xt');
+    // 新模型里轮与轮即时接线：门槛要在「选 upstairs」之前就压低，
+    // 否则 r_up 会当场过门（旧模型是等到次日 tick 才结算，所以旧写法是选完再改）。45+6=51 < r_up 的 55
+    r.channels[0]!.affinity = 45;
     replyChannel(r, 'xt', 'upstairs');
-    r.channels[0]!.affinity = 45; // 拉低到门槛以下
     tickChannels(r);
     const st = r.channels[0]!;
-    check('好感度不足时走 elseBeat 死亡分支', st.doneBeats.includes('xt_dead'), st.doneBeats.join(','));
+    // 新模型里 r_dead 是 xt_ambush 内的终止轮（不是独立事件）：死亡分支 = 事件收场 + 永久静默 + 死亡旁白
+    check(
+      '好感度不足时走 elseRound 死亡分支',
+      st.doneEvents.includes('xt_ambush') && st.status === 'lost' && st.inbox.some((l) => l.text.includes('xt_dead')),
+      `done=${st.doneEvents.join(',')} status=${st.status} inbox=${st.inbox.map((l) => l.text).join('|')}`,
+    );
     check('死亡分支把频道永久静默', st.status === 'lost', st.status);
     check('死了就没有存活线', !r.flags.includes('flag:xtAlive'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
   }
@@ -1641,7 +1682,7 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     const r = atAmbush(6203, 20);
     tickChannels(r);
     const st = r.channels[0]!;
-    check('前置不够时不是求救而是静默', st.doneBeats.includes('xt_silent'), st.doneBeats.join(','));
+    check('前置不够时不是求救而是静默', st.doneEvents.includes('xt_silent') && !st.doneEvents.includes('xt_ambush'), st.doneEvents.join(','));
     check('静默分支同样永久静默', st.status === 'lost', st.status);
     const lines = st.inbox;
     check('静默分支确实给出了文本（不是空信息）', lines.length >= 2, String(lines.length));
@@ -1653,29 +1694,43 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     const before = PRIOR.filter((id) => id !== 'xt_reconnect');
     const quiet = atAmbush(6204, 20);
     quiet.day = 26;
-    quiet.channels = [mk({ affinity: 20, doneBeats: [...before], lastContactDay: 25 })];
+    quiet.channels = [mk({ affinity: 20, doneEvents: [...before], lastContactDay: 25 })];
     tickChannels(quiet);
-    check('全程没回过 → 触发离线回归拍', quiet.channels[0]!.doneBeats.includes('xt_reconnect'), quiet.channels[0]!.doneBeats.join(','));
+    // 新模型里「触发」＝事件被开启并停在等回复上（结束才写 doneEvents）
+    const qst = quiet.channels[0]!;
+    check('全程没回过 → 触发离线回归事件', qst.active?.eventId === 'xt_reconnect' && qst.awaiting === 'choice', `active=${qst.active?.eventId} awaiting=${qst.awaiting}`);
 
     const talked = atAmbush(6205, 40);
     talked.day = 26;
     talked.flags = ['flag:xtReplied'];
-    talked.channels = [mk({ affinity: 40, doneBeats: [...before], lastContactDay: 25 })];
+    talked.channels = [mk({ affinity: 40, doneEvents: [...before], lastContactDay: 25 })];
     tickChannels(talked);
-    check('回过话 → 不触发离线回归拍', !talked.channels[0]!.doneBeats.includes('xt_reconnect'), talked.channels[0]!.doneBeats.join(','));
+    const tst = talked.channels[0]!;
+    check('回过话 → 不触发离线回归事件', tst.active?.eventId !== 'xt_reconnect' && !tst.doneEvents.includes('xt_reconnect'), `active=${tst.active?.eventId} done=${tst.doneEvents.join(',')}`);
   }
 
-  // ---- 前置不满足的拍不会堵住后面（曾经的「整线停滞」陷阱） ----
+  // ---- 前置不满足的事件不会堵住后面（曾经的「整线停滞」陷阱） ----
   {
     const r = atAmbush(6206, 20);
     r.day = 28;
+    // xt_reconnect(26) 的前置是「全程没回过话」，这里故意让它**不满足且未完成**：
+    // 它没有 elseEvent，所以引擎必须跳过它，让第 28 天的 xt_afraid 照常投递。
+    // （旧的空转版本把 xt_reconnect 也算进了 PRIOR，等于根本没测到这个陷阱。）
+    r.flags = ['flag:xtReplied'];
     r.channels = [
-      mk({ affinity: 20, doneBeats: PRIOR.filter((id) => id !== 'xt_afraid'), lastContactDay: 25 }),
+      mk({
+        affinity: 20,
+        doneEvents: PRIOR.filter((id) => id !== 'xt_reconnect' && id !== 'xt_afraid'),
+        lastContactDay: 25,
+      }),
     ];
-    // xt_reconnect(26) 的前置不满足且没有 elseBeat；xt_afraid(28) 必须照常投递
     tickChannels(r);
     const st = r.channels[0]!;
-    check('条件不满足的条件拍不会堵住后续拍', st.doneBeats.includes('xt_afraid'), st.doneBeats.join(','));
+    check(
+      '前置不满足的事件被跳过、不堵住后续事件',
+      st.doneEvents.includes('xt_afraid') && !st.doneEvents.includes('xt_reconnect'),
+      st.doneEvents.join(','),
+    );
   }
 }
 
@@ -1683,7 +1738,7 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
 console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被攻陷」');
 // ============================================================
 {
-  const { tickChannels, openChannel, replyChannel } = await import('../src/game/engine/channels');
+  const { tickChannels, openChannel, replyChannel, channelEvents } = await import('../src/game/engine/channels');
   const { CHANNEL_BY_ID } = await import('../src/game/content/channels');
   const { FAMILY_BY_ID } = await import('../src/game/content/events');
   await import('../src/game/copy');
@@ -1709,12 +1764,13 @@ console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被
       id: 'og',
       status: 'active',
       affinity: 40,
-      doneBeats: [...(opts.done ?? [])],
+      doneEvents: [...(opts.done ?? [])],
       inbox: [],
       log: [],
       missed: 0,
       repliedCount: 0,
       lastContactDay: day - 1,
+      awaiting: null,
     };
     r.channels = [st];
     r.queue = [];
@@ -1746,7 +1802,7 @@ console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被
     const r = ogAt(7002, 12, { done: ['og_open', 'og_weather', 'og_rules'] });
     tickChannels(r);
     const st = r.channels[0]!;
-    check('第 12 天收到坐标拍', st.awaitingBeat === 'og_coord', String(st.awaitingBeat));
+    check('第 12 天收到坐标事件', st.active?.eventId === 'og_coord' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
     openChannel(r, 'og');
     const kwh = r.wear.batteryCharge;
     check('调频接收成功', replyChannel(r, 'og', 'tune').ok);
@@ -1778,7 +1834,7 @@ console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被
     const r = ogAt(7005, 28, { done: MAIN.filter((id) => id !== 'og_seized') });
     tickChannels(r);
     const st = r.channels[0]!;
-    check('掠夺期按时被攻陷（口吻突变那一拍）', st.awaitingBeat === 'og_seized', String(st.awaitingBeat));
+    check('掠夺期按时被攻陷（口吻突变那一段）', st.active?.eventId === 'og_seized' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
     openChannel(r, 'og');
     const exp = r.world.exposure;
     const hum = r.stats.humanity;
@@ -1813,26 +1869,29 @@ console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被
   {
     const coop = ogAt(7008, 40, { done: MAIN, flags: ['flag:ogReported', 'flag:ogSoldOut'] });
     tickChannels(coop);
-    check('卖过人的走「合作者」结局', coop.channels[0]!.doneBeats.includes('og_endgame'), coop.channels[0]!.doneBeats.join(','));
+    check('卖过人的走「合作者」结局', coop.channels[0]!.doneEvents.includes('og_endgame'), coop.channels[0]!.doneEvents.join(','));
 
     const suspect = ogAt(7009, 40, { done: MAIN, flags: ['flag:ogReported'] });
     tickChannels(suspect);
-    check('只报过片区的走「可疑分子」结局', suspect.channels[0]!.doneBeats.includes('og_suspect'), suspect.channels[0]!.doneBeats.join(','));
+    check('只报过片区的走「可疑分子」结局', suspect.channels[0]!.doneEvents.includes('og_suspect'), suspect.channels[0]!.doneEvents.join(','));
 
     const ignored = ogAt(7010, 40, { done: MAIN, flags: [] });
     tickChannels(ignored);
     check(
-      '从没回过的走「无人应答」结局（elseBeat 链要一路走到底）',
-      ignored.channels[0]!.doneBeats.includes('og_ignored'),
-      ignored.channels[0]!.doneBeats.join(','),
+      '从没回过的走「无人应答」结局（elseEvent 链要一路走到底）',
+      ignored.channels[0]!.doneEvents.includes('og_ignored'),
+      ignored.channels[0]!.doneEvents.join(','),
     );
   }
 
   // ---- 天气预报由官方频道承接 ----
   {
     const def = CHANNEL_BY_ID['og']!;
-    const weatherBeat = def.beats.find((b) => b.id === 'og_weather');
-    const dyn = weatherBeat?.out.find((l) => l.dynamic === 'forecast');
+    const weatherEvent = channelEvents(def).find((e) => e.id === 'og_weather');
+    const dyn = [
+      ...(weatherEvent?.opening ?? []),
+      ...(weatherEvent?.rounds ?? []).flatMap((r) => r.out),
+    ].find((l) => l.dynamic === 'forecast');
     check('官方频道里有动态天气预报消息', !!dyn, String(!!dyn));
     check('动态消息的文案留了 {a}/{b} 占位', !!dyn && /\{a\}/.test(copyT(dyn.text)) && /\{b\}/.test(copyT(dyn.text)), dyn ? copyT(dyn.text) : '');
   }
@@ -1866,12 +1925,13 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
       id: 'cv',
       status: 'active',
       affinity: 40,
-      doneBeats: [...(opts.done ?? [])],
+      doneEvents: [...(opts.done ?? [])],
       inbox: [],
       log: [],
       missed: 0,
       repliedCount: 0,
       lastContactDay: day - 1,
+      awaiting: null,
     };
     r.channels = [st];
     r.queue = [];
@@ -1901,12 +1961,27 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
     check('第 15 天委员会自动到场并开场', !!cv && cv.inbox.length >= 3, `${cv?.inbox.length}`);
   }
 
+  // ---- 登记户号：与表决同属「正式手续」，要真占用电台（蓄电 −0.3） ----
+  {
+    const r = cvAt(8003, 15);
+    tickChannels(r);
+    const st = r.channels[0]!;
+    check('第 15 天进入登记事件', st.active?.eventId === 'cv_invite' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
+    openChannel(r, 'cv');
+    const kwh = r.wear.batteryCharge;
+    const ok = replyChannel(r, 'cv', 'join');
+    check('登记户号能发出去', ok.ok, ok.reason);
+    check('登记消耗蓄电 0.3', Math.abs(r.wear.batteryCharge - (kwh - 0.3)) < 1e-9, `${kwh} -> ${r.wear.batteryCharge}`);
+    check('登记留下痕迹', r.flags.includes('flag:cvJoined'), r.flags.join(','));
+    check('登记后事件正常收场', st.doneEvents.includes('cv_invite') && st.awaiting === null, st.doneEvents.join(','));
+  }
+
   // ---- 表决：耗电 0.3，需要 2 级电台 ----
   {
     const r = cvAt(8002, 22, { done: CV_MAIN.slice(0, 4) });
     tickChannels(r);
     const st = r.channels[0]!;
-    check('第 22 天进入表决拍', st.awaitingBeat === 'cv_vote_virus', String(st.awaitingBeat));
+    check('第 22 天进入表决事件', st.active?.eventId === 'cv_vote_virus' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
     openChannel(r, 'cv');
     const kwh = r.wear.batteryCharge;
     const hum = r.stats.humanity;
@@ -1947,15 +2022,15 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
   {
     const order = cvAt(8006, 44, { done: CV_MAIN, flags: ['flag:cvPaidUp'] });
     tickChannels(order);
-    check('交过份子的走「秩序」结局', order.channels[0]!.doneBeats.includes('cv_end_order'), order.channels[0]!.doneBeats.join(','));
+    check('交过份子的走「秩序」结局', order.channels[0]!.doneEvents.includes('cv_end_order'), order.channels[0]!.doneEvents.join(','));
 
     const tyr = cvAt(8007, 44, { done: CV_MAIN, flags: ['flag:cvPaidUp', 'flag:cvPublished'] });
     tickChannels(tyr);
-    check('公布过录音的走「暴政」结局', tyr.channels[0]!.doneBeats.includes('cv_end_tyranny'), tyr.channels[0]!.doneBeats.join(','));
+    check('公布过录音的走「暴政」结局', tyr.channels[0]!.doneEvents.includes('cv_end_tyranny'), tyr.channels[0]!.doneEvents.join(','));
 
     const dis = cvAt(8008, 44, { done: CV_MAIN, flags: [] });
     tickChannels(dis);
-    check('什么都没做的走「解散」结局', dis.channels[0]!.doneBeats.includes('cv_end_dissolve'), dis.channels[0]!.doneBeats.join(','));
+    check('什么都没做的走「解散」结局', dis.channels[0]!.doneEvents.includes('cv_end_dissolve'), dis.channels[0]!.doneEvents.join(','));
   }
 
   // ---- 骗子：去了就是给袭击开门 ----
@@ -1973,8 +2048,8 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
     r.ap = 6;
     r.queue = [];
     r.channels = [{
-      id: 'tmp_scammer', status: 'active', affinity: 20, doneBeats: [], inbox: [], log: [],
-      missed: 0, repliedCount: 0, lastContactDay: 0,
+      id: 'tmp_scammer', status: 'active', affinity: 20, doneEvents: [], inbox: [], log: [],
+      missed: 0, repliedCount: 0, lastContactDay: 0, awaiting: null,
     }];
     tickChannels(r);
     openChannel(r, 'tmp_scammer');
@@ -2009,8 +2084,8 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
     r.res.fuel = 20;
     r.queue = [];
     r.channels = [{
-      id: 'tmp_trucker', status: 'active', affinity: 20, doneBeats: ['tk_open'],
-      inbox: [], log: [], missed: 0, repliedCount: 0, lastContactDay: 22,
+      id: 'tmp_trucker', status: 'active', affinity: 20, doneEvents: ['tk_open'],
+      inbox: [], log: [], missed: 0, repliedCount: 0, lastContactDay: 22, awaiting: null,
     }];
     check('路线点初始不在地图上', !r.locations.some((l) => l.id === 'sig_route'), r.locations.map((l) => l.id).join(','));
     // 已经用油换过路线：隔两天他该把坐标给出来了
@@ -2041,9 +2116,9 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
     check('重开不会重复结算 onRead', again.lines.length === 0, String(again.lines.length));
 
     // 回一条之后：只有自己那句是新的
-    const beat = st.awaitingBeat;
-    check('还等着玩家回话', !!beat, String(beat));
-    if (beat) {
+    const awaiting = st.awaiting === 'choice';
+    check('还等着玩家回话', awaiting, `active=${st.active?.eventId}/${st.active?.roundId} awaiting=${st.awaiting}`);
+    if (awaiting) {
       const before = st.log.length;
       const rr = reply(r, 'cv', 'pay');
       check('回话成功', rr.ok, rr.reason);

@@ -17,6 +17,7 @@ import { NUKE_BUILD_CHECK_EVENTS } from './nuke_build_checks';
 import { NUCLEAR_WINTER_EVENTS } from './nuclear_winter';
 import { PREP_EVENTS } from './prep';
 import { PREP_SLICE_EVENTS } from './prep_slice';
+import { RADIO_EVENTS } from './radio';
 import { SURV_BEAT_EVENTS } from './surv_beats';
 import { STAT_ARC_EVENTS } from './stat_arcs';
 import { SURVIVAL_EVENTS } from './survival';
@@ -40,6 +41,7 @@ export const ALL_FAMILIES: EventFamily[] = hydrateFamilies([
   ...DARK_WITNESS_EVENTS,
   ...ECHO_SLICE_EVENTS,
   ...DAILY_EVENTS,
+  ...RADIO_EVENTS,
   ...STAT_ARC_EVENTS,
 ]);
 
@@ -61,6 +63,7 @@ export {
   NUCLEAR_WINTER_EVENTS,
   PREP_EVENTS,
   PREP_SLICE_EVENTS,
+  RADIO_EVENTS,
   STAT_ARC_EVENTS,
   SURV_BEAT_EVENTS,
   SURVIVAL_EVENTS,

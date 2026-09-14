@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -170,11 +171,47 @@ def process(key: str) -> dict:
     return info
 
 
+# ---- 温度计刻度抹除 ----------------------------------------------------------
+# ImageGen 出的温度计线稿把「均匀刻度」直接烤进了 PNG（刻度在管腔右侧的竖带里）。
+# 现在温度计改走非线性刻度（间距随温度变化，见 ArtPlanSheet.scalePct），刻度必须由
+# React 按函数画，烤死的均匀刻度就成了残影——这里把它抹掉，只保留管腔与外框。
+#
+# 量出的几何（对 line-thermo.png，宽 381 高 1351）：
+#   管腔左/右沿 x≈0.220 / 0.399，外框左/右竖边 x≈0.055 / 0.945，外框上/下横边 y≈0.020 / 0.99
+#   刻度带落在 x≈0.50..0.75
+# 所以抹除窗口取 x∈[0.43, 0.89]（避开管腔与右外框）、y∈[0.05, 0.95]（避开上下外框横边）。
+# ⚠️ 必须并进本脚本：否则下次重跑 make-art-linefig.py 会把抹除结果覆盖回均匀刻度。
+THERMO_TICK_X = (0.43, 0.89)
+THERMO_TICK_Y = (0.05, 0.95)
+
+
+def strip_thermo_ticks() -> None:
+    path = OUT / "line-thermo.png"
+    arr = np.asarray(Image.open(path).convert("RGBA")).copy()
+    H, W = arr.shape[:2]
+    x0, x1 = int(W * THERMO_TICK_X[0]), int(W * THERMO_TICK_X[1])
+    y0, y1 = int(H * THERMO_TICK_Y[0]), int(H * THERMO_TICK_Y[1])
+    arr[y0:y1, x0:x1, 3] = 0
+    Image.fromarray(arr, "RGBA").save(path, optimize=True)
+    print(
+        f"  thermo  抹除烤入刻度  x[{THERMO_TICK_X[0]}, {THERMO_TICK_X[1]}] "
+        f"y[{THERMO_TICK_Y[0]}, {THERMO_TICK_Y[1]}]  ({x1 - x0}x{y1 - y0} px)"
+    )
+
+
 def main() -> None:
+    # 单独跑刻度抹除（不重新处理原图；原图缺 .preview/gen 时也能用）
+    if len(sys.argv) > 1 and sys.argv[1] in {"thermo-ticks", "strip-ticks"}:
+        strip_thermo_ticks()
+        print("\n已更新 public/art/line-thermo.png（刻度已抹除，掩膜不受影响）")
+        return
+
     keys = ["power", "ration", "water", "thermo"]
     layout = json.loads(LAYOUT.read_text(encoding="utf-8")) if LAYOUT.exists() else {}
     for k in keys:
         layout[k] = process(k)
+    # 线稿重出后立刻抹掉烤入的均匀刻度，保证产出物始终是「无刻度」版本
+    strip_thermo_ticks()
     LAYOUT.write_text(json.dumps(layout, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"\n已写 {LAYOUT.relative_to(ROOT)}")
     for k in keys:

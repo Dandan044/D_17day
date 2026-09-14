@@ -18,7 +18,7 @@ export const data = {
         '4': '我收音机里就你一个台是活的',
       },
       choice: {
-        hi: { label: '回话', note: '耗电 0.15 kWh', say: '我在。你那边听得清吗。' },
+        hi: { label: '回话', note: '发射 · 会被测向', say: '我在。你那边听得清吗。' },
         shh: { label: '不出声', note: '不消耗' },
       },
     },
@@ -28,8 +28,8 @@ export const data = {
         '2': '我这只剩一节电池了 撑不了几天',
       },
       choice: {
-        honest: { label: '说实话', note: '耗电 0.15 kWh', say: '电台还能撑一阵。灯我早就不开了。' },
-        lie: { label: '说还有', note: '耗电 0.15 kWh', say: '多着呢，够用。' },
+        honest: { label: '说实话', note: '发射 · 会被测向', say: '电台还能撑一阵。灯我早就不开了。' },
+        lie: { label: '说还有', note: '发射 · 会被测向', say: '多着呢，够用。' },
       },
     },
     xt_daily_a: {
@@ -46,8 +46,8 @@ export const data = {
         '4': '我不知道我为什么没走',
       },
       choice: {
-        share: { label: '也跟她说你的事', note: '耗电 0.15 kWh', say: '我留下来是因为我妈的骨灰还在柜子里。' },
-        brush: { label: '换个话题', note: '耗电 0.15 kWh', say: '先别说这个了，省点电。' },
+        share: { label: '也跟她说你的事', note: '发射 · 会被测向', say: '我留下来是因为我妈的骨灰还在柜子里。' },
+        brush: { label: '换个话题', note: '发射 · 会被测向', say: '先别说这个了，省点电。' },
       },
     },
     xt_daily_b: {
@@ -78,7 +78,7 @@ export const data = {
           note: '食物 −3',
           say: '我给你留三份，放在你门口，你过来拿。',
         },
-        refuse: { label: '拒绝', note: '耗电 0.15 kWh', say: '我这也不够。你找别人问问。' },
+        refuse: { label: '拒绝', note: '发射 · 会被测向', say: '我这也不够。你找别人问问。' },
         mute: { label: '装作没收到', note: '不消耗' },
       },
     },
@@ -97,7 +97,7 @@ export const data = {
         '5': '你是不是不想说话',
       },
       choice: {
-        explain: { label: '解释：一直没电', note: '耗电 0.15 kWh', say: '我这边一直没电，不是不想回。' },
+        explain: { label: '解释：一直没电', note: '发射 · 会被测向', say: '我这边一直没电，不是不想回。' },
         nothing: { label: '还是不回', note: '不消耗' },
       },
     },
@@ -120,7 +120,7 @@ export const data = {
           note: '2 行动点 · 体力 −12 · 暴露 +8',
           say: '我现在过去。你别出声。',
         },
-        soothe: { label: '让她躲好', note: '耗电 0.15 kWh', say: '别开门。关灯，躲到床底下。' },
+        soothe: { label: '让她躲好', note: '发射 · 会被测向', say: '别开门。关灯，躲到床底下。' },
         ignore: { label: '不回', note: '不消耗' },
       },
     },
@@ -137,7 +137,7 @@ export const data = {
       },
       choice: {
         upstairs: { label: '上楼', note: '体力 −12', say: '我上楼了。你在几层。' },
-        wait: { label: '在楼下等', note: '耗电 0.15 kWh', say: '我在楼下。你找机会下来。' },
+        wait: { label: '在楼下等', note: '发射 · 会被测向', say: '我在楼下。你找机会下来。' },
         back: { label: '撤回去', note: '不消耗' },
       },
     },
@@ -177,8 +177,8 @@ export const data = {
         '2': '我不想听好听的 你就说你真怎么想',
       },
       choice: {
-        hope: { label: '说还能撑很久', note: '耗电 0.15 kWh', say: '能撑到开春。我说真的。' },
-        plain: { label: '说实话', note: '耗电 0.15 kWh', say: '不知道。但今天还行。' },
+        hope: { label: '说还能撑很久', note: '发射 · 会被测向', say: '能撑到开春。我说真的。' },
+        plain: { label: '说实话', note: '发射 · 会被测向', say: '不知道。但今天还行。' },
         silent: { label: '不回', note: '不消耗' },
       },
     },
@@ -191,6 +191,81 @@ export const data = {
       line: {
         '1': '我还在',
         '2': '你要是也在 明天这个时候回我一声',
+      },
+    },
+    // 回音拍：玩家回完话，她当场接的那一句（与 content 里的 xt_re_* 一一对应）
+    xt_re_hello_hi: {
+      line: {
+        '1': '听得清',
+        '2': '那我以后就守着这个台了',
+      },
+    },
+    xt_re_hello_quiet: {
+      line: {
+        '1': '……',
+        '2': '没事 你不想说话也行 我就在这台上',
+      },
+    },
+    xt_re_power_honest: {
+      line: {
+        '1': '那你比我强',
+        '2': '我这一节电池 用完就只剩听了',
+      },
+    },
+    xt_re_power_lie: {
+      line: {
+        '1': '那就好',
+        '2': '那我不担心你了',
+      },
+    },
+    xt_re_share_share: {
+      line: {
+        '1': '……',
+        '2': '你比我强',
+        '3': '我连个理由都没有 我就是没走',
+      },
+    },
+    xt_re_share_brush: {
+      line: {
+        '1': '哦',
+        '2': '好 那说别的',
+      },
+    },
+    xt_re_req_give: {
+      line: {
+        '1': '你真给啊',
+        '2': '我等你走了再下去拿',
+      },
+    },
+    xt_re_req_refuse: {
+      line: {
+        '1': '嗯 我知道',
+        '2': '那当我没说',
+      },
+    },
+    xt_re_req_mute: {
+      line: {
+        '1': '你在吗',
+        '2': '……',
+        '3': '算了',
+      },
+    },
+    xt_re_liveb_hope: {
+      line: {
+        '1': '好',
+        '2': '那我就当是真的',
+      },
+    },
+    xt_re_liveb_plain: {
+      line: {
+        '1': '嗯',
+        '2': '今天还行 那就先今天',
+      },
+    },
+    xt_re_liveb_silent: {
+      line: {
+        '1': '行 那我不问了',
+        '2': '你别关台就行',
       },
     },
     sys: {

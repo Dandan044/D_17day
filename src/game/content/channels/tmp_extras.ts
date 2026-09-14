@@ -1,11 +1,14 @@
 import type { ChannelDef } from '../../types';
 
 /**
- * 剩下的八个临时频道。
+ * 剩下的八个临时频道（**事件制**）。
  *
  * 它们的共同点：短、不给解法、大多以静默收尾。
  * 全部靠「搜索频道」得到，不特殊标注——玩家只会看到一个频率号。
  * 集中放一个文件，是因为它们每个只有 2–5 拍，拆成八个文件反而不好找。
+ *
+ * 每个拍都是单轮事件：这些频道从头到尾没有分叉（没有一个 `reply`），
+ * 所以一个拍 = 一个事件 = 一个轮。
  */
 
 /** 03 · 放歌的人：纯粹的陪伴，直到歌停了 */
@@ -16,34 +19,45 @@ export const TMP_SINGER: ChannelDef = {
   short: '♪',
   tagline: 'channels.tmp_singer.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'sg_open',
-      out: [{ from: 'peer', text: 'channels.tmp_singer.sg_open.line.1', onRead: { stats: { sanity: 5 }, tone: 'good' } }],
+      kind: 'open',
+      opening: [{ from: 'peer', text: 'channels.tmp_singer.sg_open.line.1', onRead: { stats: { sanity: 5 }, tone: 'good' } }],
+      first: 'sg_open',
+      rounds: [{ id: 'sg_open', out: [] }],
     },
     {
       id: 'sg_again',
       afterDays: 2,
-      out: [{ from: 'peer', text: 'channels.tmp_singer.sg_again.line.1' }],
+      kind: 'daily',
+      opening: [{ from: 'peer', text: 'channels.tmp_singer.sg_again.line.1' }],
+      first: 'sg_again',
+      rounds: [{ id: 'sg_again', out: [] }],
     },
     {
       id: 'sg_cut',
       afterDays: 3,
-      out: [
+      kind: 'daily',
+      opening: [
         { from: 'peer', text: 'channels.tmp_singer.sg_cut.line.1' },
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_singer.sg_cut.line.2', onRead: { stats: { sanity: -3 }, tone: 'grim' } },
       ],
+      first: 'sg_cut',
+      rounds: [{ id: 'sg_cut', out: [] }],
     },
     {
       id: 'sg_end',
       afterDays: 3,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', text: 'channels.tmp_singer.sg_end.line.1' },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_singer.sys.lost' },
       ],
+      first: 'sg_end',
+      rounds: [{ id: 'sg_end', out: [], silence: true }],
     },
   ],
 };
@@ -56,50 +70,62 @@ export const TMP_DOCTOR: ChannelDef = {
   short: '医',
   tagline: 'channels.tmp_doctor.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'dr_open',
-      expectReply: true,
-      out: [
+      kind: 'request',
+      opening: [
         { from: 'peer', text: 'channels.tmp_doctor.dr_open.line.1' },
         { from: 'peer', text: 'channels.tmp_doctor.dr_open.line.2' },
       ],
-      choices: [
+      first: 'dr_open',
+      rounds: [
         {
-          id: 'trade',
-          label: 'channels.tmp_doctor.dr_open.choice.trade.label',
-          note: 'channels.tmp_doctor.dr_open.choice.trade.note',
-          requires: { res: { foodStaple: 3 } },
-          say: 'channels.tmp_doctor.dr_open.choice.trade.say',
-          affinity: 8,
-          effect: { res: { foodStaple: -3, meds: 6 }, setFlags: ['flag:drTraded'], tone: 'good' },
-        },
-        {
-          id: 'no',
-          label: 'channels.tmp_doctor.dr_open.choice.no.label',
-          note: 'channels.tmp_doctor.dr_open.choice.no.note',
-          affinity: -6,
+          id: 'dr_open',
+          out: [],
+          choices: [
+            {
+              id: 'trade',
+              label: 'channels.tmp_doctor.dr_open.choice.trade.label',
+              note: 'channels.tmp_doctor.dr_open.choice.trade.note',
+              requires: { res: { foodStaple: 3 } },
+              say: 'channels.tmp_doctor.dr_open.choice.trade.say',
+              affinity: 8,
+              effect: { res: { foodStaple: -3, meds: 6 }, setFlags: ['flag:drTraded'], tone: 'good' },
+            },
+            {
+              id: 'no',
+              label: 'channels.tmp_doctor.dr_open.choice.no.label',
+              note: 'channels.tmp_doctor.dr_open.choice.no.note',
+              affinity: -6,
+            },
+          ],
         },
       ],
     },
     {
       id: 'dr_truth',
       afterDays: 3,
-      out: [
+      kind: 'daily',
+      opening: [
         { from: 'peer', text: 'channels.tmp_doctor.dr_truth.line.1' },
         { from: 'peer', text: 'channels.tmp_doctor.dr_truth.line.2', onRead: { stats: { sanity: -2 }, tone: 'grim' } },
       ],
+      first: 'dr_truth',
+      rounds: [{ id: 'dr_truth', out: [] }],
     },
     {
       id: 'dr_end',
       afterDays: 4,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_doctor.dr_end.line.1' },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_doctor.sys.lost' },
       ],
+      first: 'dr_end',
+      rounds: [{ id: 'dr_end', out: [], silence: true }],
     },
   ],
 };
@@ -112,29 +138,37 @@ export const TMP_CHILD: ChannelDef = {
   short: '童',
   tagline: 'channels.tmp_child.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'ch_open',
-      out: [
+      kind: 'open',
+      opening: [
         { from: 'peer', text: 'channels.tmp_child.ch_open.line.1' },
         { from: 'peer', text: 'channels.tmp_child.ch_open.line.2' },
       ],
+      first: 'ch_open',
+      rounds: [{ id: 'ch_open', out: [] }],
     },
     {
       id: 'ch_more',
       afterDays: 2,
-      out: [{ from: 'peer', text: 'channels.tmp_child.ch_more.line.1' }],
+      kind: 'daily',
+      opening: [{ from: 'peer', text: 'channels.tmp_child.ch_more.line.1' }],
+      first: 'ch_more',
+      rounds: [{ id: 'ch_more', out: [] }],
     },
     {
       id: 'ch_end',
       afterDays: 3,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_child.ch_end.line.1', onRead: { stats: { sanity: -4 }, tone: 'grim' } },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_child.sys.lost' },
       ],
+      first: 'ch_end',
+      rounds: [{ id: 'ch_end', out: [], silence: true }],
     },
   ],
 };
@@ -147,22 +181,27 @@ export const TMP_COUNTER: ChannelDef = {
   short: '数',
   tagline: 'channels.tmp_counter.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'ct_open',
-      out: [{ from: 'peer', text: 'channels.tmp_counter.ct_open.line.1' }],
+      kind: 'open',
+      opening: [{ from: 'peer', text: 'channels.tmp_counter.ct_open.line.1' }],
+      first: 'ct_open',
+      rounds: [{ id: 'ct_open', out: [] }],
     },
     {
       id: 'ct_end',
       afterDays: 4,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', text: 'channels.tmp_counter.ct_end.line.1' },
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_counter.ct_end.line.2', onRead: { res: { meds: 3 }, stats: { sanity: -2 }, tone: 'grim' } },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_counter.sys.lost' },
       ],
+      first: 'ct_end',
+      rounds: [{ id: 'ct_end', out: [], silence: true }],
     },
   ],
 };
@@ -175,31 +214,37 @@ export const TMP_TRUCKER: ChannelDef = {
   short: '货',
   tagline: 'channels.tmp_trucker.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'tk_open',
-      expectReply: true,
-      out: [
+      kind: 'request',
+      opening: [
         { from: 'peer', text: 'channels.tmp_trucker.tk_open.line.1' },
         { from: 'peer', text: 'channels.tmp_trucker.tk_open.line.2' },
       ],
-      choices: [
+      first: 'tk_open',
+      rounds: [
         {
-          id: 'trade',
-          label: 'channels.tmp_trucker.tk_open.choice.trade.label',
-          note: 'channels.tmp_trucker.tk_open.choice.trade.note',
-          requires: { res: { fuel: 5 } },
-          say: 'channels.tmp_trucker.tk_open.choice.trade.say',
-          affinity: 8,
-          effect: { res: { fuel: -5 }, setFlags: ['flag:tkTraded'], tone: 'good' },
-        },
-        {
-          id: 'no',
-          label: 'channels.tmp_trucker.tk_open.choice.no.label',
-          note: 'channels.tmp_trucker.tk_open.choice.no.note',
-          affinity: -6,
+          id: 'tk_open',
+          out: [],
+          choices: [
+            {
+              id: 'trade',
+              label: 'channels.tmp_trucker.tk_open.choice.trade.label',
+              note: 'channels.tmp_trucker.tk_open.choice.trade.note',
+              requires: { res: { fuel: 5 } },
+              say: 'channels.tmp_trucker.tk_open.choice.trade.say',
+              affinity: 8,
+              effect: { res: { fuel: -5 }, setFlags: ['flag:tkTraded'], tone: 'good' },
+            },
+            {
+              id: 'no',
+              label: 'channels.tmp_trucker.tk_open.choice.no.label',
+              note: 'channels.tmp_trucker.tk_open.choice.no.note',
+              affinity: -6,
+            },
+          ],
         },
       ],
     },
@@ -207,7 +252,8 @@ export const TMP_TRUCKER: ChannelDef = {
       id: 'tk_route',
       afterDays: 2,
       require: { all: ['flag:tkTraded'] },
-      out: [
+      kind: 'daily',
+      opening: [
         { from: 'peer', text: 'channels.tmp_trucker.tk_route.line.1' },
         {
           from: 'peer',
@@ -219,20 +265,28 @@ export const TMP_TRUCKER: ChannelDef = {
           },
         },
       ],
+      first: 'tk_route',
+      rounds: [{ id: 'tk_route', out: [] }],
     },
     {
       id: 'tk_warn',
       afterDays: 3,
-      out: [{ from: 'peer', text: 'channels.tmp_trucker.tk_warn.line.1' }],
+      kind: 'daily',
+      opening: [{ from: 'peer', text: 'channels.tmp_trucker.tk_warn.line.1' }],
+      first: 'tk_warn',
+      rounds: [{ id: 'tk_warn', out: [] }],
     },
     {
       id: 'tk_end',
       afterDays: 3,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_trucker.tk_end.line.1', onRead: { stats: { sanity: -3 }, tone: 'grim' } },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_trucker.sys.lost' },
       ],
+      first: 'tk_end',
+      rounds: [{ id: 'tk_end', out: [], silence: true }],
     },
   ],
 };
@@ -245,35 +299,44 @@ export const TMP_FOREIGNER: ChannelDef = {
   short: '外',
   tagline: 'channels.tmp_foreigner.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'fg_open',
-      out: [{ from: 'peer', text: 'channels.tmp_foreigner.fg_open.line.1' }],
+      kind: 'open',
+      opening: [{ from: 'peer', text: 'channels.tmp_foreigner.fg_open.line.1' }],
+      first: 'fg_open',
+      rounds: [{ id: 'fg_open', out: [] }],
     },
     {
       id: 'fg_number',
       afterDays: 2,
-      expectReply: true,
-      out: [
+      kind: 'request',
+      opening: [
         { from: 'peer', text: 'channels.tmp_foreigner.fg_number.line.1' },
         { from: 'peer', text: 'channels.tmp_foreigner.fg_number.line.2' },
       ],
-      choices: [
+      first: 'fg_number',
+      rounds: [
         {
-          id: 'go',
-          label: 'channels.tmp_foreigner.fg_number.choice.go.label',
-          note: 'channels.tmp_foreigner.fg_number.choice.go.note',
-          say: 'channels.tmp_foreigner.fg_number.choice.go.say',
-          affinity: 6,
-          effect: { stats: { stamina: -8 }, res: { foodStaple: 6 }, setFlags: ['flag:fgFound'], tone: 'good' },
-        },
-        {
-          id: 'skip',
-          label: 'channels.tmp_foreigner.fg_number.choice.skip.label',
-          note: 'channels.tmp_foreigner.fg_number.choice.skip.note',
-          affinity: -4,
+          id: 'fg_number',
+          out: [],
+          choices: [
+            {
+              id: 'go',
+              label: 'channels.tmp_foreigner.fg_number.choice.go.label',
+              note: 'channels.tmp_foreigner.fg_number.choice.go.note',
+              say: 'channels.tmp_foreigner.fg_number.choice.go.say',
+              affinity: 6,
+              effect: { stats: { stamina: -8 }, res: { foodStaple: 6 }, setFlags: ['flag:fgFound'], tone: 'good' },
+            },
+            {
+              id: 'skip',
+              label: 'channels.tmp_foreigner.fg_number.choice.skip.label',
+              note: 'channels.tmp_foreigner.fg_number.choice.skip.note',
+              affinity: -4,
+            },
+          ],
         },
       ],
     },
@@ -281,10 +344,13 @@ export const TMP_FOREIGNER: ChannelDef = {
       id: 'fg_end',
       afterDays: 4,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_foreigner.fg_end.line.1', onRead: { stats: { sanity: -3 }, tone: 'grim' } },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_foreigner.sys.lost' },
       ],
+      first: 'fg_end',
+      rounds: [{ id: 'fg_end', out: [], silence: true }],
     },
   ],
 };
@@ -297,62 +363,74 @@ export const TMP_SCAMMER: ChannelDef = {
   short: '诈',
   tagline: 'channels.tmp_scammer.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 3,
-  beats: [
+  events: [
     {
       id: 'sc_open',
-      expectReply: true,
-      out: [
+      kind: 'crisis',
+      opening: [
         { from: 'peer', text: 'channels.tmp_scammer.sc_open.line.1' },
         { from: 'peer', text: 'channels.tmp_scammer.sc_open.line.2' },
         { from: 'peer', text: 'channels.tmp_scammer.sc_open.line.3' },
       ],
-      choices: [
+      first: 'sc_open',
+      rounds: [
         {
-          id: 'go',
-          label: 'channels.tmp_scammer.sc_open.choice.go.label',
-          note: 'channels.tmp_scammer.sc_open.choice.go.note',
-          say: 'channels.tmp_scammer.sc_open.choice.go.say',
-          affinity: 4,
-          effect: {
-            stats: { stamina: -10 },
-            world: { exposure: 10 },
-            // 去了才知道：那个坐标是个等人上门的地址
-            schedule: [{ familyId: 'raid_attempt', inDays: 1 }],
-            setFlags: ['flag:scWalkedIn'],
-            tone: 'grim',
-          },
-        },
-        {
-          id: 'spot',
-          label: 'channels.tmp_scammer.sc_open.choice.spot.label',
-          note: 'channels.tmp_scammer.sc_open.choice.spot.note',
-          requires: { modules: { radio: 2 } },
-          affinity: 2,
-          effect: { stats: { sanity: -2 }, setFlags: ['flag:scSpotted'], tone: 'grim' },
-        },
-        {
-          id: 'skip',
-          label: 'channels.tmp_scammer.sc_open.choice.skip.label',
-          note: 'channels.tmp_scammer.sc_open.choice.skip.note',
-          affinity: -2,
+          id: 'sc_open',
+          out: [],
+          choices: [
+            {
+              id: 'go',
+              label: 'channels.tmp_scammer.sc_open.choice.go.label',
+              note: 'channels.tmp_scammer.sc_open.choice.go.note',
+              say: 'channels.tmp_scammer.sc_open.choice.go.say',
+              affinity: 4,
+              effect: {
+                stats: { stamina: -10 },
+                world: { exposure: 10 },
+                // 去了才知道：那个坐标是个等人上门的地址
+                schedule: [{ familyId: 'raid_attempt', inDays: 1 }],
+                setFlags: ['flag:scWalkedIn'],
+                tone: 'grim',
+              },
+            },
+            {
+              id: 'spot',
+              label: 'channels.tmp_scammer.sc_open.choice.spot.label',
+              note: 'channels.tmp_scammer.sc_open.choice.spot.note',
+              requires: { modules: { radio: 2 } },
+              affinity: 2,
+              effect: { stats: { sanity: -2 }, setFlags: ['flag:scSpotted'], tone: 'grim' },
+            },
+            {
+              id: 'skip',
+              label: 'channels.tmp_scammer.sc_open.choice.skip.label',
+              note: 'channels.tmp_scammer.sc_open.choice.skip.note',
+              affinity: -2,
+            },
+          ],
         },
       ],
     },
     {
       id: 'sc_again',
       afterDays: 2,
-      out: [{ from: 'peer', text: 'channels.tmp_scammer.sc_again.line.1' }],
+      kind: 'daily',
+      opening: [{ from: 'peer', text: 'channels.tmp_scammer.sc_again.line.1' }],
+      first: 'sc_again',
+      rounds: [{ id: 'sc_again', out: [] }],
     },
     {
       id: 'sc_end',
       afterDays: 3,
       silence: true,
-      out: [
+      kind: 'end',
+      opening: [
         { from: 'peer', sys: 'narrate', text: 'channels.tmp_scammer.sc_end.line.1' },
         { from: 'peer', sys: 'silent', text: 'channels.tmp_scammer.sys.lost' },
       ],
+      first: 'sc_end',
+      rounds: [{ id: 'sc_end', out: [], silence: true }],
     },
   ],
 };
@@ -365,77 +443,99 @@ export const TMP_NEIGHBOR: ChannelDef = {
   short: '邻',
   tagline: 'channels.tmp_neighbor.tagline',
   discover: 'search',
-  minRadio: 1,
   replyWindowDays: 4,
-  beats: [
+  events: [
     {
       id: 'nb_open',
-      expectReply: true,
-      out: [
+      kind: 'request',
+      opening: [
         { from: 'peer', text: 'channels.tmp_neighbor.nb_open.line.1' },
         { from: 'peer', text: 'channels.tmp_neighbor.nb_open.line.2' },
       ],
-      choices: [
+      first: 'nb_open',
+      rounds: [
         {
-          id: 'hi',
-          label: 'channels.tmp_neighbor.nb_open.choice.hi.label',
-          note: 'channels.tmp_neighbor.nb_open.choice.hi.note',
-          say: 'channels.tmp_neighbor.nb_open.choice.hi.say',
-          affinity: 6,
-          effect: { stats: { sanity: 3 }, setFlags: ['flag:nbSaidHi'], tone: 'good' },
-        },
-        {
-          id: 'quiet',
-          label: 'channels.tmp_neighbor.nb_open.choice.quiet.label',
-          note: 'channels.tmp_neighbor.nb_open.choice.quiet.note',
-          affinity: -4,
+          id: 'nb_open',
+          out: [],
+          choices: [
+            {
+              id: 'hi',
+              label: 'channels.tmp_neighbor.nb_open.choice.hi.label',
+              note: 'channels.tmp_neighbor.nb_open.choice.hi.note',
+              say: 'channels.tmp_neighbor.nb_open.choice.hi.say',
+              affinity: 6,
+              effect: { stats: { sanity: 3 }, setFlags: ['flag:nbSaidHi'], tone: 'good' },
+            },
+            {
+              id: 'quiet',
+              label: 'channels.tmp_neighbor.nb_open.choice.quiet.label',
+              note: 'channels.tmp_neighbor.nb_open.choice.quiet.note',
+              affinity: -4,
+            },
+          ],
         },
       ],
     },
     {
       id: 'nb_check1',
       afterDays: 2,
-      out: [
+      kind: 'daily',
+      opening: [
         { from: 'peer', text: 'channels.tmp_neighbor.nb_check1.line.1' },
         { from: 'peer', text: 'channels.tmp_neighbor.nb_check1.line.2', onRead: { stats: { sanity: 2 }, tone: 'neutral' } },
       ],
+      first: 'nb_check1',
+      rounds: [{ id: 'nb_check1', out: [] }],
     },
     {
       id: 'nb_check2',
       afterDays: 4,
-      out: [{ from: 'peer', text: 'channels.tmp_neighbor.nb_check2.line.1' }],
+      kind: 'daily',
+      opening: [{ from: 'peer', text: 'channels.tmp_neighbor.nb_check2.line.1' }],
+      first: 'nb_check2',
+      rounds: [{ id: 'nb_check2', out: [] }],
     },
     {
       id: 'nb_check3',
       afterDays: 5,
-      out: [
+      kind: 'daily',
+      opening: [
         { from: 'peer', text: 'channels.tmp_neighbor.nb_check3.line.1' },
         { from: 'peer', text: 'channels.tmp_neighbor.nb_check3.line.2' },
       ],
+      first: 'nb_check3',
+      rounds: [{ id: 'nb_check3', out: [] }],
     },
     {
       id: 'nb_last',
       afterDays: 5,
-      expectReply: true,
-      out: [
+      kind: 'request',
+      opening: [
         { from: 'peer', text: 'channels.tmp_neighbor.nb_last.line.1' },
         { from: 'peer', text: 'channels.tmp_neighbor.nb_last.line.2' },
       ],
-      choices: [
+      first: 'nb_last',
+      rounds: [
         {
-          id: 'tell',
-          label: 'channels.tmp_neighbor.nb_last.choice.tell.label',
-          note: 'channels.tmp_neighbor.nb_last.choice.tell.note',
-          say: 'channels.tmp_neighbor.nb_last.choice.tell.say',
-          affinity: 6,
-          effect: { stats: { sanity: 3 }, setFlags: ['flag:nbTold'], tone: 'good' },
-        },
-        {
-          id: 'hold',
-          label: 'channels.tmp_neighbor.nb_last.choice.hold.label',
-          note: 'channels.tmp_neighbor.nb_last.choice.hold.note',
-          affinity: -2,
-          effect: { stats: { sanity: -3 }, tone: 'grim' },
+          id: 'nb_last',
+          out: [],
+          choices: [
+            {
+              id: 'tell',
+              label: 'channels.tmp_neighbor.nb_last.choice.tell.label',
+              note: 'channels.tmp_neighbor.nb_last.choice.tell.note',
+              say: 'channels.tmp_neighbor.nb_last.choice.tell.say',
+              affinity: 6,
+              effect: { stats: { sanity: 3 }, setFlags: ['flag:nbTold'], tone: 'good' },
+            },
+            {
+              id: 'hold',
+              label: 'channels.tmp_neighbor.nb_last.choice.hold.label',
+              note: 'channels.tmp_neighbor.nb_last.choice.hold.note',
+              affinity: -2,
+              effect: { stats: { sanity: -3 }, tone: 'grim' },
+            },
+          ],
         },
       ],
     },

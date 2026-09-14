@@ -75,6 +75,19 @@ export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal', wea
   };
 }
 
+/**
+ * 库存可撑天数 = 库存 / 每日消耗。`perDay<=0` 时返回 Infinity（由调用方决定怎么显示）。
+ *
+ * 有意抽成共享函数：配给图的悬停详情（当前配给档）与物资货架的档位（单人标准人日）
+ * 必须走同一套口径，否则同一份库存会在两个界面上显示成不同的天数。
+ */
+export function stockDays(stock: number, perDay: number): number {
+  return perDay > 0 ? Math.max(0, stock) / perDay : Infinity;
+}
+
+/** 单人·标准档（normal）每日需求：物资货架「单人标准人日」的分母，不乘人数/难度/同伴。 */
+export const SINGLE_NEED = { food: FOOD_NEED.normal, water: WATER_NEED.normal } as const;
+
 export interface ConsumeResult {
   waterRatio: number;
   foodRatio: number;
@@ -134,7 +147,7 @@ export function applyProduction(run: RunState): LedgerNote[] {
     if (run.world.temperature < 0) yieldAmt *= 0.6;
     if (yieldAmt > 0) {
       run.res.foodFresh += yieldAmt;
-      notes.push(ledger(t('ledger.garden.yield', { amt: yieldAmt.toFixed(1) })));
+      notes.push(ledger(t('ledger.garden.yield', { amt: yieldAmt.toFixed(1) }), undefined, 'foodFresh'));
     }
   }
 
@@ -167,10 +180,11 @@ export function applyProduction(run: RunState): LedgerNote[] {
           ledger(
             (precip ? t('ledger.filter.rainStored', { stored, overflow }) : t('ledger.filter.wellStored', { stored, overflow })),
             'good',
+            'water',
           ),
         );
       } else {
-        notes.push(ledger(t('ledger.filter.allOverflow', { amt }), 'bad'));
+        notes.push(ledger(t('ledger.filter.allOverflow', { amt }), 'bad', 'water'));
       }
     }
   } else if (filter <= 0 && precip) {
@@ -213,7 +227,7 @@ export function applyProduction(run: RunState): LedgerNote[] {
     if (run.wear.filterLife <= 0) {
       notes.push(ledger(t('ledger.filter.dead'), 'bad'));
     } else if (run.wear.filterLife <= 4) {
-      notes.push(ledger(t('ledger.filter.daysLeft', { days: Math.ceil(run.wear.filterLife) }), 'bad'));
+      notes.push(ledger(t('ledger.filter.daysLeft', { days: Math.ceil(run.wear.filterLife) }), 'bad', 'cartridge'));
     }
   }
 
@@ -287,7 +301,7 @@ export function consumeDaily(
   if (need.recycling) {
     if (!run.flags.includes('flag:waterRecyclingToday')) run.flags.push('flag:waterRecyclingToday');
     const mult = FILTER.RECYCLE_NEED[filterLv] ?? 1;
-    notes.push(ledger(t('ledger.ration.recycle', { mult: mult.toFixed(2) })));
+    notes.push(ledger(t('ledger.ration.recycle', { mult: mult.toFixed(2) }), undefined, 'water'));
     notes.push(
       ledger(
         t('ledger.ration.recycleUse', {
@@ -295,6 +309,8 @@ export function consumeDaily(
           need: need.water.toFixed(1),
           left: waterLeft,
         }),
+        undefined,
+        'water',
       ),
     );
   } else {
@@ -305,6 +321,8 @@ export function consumeDaily(
           need: need.water.toFixed(1),
           left: waterLeft,
         }),
+        undefined,
+        'water',
       ),
     );
   }
@@ -339,14 +357,15 @@ export function consumeDaily(
         ? t('ledger.ration.food', { amt: foodTotal.toFixed(1), bits: foodBits.join(' + ') })
         : t('ledger.ration.foodZero', { need: need.food.toFixed(1) }),
       foodRatio < 0.99 ? 'bad' : 'neutral',
+      'foodStaple',
     ),
   );
 
   if (waterRatio < 0.99) {
-    notes.push(ledger(t('ledger.ration.waterGap', { pct: ((1 - waterRatio) * 100).toFixed(0) }), 'bad'));
+    notes.push(ledger(t('ledger.ration.waterGap', { pct: ((1 - waterRatio) * 100).toFixed(0) }), 'bad', 'water'));
   }
   if (foodRatio < 0.99) {
-    notes.push(ledger(t('ledger.ration.foodGap', { pct: ((1 - foodRatio) * 100).toFixed(0) }), 'bad'));
+    notes.push(ledger(t('ledger.ration.foodGap', { pct: ((1 - foodRatio) * 100).toFixed(0) }), 'bad', 'foodStaple'));
   }
 
   const est = budget ?? tonightHeat(run).plan;
@@ -363,6 +382,8 @@ export function consumeDaily(
       t('ledger.power.solar', { solar: power.solar.toFixed(1), weather: weatherBit }) +
         (power.grid > 0 ? t('ledger.power.gridBit', { amt: power.grid.toFixed(1) }) : '') +
         (power.generator > 0 ? t('ledger.power.genBit', { amt: power.generator.toFixed(1) }) : ''),
+      undefined,
+      'battery',
     ),
   );
   if (power.offline.length > 0) {
@@ -372,7 +393,7 @@ export function consumeDaily(
   if (power.fuelBurn > 0) {
     run.res.fuel = Math.max(0, run.res.fuel - power.fuelBurn);
     run.wear.generatorOil -= 1;
-    notes.push(ledger(t('ledger.power.fuel', { amt: power.fuelBurn.toFixed(1) })));
+    notes.push(ledger(t('ledger.power.fuel', { amt: power.fuelBurn.toFixed(1) }), undefined, 'fuel'));
     if (run.wear.generatorOil <= 0 && rng.chance(0.3)) {
       notes.push(ledger(t('ledger.power.oilWarn'), 'bad'));
     }
@@ -389,6 +410,8 @@ export function consumeDaily(
           left: (power.batteryStored - power.battery + power.batteryGain).toFixed(1),
           cap: power.batteryCap,
         }),
+        undefined,
+        'battery',
       ),
     );
   } else if (power.batteryGain > 0) {
@@ -400,10 +423,11 @@ export function consumeDaily(
           cap: power.batteryCap,
         }),
         'good',
+        'battery',
       ),
     );
   } else if (power.batteryStored > 0) {
-    notes.push(ledger(t('ledger.power.battIdle', { stored: power.batteryStored.toFixed(1), cap: power.batteryCap })));
+    notes.push(ledger(t('ledger.power.battIdle', { stored: power.batteryStored.toFixed(1), cap: power.batteryCap }), undefined, 'battery'));
   }
 
   const unheated = actual.leaked;
@@ -433,19 +457,19 @@ export function consumeDaily(
     if (resolved.kwh > 0) {
       heated = true;
       heatKind = 'electric';
-      notes.push(ledger(t('ledger.heat.elecOn', { indoor })));
+      notes.push(ledger(t('ledger.heat.elecOn', { indoor }), undefined, 'battery'));
     }
     if (resolved.fuelCost > 0) {
       if (!canFuelHeat(run)) {
         notes.push(ledger(t('ledger.heat.fuelNoInsulate', { indoor }), 'bad'));
       } else if (run.res.fuel <= 0) {
-        notes.push(ledger(t('ledger.heat.fuelEmpty', { indoor }), 'bad'));
+        notes.push(ledger(t('ledger.heat.fuelEmpty', { indoor }), 'bad', 'fuel'));
       } else {
         const spent = Math.min(resolved.fuelCost, run.res.fuel);
         run.res.fuel = Math.max(0, run.res.fuel - spent);
         heated = true;
         heatKind = 'fuel';
-        notes.push(ledger(t('ledger.heat.fuelBurn', { spent: spent.toFixed(1), indoor })));
+        notes.push(ledger(t('ledger.heat.fuelBurn', { spent: spent.toFixed(1), indoor }), undefined, 'fuel'));
       }
     }
   }
@@ -461,10 +485,10 @@ export function consumeDaily(
   }
   const outdoorEased = actual.leaked > est.leaked;
   if (!droppedBand && outdoorEased && resolved.fuelCost < est.fuelCost && est.fuelCost > 0) {
-    notes.push(ledger(t('ledger.heat.savedFuel', { est: est.fuelCost.toFixed(1), spent: resolved.fuelCost.toFixed(1) })));
+    notes.push(ledger(t('ledger.heat.savedFuel', { est: est.fuelCost.toFixed(1), spent: resolved.fuelCost.toFixed(1) }), undefined, 'fuel'));
   }
   if (!droppedBand && outdoorEased && resolved.kwh < est.kwh && est.kwh > 0) {
-    notes.push(ledger(t('ledger.heat.savedKwh', { est: est.kwh.toFixed(1), spent: resolved.kwh.toFixed(1) })));
+    notes.push(ledger(t('ledger.heat.savedKwh', { est: est.kwh.toFixed(1), spent: resolved.kwh.toFixed(1) }), undefined, 'battery'));
   }
 
   run.indoorTemp = indoor;

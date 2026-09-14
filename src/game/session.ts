@@ -8,9 +8,10 @@ import { HEALTH, RAD, STAMINA, TIME, WEAR } from './balance';
 import { CHANNEL_BY_ID } from './content/channels';
 import { FAMILY_BY_ID } from './content/events';
 import { LOCATION_BY_ID } from './content/locations';
+import { MODULE_IDS } from './content/modules';
+import { SITE_BY_ID } from './content/sites';
 import { t } from './copy/t';
-import { applyHeatWants } from './engine/climate';
-import {
+import { applyHeatWants } from './engine/climate';import {
   cancelProject as engineCancelProject,
   completeReadyProjects,
   doMaintenance,
@@ -37,16 +38,18 @@ import {
 import {
   openChannel as engineOpenChannel,
   replyChannel as engineReplyChannel,
+  hailChannel as engineHailChannel,
   searchChannel as engineSearchChannel,
 } from './engine/channels';
 import { applyScavengeDanger } from './engine/exposure';
 import { medicateCondition } from './engine/health';
 import { emitHook } from './engine/hooks';
-import { heaterHeadroomKwh } from './engine/power';
+import { batteryCapacity, heaterHeadroomKwh } from './engine/power';
 import {
   activateIodineProtection,
   hasIodinePrep,
   iodineActive,
+  waterCapacity,
 } from './engine/tags';
 import {
   acknowledgeCollapse as engineAckCollapse,
@@ -133,6 +136,75 @@ export function pickGreedyHaul(run: RunState, haul: Haul): HaulItem[] {
 export function chooseSite(s: Session, siteId: SiteId): SessionResult {
   const r = engineChooseSite(s.run, siteId);
   return r.ok ? ok() : fail(r.reason ?? t('ledger.toast.noSite'));
+}
+
+/**
+ * 开发者指令（彩蛋）：跳到崩溃日、物资满仓、建筑满级。
+ *
+ * 三件事的顺序不能调：
+ *   1. 先把模块抬到上限 —— 水箱等级决定 waterCapacity，等级不先上去，
+ *      下面把水设成容量时会按低容量的旧上限被 clampResources 削掉。
+ *   2. 再给资源赋值（此时 waterCapacity 已是最大值）。
+ *   3. 最后一次性 clampResources 收口，水自然被夹到「满容量」而不是硬编码数字。
+ *
+ * 「有上限的物资，其上限制也一并拉满」——具体就落在水箱上：
+ * 水是唯一带容量上限的资源，而容量 = CAPS.WATER[水箱等级] × 站点水倍率。
+ * 所以水箱**不看站点 caps，直接修到硬上限 3 级**（公寓原上限只有 1 级，
+ * 只按站点 caps 拉满的话水只有 27 L，玩家看着不像"拉满"）。
+ * 其余模块仍尊重站点 caps —— 那些是站点设计差异，不该被调试指令抹平。
+ *
+ * 无上限的物资给 9999 —— 别用一个「看起来很大」的数，库存天数会直接参与
+ * 派生的天数计算（economy.ts 的 stockDays），9999 足够撑满整个 49 天。
+ *
+ * day 8 的推进走和 endDay 同一条路：如果直接 run.day = 8 而不跑 applyOnset，
+ * 世界的气候、暴露度、崩溃报告全是 Day 7 的状态，跳过去会得到一个假的第八天。
+ */
+export function devCheat(s: Session): SessionResult {
+  const run = s.run;
+  if (!run || !run.siteId) return fail(t('ledger.run.noSite'));
+  const site = SITE_BY_ID[run.siteId];
+  if (!site) return fail(t('ledger.run.noSite'));
+
+  // ---- 1. 建筑拉满：等级取站点 caps（水箱单独特判到硬上限 3） ----
+  for (const id of MODULE_IDS) {
+    run.modules[id] = id === 'cistern' ? 3 : site.caps[id] ?? 3;
+  }
+
+  // ---- 2. 物资拉满：有上限的水按「满容量」，其余给一个大数 ----
+  for (const k of Object.keys(run.res) as ResourceId[]) {
+    if (k === 'water') continue;
+    run.res[k] = k === 'cash' ? 999999 : 9999;
+  }
+  clampResources(run); // 先让 waterCapacity 按新水箱等级生效
+  run.res.water = Math.round(waterCapacity(run) * 10) / 10;
+
+  // 滤芯、发电机油这类耗材也回满；坏掉的装备不该在"满级"状态里露馅
+  run.wear.filterLife = WEAR.FILTER_LIFE;
+  run.wear.generatorOil = WEAR.GENERATOR_OIL;
+  // 蓄电池是第二个"有容量上限"的东西（上限 = POWER.BATTERY_CAP[发电机等级]）。
+  // 发电机等级上面已经拉过，所以这里直接充到当前容量即可。
+  run.wear.batteryCharge = batteryCapacity(run);
+  run.items.filter = Math.max(run.items.filter ?? 0, 9);
+  run.stats.hp = 100;
+  run.stats.stamina = 100;
+  run.stats.sanity = 100;
+
+  // 工程队列清空：满级了还挂着半拉子项目，建造面板会显示"施工中"
+  run.projects = [];
+
+  // ---- 3. 跳到崩溃日：走 endDay 的正规路径，直到 day === COLLAPSE_DAY ----
+  const rng = makeRng(run.seed, run.rngCursor);
+  let guard = 0;
+  while (run.day < TIME.COLLAPSE_DAY && guard++ < 64) {
+    // 队列不为空时 endDay 会被外层拦（session.endDay 那道闸），这里直接调引擎层
+    run.queue = [];
+    const report = engineEndDay(run);
+    if (report.died || run.phase === 'ended') break;
+  }
+  run.rngCursor = rng.cursor();
+  clampResources(run);
+
+  return ok(undefined, [{ text: t('ledger.toast.devCheat', { day: run.day }), tone: 'good' }]);
 }
 
 export function endDay(s: Session): SessionResult<NightReport> {
@@ -418,11 +490,18 @@ export function openChannel(s: Session, id: string): SessionResult<{ lines: Chat
   return ok({ lines: r.lines, from: r.from });
 }
 
-/** 回一条消息：耗电，不占 AP；1 级电台只能听 */
+/** 回一条消息：发送本身不耗电、不占 AP（发射只累积暴露度） */
 export function replyChannel(s: Session, id: string, choiceId: string): SessionResult {
   const r = engineReplyChannel(s.run, id, choiceId);
   if (!r.ok) return fail(r.reason ?? t('channels.err.noChoice'));
   // 回话本身不写日记（会话里已经有一条自己的气泡），只回报成功
+  return ok();
+}
+
+/** 主动先开口：有些事件的开场在等你先说第一句 */
+export function hailChannel(s: Session, id: string, choiceId: string): SessionResult {
+  const r = engineHailChannel(s.run, id, choiceId);
+  if (!r.ok) return fail(r.reason ?? t('channels.err.noChoice'));
   return ok();
 }
 

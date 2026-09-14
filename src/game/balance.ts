@@ -549,29 +549,26 @@ export const CHANNEL = {
   /** 搜索频道：1 AP + 蓄电 */
   SEARCH_AP: 1,
   SEARCH_KWH: 0.4,
-  /** 发一条消息的蓄电消耗（不占 AP，否则一天 3 AP 撑不住聊天） */
-  SEND_KWH: 0.15,
-  /** 调频接收完整报文 */
-  TUNE_KWH: 0.5,
-  /** 自治委员会表决 */
-  VOTE_KWH: 0.3,
   /** 搜索命中率，下标 = 无线电台等级 - 1 */
   SEARCH_HIT: [0.6, 0.75, 0.95],
-  /** 好感度增减 */
-  AFF_REPLY: 4,
-  AFF_REPLY_KEY: 10,
-  AFF_GIFT: 15,
-  AFF_REFUSE: -10,
+  /** 超期未回按次扣好感度（这条是引擎统一结算的，不属于任何单个选项，所以留在 balance） */
   AFF_MISSED: -6,
   AFF_INIT_ORG: 30,
   AFF_INIT_PERSON: 20,
+  /**
+   * 注：上面**没有** AFF_REPLY / AFF_GIFT / AFF_REFUSE / TUNE_KWH / VOTE_KWH。
+   * 好感度增减与"调频接收 / 登记 / 表决"那几笔蓄电，一律由内容逐选项声明
+   * （见 `content/channels/*.ts` 里的 `affinity:` 与 `effect.wear.batteryCharge`）：
+   * 拒绝与答应的差别很大、登记与普通回话也不同价，推断不出来，只能一条条写。
+   * 放过一次常量，结果是文案按常量写 0.5 kWh、机制却按内容扣，两边悄悄漂了。
+   */
   /** 超期未回累计到几次开始判失联 */
   MISSED_LIMIT: 2,
   /** 好感度低于此值且超限 → lost */
   LOST_AFFINITY: 40,
   /** 静默多少天后可触发回归拍 */
   OFFLINE_RECONNECT: 5,
-  /** L2 起每次发射的暴露度区间 */
+  /** 每次发射（含 1 级）累积的暴露度区间 */
   TX_EXPOSURE: [0.5, 1],
   /** 单个频道会话记录封顶 */
   LOG_CAP: 400,

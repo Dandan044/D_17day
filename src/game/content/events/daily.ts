@@ -845,6 +845,19 @@ beat({
             },
           },
           {
+            id: 'relay',
+
+            requires: { modules: { radio: 3 }, reason: '需要 3 级电台（中继台）才能把信号转出去' },
+            effect: {
+              stats: { sanity: 10, reputation: 8, humanity: 3 },
+              world: { exposure: 12 },
+              setFlags: ['flag:talkedToDJ'],
+              schedule: [{ familyId: 'daily_dj_mentions', inDays: 2 }],
+
+              tone: 'good',
+            },
+          },
+          {
             id: 'note_coords',
 
             effect: {

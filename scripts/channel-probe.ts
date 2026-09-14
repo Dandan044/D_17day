@@ -10,12 +10,13 @@
 import { TIME } from '../src/game/balance';
 import '../src/game/copy';
 import { CHANNEL_DEFS } from '../src/game/content/channels';
-import { tickChannels } from '../src/game/engine/channels';
+import { activeEvent, activeRound, tickChannels } from '../src/game/engine/channels';
 import { chooseSite, createRun, endDay } from '../src/game/engine/run';
 import { checkRequirement, deriveFacts } from '../src/game/engine/tags';
 import {
   acknowledgeCollapse as ackCollapse,
   createSession,
+  hailChannel,
   openChannel,
   replyChannel,
   searchChannel,
@@ -108,13 +109,19 @@ function runOne(seed: number, persona: Persona): Outcome {
       stats[st.id]!.lines += st.inbox.length;
       openChannel(s, st.id);
 
-      if (persona !== 'none' && st.awaitingBeat) {
-        const def = CHANNEL_DEFS.find((d) => d.id === st.id)!;
-        const beat = def.beats.find((b) => b.id === st.awaitingBeat);
-        const pick = beat ? pickChoice(run, beat.choices ?? [], persona) : null;
-        if (pick) {
-          const r = replyChannel(s, st.id, pick.id);
-          if (r.ok) stats[st.id]!.choices += 1;
+      const def = CHANNEL_DEFS.find((d) => d.id === st.id)!;
+      // 事件一旦开始，日历就不再插手：当前这轮要么等玩家选（awaiting='choice'），
+      // 要么等玩家先开口（awaiting='open'，用 hailChannel 说第一句）；
+      // 被 delayDays 压着时 awaiting 是 null，探针什么都不做，等它到点。
+      if (persona !== 'none' && st.active) {
+        if (st.awaiting === 'open') {
+          const ev = activeEvent(def, st);
+          const pick = ev ? pickChoice(run, ev.openChoices ?? [], persona) : null;
+          if (pick && hailChannel(s, st.id, pick.id).ok) stats[st.id]!.choices += 1;
+        } else if (st.awaiting === 'choice') {
+          const cur = activeRound(def, st);
+          const pick = cur ? pickChoice(run, cur.choices ?? [], persona) : null;
+          if (pick && replyChannel(s, st.id, pick.id).ok) stats[st.id]!.choices += 1;
         }
       }
     }
@@ -127,9 +134,13 @@ function runOne(seed: number, persona: Persona): Outcome {
         stats[st.id]!.lostDayN += 1;
       }
       if (st.id === 'xt' && xtOutcome === 'unmet') {
+        // xt_dead 已经不再是事件/轮 id（它只是被多条链共享的终止文案）。
+        // 判定顺序有讲究：`flag:xtAlive` 写在线的 `onRead` 里，要等玩家**读到那一行**才置上
+        // （下一日 openChannel 时），而本判定与回复在同一日跑。所以要等频道真的落了 `lost`
+        // 才能判"死了"——否则存活线在收场当天就会被误判成死亡。
         if (run.flags.includes('flag:xtAlive')) xtOutcome = 'alive';
-        else if (st.doneBeats.includes('xt_dead')) xtOutcome = 'dead';
-        else if (st.doneBeats.includes('xt_silent')) xtOutcome = 'silent';
+        else if (st.doneEvents.includes('xt_silent')) xtOutcome = 'silent';
+        else if (st.status === 'lost' && st.doneEvents.includes('xt_ambush')) xtOutcome = 'dead';
         else if (st.status === 'lost') xtOutcome = 'silent';
       }
     }
@@ -144,9 +155,9 @@ function runOne(seed: number, persona: Persona): Outcome {
   }
   const ogSt = run.channels.find((c) => c.id === 'og');
   if (ogSt) {
-    if (ogSt.doneBeats.includes('og_endgame')) ogOutcome = 'coop';
-    else if (ogSt.doneBeats.includes('og_suspect')) ogOutcome = 'suspect';
-    else if (ogSt.doneBeats.includes('og_ignored')) ogOutcome = 'ignored';
+    if (ogSt.doneEvents.includes('og_endgame')) ogOutcome = 'coop';
+    else if (ogSt.doneEvents.includes('og_suspect')) ogOutcome = 'suspect';
+    else if (ogSt.doneEvents.includes('og_ignored')) ogOutcome = 'ignored';
   }
   return { stats, poolLeft: run.channelPool.length, xt: xtOutcome, og: ogOutcome };
 }

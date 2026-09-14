@@ -10,6 +10,7 @@ import { checkRequirement } from '../../game/engine/tags';
 import { useGame } from '../../game/store';
 import type { Choice, ResourceId, RunState } from '../../game/types';
 import { cachedFacts } from '../derived';
+import { ValueIcon } from '../icons';
 import { scrambleText } from '../scramble';
 import { NotebookSheet } from './NotebookSheet';
 import { TodoSpread } from './TodoSpread';
@@ -30,6 +31,20 @@ import './art.css';
  */
 
 const TURN_MS = 430;
+/** 翻页纸「全幅盖住整页」的那一瞬间：此刻换内容，玩家看不见替换过程 */
+const SWAP_MS = 40;
+
+/** 页面上**真正被渲染**的那一条（不是队列里的下一条） */
+type Shown = { kind: 'event'; familyId: string; variantId: string } | { kind: 'landed' };
+
+function keyOf(s: Shown): string {
+  return s.kind === 'landed' ? 'landed' : `${s.familyId}:${s.variantId}`;
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 /** d20 + 技能 >= dc 的成功率 */
 function successChance(dc: number, skill: number): number {
@@ -58,23 +73,58 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
   const [turning, setTurning] = useState(false);
 
   const pending = !!lastChoice;
-  const display = pending && answered ? answered : item;
-  const shownKey = display ? `${display.familyId}:${display.variantId}` : '';
-  const prev = useRef(shownKey);
+  // 「应该显示什么」由实时状态派生；但页面**先不跟**，等翻页纸盖住整页时才切过去（见下）
+  const desired: Shown =
+    pending && answered
+      ? { kind: 'event', familyId: answered.familyId, variantId: answered.variantId }
+      : item
+        ? { kind: 'event', familyId: item.familyId, variantId: item.variantId }
+        : { kind: 'landed' };
+  const desiredKey = keyOf(desired);
 
-  // 翻页动画：**真正换了显示条目**才播一次（点完「继续」关掉结算后才翻到下一件）
+  const [shown, setShown] = useState<Shown>(desired);
+  const shownRef = useRef(shown);
+  const desiredRef = useRef(desired);
+  desiredRef.current = desired;
+  const flipToken = useRef(0);
+
+  // 翻页时序：**内容必须在纸盖住整页之后才换**。
+  // 旧实现一改 desired 就立刻渲染下一件，而翻页纸只盖住右半页 → 左页的新正文在动画还没走完时
+  // 就已经露出来了。现在把「渲染用的条目」冻在 shown 里，纸全幅覆盖（SWAP_MS）的那一刻才切，
+  // 玩家只会看到纸掀开、露出新的一页。
   useEffect(() => {
-    if (prev.current && prev.current !== shownKey) {
-      prev.current = shownKey;
-      setTurning(true);
-      const id = window.setTimeout(() => setTurning(false), TURN_MS);
-      return () => window.clearTimeout(id);
+    if (desiredKey === keyOf(shownRef.current)) {
+      // 回到当前页（极快连点 A→B→A 时可能发生）：撤掉还在跑的翻页，别把 turning 卡在 true
+      flipToken.current++;
+      setTurning(false);
+      return;
     }
-    prev.current = shownKey;
-  }, [shownKey]);
+    if (prefersReducedMotion()) {
+      shownRef.current = desiredRef.current;
+      setShown(desiredRef.current);
+      return;
+    }
+    const token = ++flipToken.current;
+    setTurning(true);
+    const swap = window.setTimeout(() => {
+      if (token !== flipToken.current) return;
+      shownRef.current = desiredRef.current;
+      setShown(desiredRef.current);
+    }, SWAP_MS);
+    const done = window.setTimeout(() => {
+      if (token !== flipToken.current) return;
+      setTurning(false);
+    }, TURN_MS);
+    return () => {
+      window.clearTimeout(swap);
+      window.clearTimeout(done);
+    };
+  }, [desiredKey]);
 
-  const family = display ? FAMILY_BY_ID[display.familyId] : undefined;
-  const variant = display && family ? family.variants.find((v) => v.id === display.variantId) : undefined;
+  const shownEvent = shown.kind === 'event' ? shown : null;
+  const family = shownEvent ? FAMILY_BY_ID[shownEvent.familyId] : undefined;
+  const variant = shownEvent && family ? family.variants.find((v) => v.id === shownEvent.variantId) : undefined;
+  const displayTag = shownEvent?.familyId ?? '';
 
   const facts = cachedFacts(run);
   const unreliable = run.stats.sanity < HEALTH.SANITY_UNRELIABLE;
@@ -88,7 +138,9 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
   const remaining = run.queue.length;
   // 全部读完（队列空、结算也关了）→ 这本本子直接翻到「今日待办」那两页。
   // 关键：**不换组件**——纸还是同一张，只换内容，否则会看到本子又"飞进来"一次，很生硬。
-  const finished = remaining === 0 && !pending;
+  // finished 必须由**冻结的 shown** 推导，不能用实时的 remaining —— 否则最后一件还在翻页时，
+  // 待办页就已经跟着队列清空提前露出来了。
+  const finished = shown.kind === 'landed';
 
   return (
     <div className="art-nb-veil art-book-veil" role="dialog" aria-modal="true" aria-label={t('ui.event.bookKicker')}>
@@ -134,10 +186,10 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
               <p className="art-nb-empty">{t('ui.event.toTodo')}</p>
             ) : (
               <>
-                <h4 className="art-book-title">{scrambleText(variant.title ?? '', run, `${display!.familyId}-t`)}</h4>
+                <h4 className="art-book-title">{scrambleText(variant.title ?? '', run, `${displayTag}-t`)}</h4>
                 <div className={`art-book-body${unreliable ? ' is-unreliable' : ''}`}>
                   {(variant.body ?? '').split('\n').map((p, i) => (
-                    <p key={i}>{scrambleText(p, run, `${display!.familyId}-b${i}`)}</p>
+                    <p key={i}>{scrambleText(p, run, `${displayTag}-b${i}`)}</p>
                   ))}
                 </div>
                 {unreliable && <p className="art-book-scramble">{t('ui.event.scramble')}</p>}
@@ -175,13 +227,24 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
                       <span> · {lastChoice.raid.narrative}</span>
                     </p>
                     <p className="art-book-chips">
-                      {lastChoice.raid.hpLost > 0 && <em className="is-bad">{t('ui.result.hp', { n: lastChoice.raid.hpLost })}</em>}
-                      {lastChoice.raid.usedAmmo > 0 && <em>{t('ui.result.ammo', { n: lastChoice.raid.usedAmmo })}</em>}
+                      {lastChoice.raid.hpLost > 0 && (
+                        <em className="is-bad">
+                          <ValueIcon id="hp" />
+                          {t('ui.result.hp', { n: lastChoice.raid.hpLost })}
+                        </em>
+                      )}
+                      {lastChoice.raid.usedAmmo > 0 && (
+                        <em>
+                          <ValueIcon id="ammo" />
+                          {t('ui.result.ammo', { n: lastChoice.raid.usedAmmo })}
+                        </em>
+                      )}
                       {lastChoice.raid.moduleDamaged && (
                         <em className="is-bad">{t('ui.result.module', { name: lastChoice.raid.moduleDamaged })}</em>
                       )}
                       {Object.entries(lastChoice.raid.lost).map(([k, v]) => (
                         <em key={k} className="is-bad">
+                          <ValueIcon id={k as ResourceId} />
                           {RES_NAME[k as ResourceId]} -{v}
                         </em>
                       ))}
@@ -192,7 +255,10 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
                 {lastChoice.notes.length > 0 && (
                   <p className="art-book-chips">
                     {lastChoice.notes.map((n, i) => (
-                      <em key={i}>{n}</em>
+                      <em key={i}>
+                        {n.icon && <ValueIcon id={n.icon} />}
+                        {n.text}
+                      </em>
                     ))}
                   </p>
                 )}
@@ -218,12 +284,13 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
               </h3>
             </div>
 
-            <div className={`art-book-choices${pending ? ' is-locked' : ''}`}>
+            <div className={`art-book-choices${pending || turning ? ' is-locked' : ''}`}>
               {visibleChoices.map((c) => {
                 const req = checkRequirement(c.requires, run, facts);
                 const chance = c.check ? successChance(c.check.dc, run.skills[c.check.skill]) : null;
                 const cost = requirementCost(c);
-                const disabled = !req.ok || pending;
+                // 翻页中（turning）也锁住：此刻页面还停在旧那一件上，点下去会拿着旧事件去 resolve
+                const disabled = !req.ok || pending || turning;
                 return (
                   <button
                     key={c.id}
@@ -231,13 +298,13 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
                     className={`art-book-choice${pending && answered?.choiceId === c.id ? ' is-picked' : ''}`}
                     disabled={disabled}
                     onClick={() => {
-                      if (!item) return;
-                      setAnswered({ familyId: item.familyId, variantId: item.variantId, choiceId: c.id });
-                      resolveChoice(item.familyId, item.variantId, c.id);
+                      if (!shownEvent) return;
+                      setAnswered({ familyId: shownEvent.familyId, variantId: shownEvent.variantId, choiceId: c.id });
+                      resolveChoice(shownEvent.familyId, shownEvent.variantId, c.id);
                     }}
                   >
                     <span className="art-book-choicelabel">
-                      {scrambleText(c.label ?? '', run, `${display!.familyId}-${c.id}`)}
+                      {scrambleText(c.label ?? '', run, `${displayTag}-${c.id}`)}
                       {!req.ok && <em className="art-book-choicereason">{req.reason}</em>}
                       {req.ok && chance !== null && c.check && (
                         <em className="art-book-chance">

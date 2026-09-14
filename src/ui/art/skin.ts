@@ -1,6 +1,7 @@
 import type { WeatherId } from '../../game/types';
 import winGeo from './windowPanes.json';
 import artLayout from './artLayout.json';
+import shelfLayout from './shelfLayout.json';
 
 /** 由首页 / art.html 的 <body data-skin="art"> 决定。经典入口 classic.html 不带这个标记。 */
 export function isArtSkin(): boolean {
@@ -124,7 +125,38 @@ export const ART = {
   winWinterSnow: './art/win-winter-snow.jpg',
   winWinterAshfall: './art/win-winter-ashfall.jpg',
   winWinterBlackrain: './art/win-winter-blackrain.jpg',
+  /** 注：局内那面货架不再是单张贴图，改按「口粮档 × 用水档」切 25 态，
+   *  见 shelfLayout.json 与下面的 SHELF_STATE / shelfStateSrc。 */
 } as const;
+
+/** 局内货架的「口粮档 × 用水档」25 态（shelfLayout.json —— 唯一坐标真源）。 */
+export interface ShelfStateLayout {
+  /** 货架在场景里的区域框 [左, 上, 宽, 高]（分数坐标），贴图按它盖回原位 */
+  region: readonly [number, number, number, number];
+  /** 「单人标准人日」的档位阈值，下标 0..4 */
+  tiers: readonly number[];
+  /** 贴图路径模板，{f}/{w} 是口粮档 / 用水档 */
+  src: string;
+}
+
+export const SHELF_STATE = shelfLayout as unknown as ShelfStateLayout;
+
+/** 货架在场景里的摆放框（贴图按它盖回原位，不必走 artLayout）。 */
+export const SHELF_BOX: BoxStyle = boxLTWH(SHELF_STATE.region);
+
+/** 「单人标准人日」→ 档位（0..4）：取最后一个 days >= 阈值 的档。 */
+export function shelfTier(days: number): number {
+  const tiers = SHELF_STATE.tiers;
+  for (let i = tiers.length - 1; i >= 0; i--) {
+    if (days >= tiers[i]!) return i;
+  }
+  return 0;
+}
+
+/** 口粮档 f × 用水档 w → 贴图路径。 */
+export function shelfStateSrc(f: number, w: number): string {
+  return SHELF_STATE.src.replace('{f}', String(f)).replace('{w}', String(w));
+}
 
 /** 主菜单物件：摆放框来自 artLayout.json（cut-art-objects.py 收紧后的最终框）。 */
 export const CUT: Record<string, BoxStyle> = {
@@ -172,6 +204,27 @@ export const HOME_POLY: Record<string, ArtPoly | undefined> = {
   door: polyOf('cut-h-door'),
   shelf: polyOf('cut-h-shelf'),
 };
+
+/**
+ * 货架 25 态贴图的热点多边形。
+ *
+ * 25 张贴图共用同一个轮廓，所以**不另存一份多边形**：把既有 `cut-h-shelf` 的轮廓
+ * （归一化到它自己的 PNG 画布）先还原到场景分数坐标，再折算进 shelfLayout.region 的画布。
+ * 于是换贴图不动热点，轮廓也不会跑偏。
+ */
+export const SHELF_POLY: ArtPoly | undefined = (() => {
+  const poly = polyOf('cut-h-shelf');
+  if (!poly) return undefined;
+  const b = item('cut-h-shelf').box; // [l, t, w, h] 场景分数
+  const r = SHELF_STATE.region;
+  return poly.map((ring) =>
+    ring.map(([x, y]) => {
+      const sx = b[0]! + x * b[2]!;
+      const sy = b[1]! + y * b[3]!;
+      return [(sx - r[0]) / r[2], (sy - r[1]) / r[3]] as [number, number];
+    }),
+  );
+})();
 
 export const MENU_POLY: Record<string, ArtPoly | undefined> = {
   table: polyOf('cut-table'),

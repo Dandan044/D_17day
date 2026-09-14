@@ -32,6 +32,21 @@ export type SkillId =
   | 'fitness' // 体能
   | 'stealth'; // 隐蔽
 
+/**
+ * 「会变的数值」的图标标识。
+ *
+ * 直接复用字段名（属性用 StatId、资源用 ResourceId），再加四个非资源的数值——
+ * 于是结算里能原样把 `k` 传出来当图标 id，不必再维护一张对照表。
+ * 渲染在 `src/ui/icons.tsx`。
+ */
+export type ValueIconId = StatId | ResourceId | 'ap' | 'exposure' | 'battery' | 'cartridge';
+
+/** 结算/报表里的一行结果：文本 + 该行代表的数值（有则显示图标） */
+export interface ValueNote {
+  text: string;
+  icon?: ValueIconId;
+}
+
 export type ConditionId =
   | 'thirst' // 口渴（限量档饮水的代价，脱水阶梯的前一站）
   | 'dehydrationMild' // 轻度脱水
@@ -520,38 +535,82 @@ export interface ChannelDef {
   discoverDay?: number;
   /** search：最低末世等级 */
   discoverThreat?: number;
-  /** search：可被搜到所需的无线电台等级 */
-  minRadio?: number;
-  /** 需要玩家回应的拍，超这么多天没回算 missed */
+  /**
+   * 注：**没有** `minRadio`。电台等级不再决定"能不能收到/能不能发话"——
+   * 1 级即可收发；等级的差别落在两处：搜索命中率（`CHANNEL.SEARCH_HIT`）
+   * 与选项自己的 `requires.modules.radio`（2/3 级解锁更多选项）。
+   */
+  /** 事件里等玩家回应超过这么多天 → 该事件以超时收场 */
   replyWindowDays: number;
-  /** 核心频道：横跨整个末世，拍数有下限护栏（lint 用） */
+  /** 核心频道：横跨整个末世，事件数有下限护栏（lint 用） */
   core?: boolean;
-  beats: ChannelBeat[];
+  /** **事件表**——频道的驱动单位。一个事件 = 开场 + 若干轮。 */
+  events?: ChannelEvent[];
 }
 
 /**
- * 一拍频道事件。
+ * 一个频道事件。
  *
- * 调度优先级：at（绝对日）> afterDays（相对上一拍完成日）。
- * 前置不满足时，有 elseBeat 就走替代拍——「你没参与，但事情照样发生」。
+ * 这是频道的驱动单位：**有开场、有若干轮、有明确结束**。
+ *
+ * 时间语义上有一条硬规矩：
+ * - `at` / `afterDays` 只管**事件什么时候开始**（事件之间才看日历）。
+ * - 事件一旦开始，轮与轮之间**即时**推进，日历不再插手；想表达"他几天没回"，
+ *   在该轮上写 `delayDays`，不要回到事件级。
+ *
+ * 与旧模型的关系：旧模型里"日历拍"和"轮"混在同一个 `beats[]` 里，只靠有没有 `at` 区分，
+ * 于是既没有事件边界、也无法表达"这件事一共几轮"，节奏规则只能靠频道 kind 兜。
+ * 分层之后这些补丁全部作废。
  */
-export interface ChannelBeat {
+export interface ChannelEvent {
   id: string;
+  /** 绝对日锚：第几天开始 */
   at?: number;
+  /** 相对锚：距上一次联系这么多天开始 */
   afterDays?: number;
-  /** 必须已完成的 beat */
+  /** 需要已完成的事件 id */
   need?: string[];
   minAffinity?: number;
   require?: TagQuery;
-  /** 前置不满足时的替代拍 id；缺省则整条线停在这一拍 */
-  elseBeat?: string;
-  expectReply?: boolean;
-  out: ChatLine[];
-  choices?: ChatChoice[];
-  /** 这一拍之后频道永久静默（没去救人、对方死了） */
+  /** 前置不满足时改走哪个事件（旧 elseBeat 的事件级版本） */
+  elseEvent?: string;
+  /** false / 缺省＝正常事件（进不了就跳过）；true＝**条件不满足时什么也不发生**，等它自然到点重试 */
+  keepWaiting?: boolean;
+
+  /** 开场白。空数组 = 由玩家先开口（见 awaitPlayerOpen） */
+  opening?: ChatLine[];
+  /** true：事件到场后停在"等你先说第一句"，玩家开口才进第一轮 */
+  awaitPlayerOpen?: boolean;
+  /** 玩家先开口时可选的那几句话（`awaitPlayerOpen` 用） */
+  openChoices?: ChatChoice[];
+
+  /** 第一轮的 id */
+  first: string;
+  /** 全部轮。轮 id 只在本事件内唯一 */
+  rounds: ChannelRound[];
+
+  /** 这一事件以 silence 收场后，频道永久静默（旧 beat 级 silence） */
   silence?: boolean;
+  /** 供 UI / 统计 / lint 分类 */
+  kind?: 'daily' | 'request' | 'crisis' | 'open' | 'end';
 }
 
+/** 一轮 = 对方说一段 + 给玩家若干选项。没有 `choices` 的一轮＝本事件的最后一轮。 */
+export interface ChannelRound {
+  id: string;
+  /** 对方这一轮说的话 */
+  out: ChatLine[];
+  /** 玩家的选项；缺省 = 事件到此结束 */
+  choices?: ChatChoice[];
+  /** 这一轮压制 N 天后才出现（唯一能"等天"的地方）。事件在这期间挂起，不挡别的事 */
+  delayDays?: number;
+  /** 前置不满足时改走本事件内的哪一轮（旧 beat 级 elseBeat 的轮级版本） */
+  elseRound?: string;
+  minAffinity?: number;
+  require?: TagQuery;
+  /** 这一轮播完就永久静默（旧 beat 级 silence） */
+  silence?: boolean;
+}
 export interface ChatLine {
   from: 'peer' | 'you';
   /** 文案键 channels.<channelId>.<beatId>.line.<n> */
@@ -577,7 +636,7 @@ export interface ChatChoice {
   id: string;
   /** 文案键 */
   label: string;
-  /** 文案键，代价说明如「耗电 0.15 kWh」 */
+  /** 文案键。代价说明**只写玩家真要付的东西**——发送本身不耗电，别再写"耗电 0.15 kWh" */
   note?: string;
   /** 门槛：常用 modules.radio 做等级鉴定 */
   requires?: Requirement;
@@ -586,10 +645,14 @@ export interface ChatChoice {
   affinity?: number;
   /** 发送后追加到右侧气泡的文案键 */
   say?: string;
-  /** 下一拍 id；缺省表示对方不回 */
-  reply?: string;
-  /** 这一选让对方永久静默 */
+  /** 选完进入**本事件内**的哪一轮；缺省＝这个事件到此结束 */
+  next?: string;
+  /** 事件以什么结局收场。缺省＝resolved（正常聊完） */
+  outcome?: 'resolved' | 'refused' | 'silent' | 'timedout' | 'lost';
+  /** 这一选让对方永久静默（事件以 silence 收场） */
   silence?: boolean;
+  /** @deprecated 旧字段：下一拍 id。仅未迁移内容使用，适配层折成 next */
+  reply?: string;
 }
 
 /** 频道运行状态。信封与队列无关：独立配额、不挡「结束这一天」 */
@@ -598,7 +661,8 @@ export interface ChannelState {
   status: ChannelStatus;
   /** 好感度 0-100，内部值，UI 只映射成 BondLevel */
   affinity: number;
-  doneBeats: string[];
+  /** 已完成的事件 id */
+  doneEvents: string[];
   /** 已到达未读 */
   inbox: ChatLine[];
   /** 已读记录，按频道独立封顶 */
@@ -608,13 +672,26 @@ export interface ChannelState {
    * 之前的一律直接显示。否则每次打开收音机都会把整段历史从头念一遍。
    */
   seenLines?: number;
-  /** 正在等玩家回的拍 */
-  awaitingBeat?: string;
-  awaitSinceDay?: number;
-  /** 选项指定的下一拍（分支），播放时绕过时间锚 */
-  pendingBeat?: string;
-  /** pendingBeat 的设定日；该拍自带 afterDays 时从这天起算 */
-  pendingSinceDay?: number;
+
+  /**
+   * 正在进行的那个事件。**事件一旦开始，日历就不再插手** —— 直到它结束或超时。
+   * 这是旧模型给不了的东西：那时"日历拍"和"轮"混在同一个数组里，日历会在对话中途插进来。
+   */
+  active?: {
+    eventId: string;
+    /** 当前停在哪一轮 */
+    roundId: string;
+    /** 这是本事件里你正在经历的第几轮（从 1 数起，UI 显示「第 2 轮」） */
+    round: number;
+    startedDay: number;
+    /** 你最后一次在本事件里做选择的日子（超时判定用它） */
+    lastActionDay: number;
+  };
+  /** 在等玩家做什么：choice＝等你选；open＝等你先开口；null＝不在等（被 delayDays 压着） */
+  awaiting: 'choice' | 'open' | null;
+  /** 某一轮被 `delayDays` 压着：要等到这天。等待期间这个频道不做任何事 */
+  waitUntilDay?: number;
+
   missed: number;
   repliedCount: number;
   lastContactDay: number;

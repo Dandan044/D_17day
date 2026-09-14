@@ -137,7 +137,7 @@ export const data = {
         '2': '我住六楼。停电那天起就没下过楼。',
       },
       choice: {
-        hi: { label: '回话', note: '耗电 0.15 kWh', say: '嗯，我在 1101。我这边还好。' },
+        hi: { label: '回话', note: '发射 · 会被测向', say: '嗯，我在 1101。我这边还好。' },
         quiet: { label: '不回', note: '不消耗' },
       },
     },
@@ -160,7 +160,7 @@ export const data = {
         '2': '你住几楼',
       },
       choice: {
-        tell: { label: '告诉他楼层', note: '耗电 0.15 kWh', say: '四楼。我门口挂着个旧书包。' },
+        tell: { label: '告诉他楼层', note: '发射 · 会被测向', say: '四楼。我门口挂着个旧书包。' },
         hold: { label: '不说', note: '不消耗' },
       },
     },

@@ -11,7 +11,7 @@ import {
   heatSliderMax,
   survivalTemp,
 } from '../../game/engine/climate';
-import { dailyNeeds } from '../../game/engine/economy';
+import { dailyNeeds, stockDays } from '../../game/engine/economy';
 import { waterCapacity } from '../../game/engine/tags';
 import LINEFIG from './linefigLayout.json';
 import {
@@ -40,15 +40,24 @@ import { ART } from './skin';
  * 逻辑上必须与经典版逐项等价——尤其滑杆的 draft/commit 防抖与负荷排序的换位基准。
  */
 
-// 温度计刻度**固化**成 -40..+40：管腔按这个量程线性映射，顶底两端标数字。
-// 超出范围的读数会顶在极端位置（clamp），不会溢出管腔。
+// 温度计刻度**固化**成 -40..+40，但**不再线性**：0~+40 是天天用到的区间（舒适 16°/生存 4°/灾前 18°），
+// 给它最大的间距；0~-40 只在后期核冬天才到，越往下越挤（刻度越密）。于是 0° 被抬到管腔 35% 处，
+// 下半段用一个幂函数压扁。填色 / 刻度线 / 刻度数字 / 生存舒适线 / 两根针**全部**经这一支函数，
+// 天然对齐——不会出现"线、色、针各走各的"。
 const SCALE_MIN = -40;
 const SCALE_MAX = 40;
+const ZERO_PCT = 35; // 0° 落在管腔 35% 高度
+const COLD_POW = 13 / 7; // ≈1.857：使 0° 处上下两段导数相等（1.625 %/°），视觉上不断折
 
 function scalePct(temp: number): number {
   const t = Math.max(SCALE_MIN, Math.min(SCALE_MAX, temp));
-  return ((t - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
+  if (t >= 0) return ZERO_PCT + (t / SCALE_MAX) * (100 - ZERO_PCT);
+  // (t+40)/40 ∈ [0,1]：0=极寒、1=冰点。指数 >1 → 越靠冰点间距越大、越靠 -40 越密
+  return ZERO_PCT * Math.pow((t - SCALE_MIN) / (0 - SCALE_MIN), COLD_POW);
 }
+
+/** 刻度尺要画的温度点（每 5°），整 10° 为长刻度 */
+const THERMO_TICKS = Array.from({ length: 17 }, (_, i) => SCALE_MIN + i * 5);
 
 function disasterFactorLabel(id: DisasterId): string | null {
   if (id === 'nuclear') return t('ui.power.factorNuclear');
@@ -138,6 +147,17 @@ export function PlanRationColumn({ run }: { run: RunState }) {
   const waterNowRatio = Math.min(1, run.res.water / waterCap);
   const waterNextRatio = Math.min(1, Math.max(0, run.res.water - needs.water) / waterCap);
 
+  // 悬停/点击展开的详情：剩余量 + **按当前配给档**还能撑几天（分母 = dailyNeeds 算出的今日总需求）。
+  // 抽成 stockDays 是为了和物资货架用同一套天数口径，别让同一份库存在两处显示成不同的天数。
+  const [openTip, setOpenTip] = useState<'food' | 'water' | null>(null);
+  const toggleTip = (k: 'food' | 'water') => setOpenTip((v) => (v === k ? null : k));
+  const fmtDays = (d: number) => (Number.isFinite(d) ? d.toFixed(1) : t('ui.plan.rationTipOver'));
+  const foodTip = t('ui.plan.rationTipFood', { amount: Math.round(foodHave), days: fmtDays(stockDays(foodHave, needs.food)) });
+  const waterTip = t('ui.plan.rationTipWater', {
+    amount: Math.round(run.res.water * 10) / 10,
+    days: fmtDays(stockDays(run.res.water, needs.water)),
+  });
+
   return (
     <section className="art-pl-col" aria-label={t('ui.plan.colRation')}>
       <h3 className="art-pl-colname">{t('ui.plan.colRation')}</h3>
@@ -198,32 +218,58 @@ export function PlanRationColumn({ run }: { run: RunState }) {
 
           <p className="art-pl-note">{t('ui.game.waterHint')}</p>
 
-          {/* 口粮金字塔 / 水瓶堆：两色分层——下层绿=次日仍在，上层赭=今晚会吃掉的那段。
+          {/* 口粮金字塔 / 水瓶堆：两色分层——下层淡绿=次日仍在，上层淡赭=今晚会吃掉的那段。
               食物储量没有上限，所以分母取「7 天口粮量」；水分母取水箱物理上限。 */}
           <div className="art-pl-rationfigs">
-            <figure className="art-pl-rationfig">
+            <figure
+              className={`art-pl-rationfig${openTip === 'food' ? ' is-open' : ''}`}
+              tabIndex={0}
+              onClick={() => toggleTip('food')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTip('food');
+                }
+              }}
+            >
               <LineFig
                 line={ART.lineRation}
                 mask={ART.lineRationMask}
                 aspect={LINEFIG.ration.aspect}
                 fills={[
-                  { from: 0, to: foodNextRatio, color: 'var(--pl-green)' },
-                  { from: foodNextRatio, to: foodNowRatio, color: 'var(--pl-ochre)' },
+                  { from: 0, to: foodNextRatio, color: 'var(--pl-green-lt)' },
+                  { from: foodNextRatio, to: foodNowRatio, color: 'var(--pl-ochre-lt)' },
                 ]}
               />
               <figcaption>{t('ui.game.food')}</figcaption>
+              <span className="art-pl-rationtip num" role="status">
+                {foodTip}
+              </span>
             </figure>
-            <figure className="art-pl-rationfig">
+            <figure
+              className={`art-pl-rationfig${openTip === 'water' ? ' is-open' : ''}`}
+              tabIndex={0}
+              onClick={() => toggleTip('water')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleTip('water');
+                }
+              }}
+            >
               <LineFig
                 line={ART.lineWater}
                 mask={ART.lineWaterMask}
                 aspect={LINEFIG.water.aspect}
                 fills={[
-                  { from: 0, to: waterNextRatio, color: 'var(--pl-blue)' },
-                  { from: waterNextRatio, to: waterNowRatio, color: 'var(--pl-ochre)' },
+                  { from: 0, to: waterNextRatio, color: 'var(--pl-blue-lt)' },
+                  { from: waterNextRatio, to: waterNowRatio, color: 'var(--pl-ochre-lt)' },
                 ]}
               />
               <figcaption>{t('ui.game.water')}</figcaption>
+              <span className="art-pl-rationtip num" role="status">
+                {waterTip}
+              </span>
             </figure>
           </div>
         </>
@@ -307,16 +353,21 @@ export function PlanHeatColumn({ run }: { run: RunState }) {
             aspect={LINEFIG.thermo.aspect}
             fills={[{ from: 0, to: scalePct(plan.indoor) / 100, color: bandColor }]}
           />
-          {/* 固定刻度：底 -40、中 0、顶 +40，管腔按此线性映射 */}
-          <span className="art-pl-tnum is-min" style={{ bottom: markAt(scalePct(SCALE_MIN)) }}>
-            {SCALE_MIN}°
-          </span>
-          <span className="art-pl-tnum is-mid" style={{ bottom: markAt(scalePct(0)) }}>
-            0°
-          </span>
-          <span className="art-pl-tnum is-max" style={{ bottom: markAt(scalePct(SCALE_MAX)) }}>
-            +{SCALE_MAX}°
-          </span>
+          {/* 刻度尺：位置全部由 scalePct 决定（0° 以上稀、0° 以下越往下越密）。
+              与填色、指针共用同一支函数 → 刻度线与色柱永远对得上。整 20° 标数字。 */}
+          {THERMO_TICKS.map((v) => (
+            <span
+              key={v}
+              className={`art-pl-ttick${v % 10 === 0 ? ' is-major' : ''}`}
+              style={{ bottom: markAt(scalePct(v)) }}
+              aria-hidden
+            />
+          ))}
+          {[SCALE_MIN, -20, 0, 20, SCALE_MAX].map((v) => (
+            <span key={`n${v}`} className="art-pl-ttnum num" style={{ bottom: markAt(scalePct(v)) }}>
+              {v > 0 ? `+${v}°` : `${v}°`}
+            </span>
+          ))}
           <span className="art-pl-tmark is-survival" style={{ bottom: markAt(scalePct(survival)) }}>
             {t('ui.game.heatSurvival')} {Math.round(survival)}°
           </span>

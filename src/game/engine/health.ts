@@ -384,6 +384,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
           ledger(
             t('ledger.health.rad', { rad: Math.round(run.world.radiation), tol, dmg: dmg.toFixed(1) }),
             'bad',
+            'hp',
           ),
         );
       }
@@ -397,10 +398,10 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   // ---------- 6. 灯光 ----------
   if (loadOnline(run, 'lights')) {
     run.stats.sanity = clamp(run.stats.sanity + HEALTH.LIGHTS_SANITY_ON, 0, 100);
-    notes.push(ledger(t('ledger.health.lightsOn', { amt: HEALTH.LIGHTS_SANITY_ON }), 'good'));
+    notes.push(ledger(t('ledger.health.lightsOn', { amt: HEALTH.LIGHTS_SANITY_ON }), 'good', 'sanity'));
   } else {
     run.stats.sanity = clamp(run.stats.sanity + HEALTH.LIGHTS_SANITY_OFF, 0, 100);
-    notes.push(ledger(t('ledger.health.lightsOff', { amt: HEALTH.LIGHTS_SANITY_OFF }), 'bad'));
+    notes.push(ledger(t('ledger.health.lightsOff', { amt: HEALTH.LIGHTS_SANITY_OFF }), 'bad', 'sanity'));
   }
 
   // ---------- 7. 水源与疾病 ----------
@@ -474,7 +475,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     } else if (sleepSan > 0) {
       notes.push(ledger(t('ledger.health.medbayFull', { sta: sleepSta, san: sleepSan }), 'good'));
     } else {
-      notes.push(ledger(t('ledger.health.medbaySta', { sta: sleepSta }), 'good'));
+      notes.push(ledger(t('ledger.health.medbaySta', { sta: sleepSta }), 'good', 'stamina'));
     }
   }
 

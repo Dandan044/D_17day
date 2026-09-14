@@ -12,7 +12,7 @@ import { MODULE_BY_ID } from '../content/modules';
 import { SITE_BY_ID } from '../content/sites';
 import { SURVIVORS, SURVIVOR_BY_ID } from '../content/survivors';
 import type { Rng } from '../rng';
-import type { ActionHook, ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor } from '../types';
+import type { ActionHook, ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor, ValueIconId, ValueNote } from '../types';
 import { clampBattery, batteryCapacity } from './power';
 import { markGunshotRecent } from './exposure';
 import { grantIodine, waterCapacity } from './tags';
@@ -98,16 +98,18 @@ export function recruit(run: RunState, templateId: string, rng: Rng): Survivor |
   return s;
 }
 
-/** 应用一个 Effect。返回给玩家看的结果摘要行。 */
-export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
-  const notes: string[] = [];
+/** 应用一个 Effect。返回给玩家看的结果摘要行（带该行代表的数值 id，用于画图标）。 */
+export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
+  const notes: ValueNote[] = [];
+  /** 有对应数值的行才带图标；状态/人物/提示类只给文本 */
+  const push = (text: string, icon?: ValueIconId) => notes.push(icon ? { text, icon } : { text });
 
   if (eff.res) {
     for (const [k, delta] of Object.entries(eff.res)) {
       if (!delta) continue;
       run.res[k as ResourceId] += delta;
       const shown = Math.round(delta * 10) / 10;
-      notes.push(`${RES_NAME[k as ResourceId] ?? k} ${shown > 0 ? '+' : ''}${shown}`);
+      push(`${RES_NAME[k as ResourceId] ?? k} ${shown > 0 ? '+' : ''}${shown}`, k as ValueIconId);
     }
     clampResources(run);
   }
@@ -115,7 +117,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   // 行动点不像资源那样有储量上限，只需保证不为负
   if (eff.ap) {
     run.ap = Math.max(0, run.ap + eff.ap);
-    notes.push(t('ledger.effect.ap', { delta: `${eff.ap > 0 ? '+' : ''}${eff.ap}` }));
+    push(t('ledger.effect.ap', { delta: `${eff.ap > 0 ? '+' : ''}${eff.ap}` }), 'ap');
   }
 
   if (eff.stats) {
@@ -124,7 +126,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       const key = k as StatId;
       const hi = key === 'humanity' || key === 'reputation' ? 100 : HEALTH.MAX;
       run.stats[key] = clamp(run.stats[key] + delta, 0, hi);
-      notes.push(`${STAT_NAME[key] ?? key} ${delta > 0 ? '+' : ''}${delta}`);
+      push(`${STAT_NAME[key] ?? key} ${delta > 0 ? '+' : ''}${delta}`, key);
     }
   }
 
@@ -138,12 +140,12 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
 
   if (eff.addCond) {
     for (const c of eff.addCond) {
-      if (addCondition(run, c)) notes.push(t('ledger.effect.condAdd', { name: CONDITION_BY_ID[c].name }));
+      if (addCondition(run, c)) push(t('ledger.effect.condAdd', { name: CONDITION_BY_ID[c].name }));
     }
   }
   if (eff.removeCond) {
     for (const c of eff.removeCond) {
-      if (removeCondition(run, c)) notes.push(t('ledger.effect.condRemove', { name: CONDITION_BY_ID[c].name }));
+      if (removeCondition(run, c)) push(t('ledger.effect.condRemove', { name: CONDITION_BY_ID[c].name }));
     }
   }
 
@@ -157,7 +159,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       run.modules[id] = clamp(before + delta, 0, cap);
       if (run.modules[id] !== before) {
         const name = MODULE_BY_ID[id].name;
-        notes.push(delta > 0 ? t('ledger.effect.moduleUp', { name, lvl: run.modules[id] }) : t('ledger.effect.moduleDown', { name, lvl: run.modules[id] }));
+        push(delta > 0 ? t('ledger.effect.moduleUp', { name, lvl: run.modules[id] }) : t('ledger.effect.moduleDown', { name, lvl: run.modules[id] }));
       }
     }
   }
@@ -175,7 +177,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       run.wear.batteryCharge = Math.max(0, (run.wear.batteryCharge ?? 0) + eff.wear.batteryCharge);
       clampBattery(run);
       const shown = Math.round(eff.wear.batteryCharge * 10) / 10;
-      notes.push(t('ledger.effect.battery', { shown: `${shown > 0 ? '+' : ''}${shown}`, stored: run.wear.batteryCharge.toFixed(1), cap: batteryCapacity(run) }));
+      push(t('ledger.effect.battery', { shown: `${shown > 0 ? '+' : ''}${shown}`, stored: run.wear.batteryCharge.toFixed(1), cap: batteryCapacity(run) }), 'battery');
     }
   }
 
@@ -184,7 +186,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     const d = eff.items.filter ?? 0;
     if (d) {
       run.items.filter = Math.max(0, run.items.filter + d);
-      notes.push(t('ledger.effect.cartridge', { n: run.items.filter }));
+      push(t('ledger.effect.cartridge', { n: run.items.filter }), 'cartridge');
     }
   }
 
@@ -195,7 +197,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     if (eff.world.neighborhood) w.neighborhood = clamp(w.neighborhood + eff.world.neighborhood, -100, 100);
     if (eff.world.exposure) {
       w.exposure = clamp(w.exposure + eff.world.exposure, 0, EXPOSURE.MAX);
-      notes.push(t('ledger.effect.exposure', { delta: `${eff.world.exposure > 0 ? '+' : ''}${eff.world.exposure}` }));
+      push(t('ledger.effect.exposure', { delta: `${eff.world.exposure > 0 ? '+' : ''}${eff.world.exposure}` }), 'exposure');
     }
     if (eff.world.radiation) w.radiation = clamp(w.radiation + eff.world.radiation, 0, 100);
     if (eff.world.contagion) w.contagion = clamp(w.contagion + eff.world.contagion, 0, 100);
@@ -231,14 +233,14 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
   if (eff.survivor) {
     if (eff.survivor.recruit) {
       const s = recruit(run, eff.survivor.recruit, rng);
-      if (s) notes.push(t('ledger.effect.join', { name: s.name }));
-      else notes.push(t('ledger.effect.full'));
+      if (s) push(t('ledger.effect.join', { name: s.name }));
+      else push(t('ledger.effect.full'));
     }
     if (eff.survivor.lose) {
       for (let i = 0; i < eff.survivor.lose && run.survivors.length > 0; i++) {
         const idx = rng.int(0, run.survivors.length - 1);
         const gone = run.survivors.splice(idx, 1)[0]!;
-        notes.push(t('ledger.effect.leave', { name: gone.name }));
+        push(t('ledger.effect.leave', { name: gone.name }));
       }
     }
     if (eff.survivor.morale) {
@@ -253,8 +255,9 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
     for (const f of eff.setFlags) if (!run.flags.includes(f)) run.flags.push(f);
     if (eff.setFlags.includes('flag:iodine')) grantIodine(run);
     if (eff.setFlags.includes('flag:gunshotRecent')) markGunshotRecent(run);
-    if (eff.setFlags.includes('flag:knowsNorthRoute')) notes.push(t('ledger.effect.north'));
-    else if (eff.setFlags.length) notes.push(t('ledger.effect.flagged'));
+    // 只报「北上路线已知」这种玩家真正需要知道的结果。
+    // 其余 flag 一律不写进结算提示——"已记入日记"是一句没有信息量的噪音，已移除。
+    if (eff.setFlags.includes('flag:knowsNorthRoute')) push(t('ledger.effect.north'));
   }
   if (eff.clearFlags) {
     run.flags = run.flags.filter((f) => !eff.clearFlags!.includes(f));
@@ -269,13 +272,13 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       }
       if (loc.stock !== undefined) {
         st.stock = Math.max(0, Math.min(100, loc.stock));
-        notes.push(t('ledger.effect.stock', { name: LOCATION_BY_ID[loc.id]?.name ?? loc.id, pct: Math.round(st.stock) }));
+        push(t('ledger.effect.stock', { name: LOCATION_BY_ID[loc.id]?.name ?? loc.id, pct: Math.round(st.stock) }));
       }
       if (loc.blocked === null) {
         delete st.blocked;
       } else if (loc.blocked) {
         st.blocked = loc.blocked;
-        notes.push(t('ledger.effect.blocked', { name: LOCATION_BY_ID[loc.id]?.name ?? loc.id, why: loc.blocked }));
+        push(t('ledger.effect.blocked', { name: LOCATION_BY_ID[loc.id]?.name ?? loc.id, why: loc.blocked }));
       }
     }
   }
@@ -295,8 +298,8 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): string[] {
       const w = waitForLabel(s.waitFor);
       if (w) waitHints.push(w);
     }
-    if (waitHints.length) notes.push(t('ledger.effect.sequelWait', { hooks: waitHints.join('、') }));
-    else notes.push(t('ledger.effect.sequel'));
+    if (waitHints.length) push(t('ledger.effect.sequelWait', { hooks: waitHints.join('、') }));
+    else push(t('ledger.effect.sequel'));
   }
 
   if (eff.unlock?.length) {

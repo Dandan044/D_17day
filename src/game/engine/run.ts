@@ -23,6 +23,7 @@ import type {
   SiteId,
   SkillId,
   StatId,
+  ValueNote,
 } from '../types';
 import { tickChannels } from './channels';
 import { assessCollapse } from './collapse';
@@ -457,7 +458,7 @@ export function acknowledgeCollapse(run: RunState): void {
 
 /** 结算一个事件选项 */
 export interface ResolveChoiceResult {
-  notes: string[];
+  notes: ValueNote[];
   checkRoll?: { roll: number; total: number; dc: number; success: boolean; skill: SkillId };
   raid?: RaidResult;
   died?: boolean;
@@ -479,7 +480,7 @@ export function resolveChoice(
 
   const req = checkRequirement(choice.requires, run, deriveFacts(run));
   if (!req.ok) {
-    out.notes.push(req.reason ?? t('ledger.run.cannot'));
+    out.notes.push({ text: req.reason ?? t('ledger.run.cannot') });
     return out;
   }
 
@@ -522,15 +523,15 @@ export function resolveChoice(
       const stolen = Object.entries(raid.lost)
         .map(([k, v]) => `${k} -${v}`)
         .length;
-      if (stolen > 0) out.notes.push(t('ledger.run.stolen'));
+      if (stolen > 0) out.notes.push({ text: t('ledger.run.stolen') });
     }
-    if (raid.usedAmmo > 0) out.notes.push(t('ledger.run.ammo', { n: raid.usedAmmo }));
-    if (raid.moduleDamaged) out.notes.push(t('ledger.run.moduleBroke', { name: raid.moduleDamaged }));
+    if (raid.usedAmmo > 0) out.notes.push({ text: t('ledger.run.ammo', { n: raid.usedAmmo }), icon: 'ammo' });
+    if (raid.moduleDamaged) out.notes.push({ text: t('ledger.run.moduleBroke', { name: raid.moduleDamaged }) });
     emitHook(run, raid.repelled ? 'raidRepelled' : 'raidFailed', rng);
     if (run.stats.hp <= 0) {
       if (run.difficulty === 'story') {
         run.stats.hp = 20;
-        out.notes.push(t('ledger.run.storyRaid'));
+        out.notes.push({ text: t('ledger.run.storyRaid') });
       } else {
         const ending = resolveEnding(run, t('ledger.cause.raid'));
         run.endingId = ending.id;
@@ -545,7 +546,7 @@ export function resolveChoice(
     const coDrown = familyId === 'env_co_drowning';
     if (run.difficulty === 'story' && !coDrown) {
       run.stats.hp = 20;
-      out.notes.push(t('ledger.run.storyLive'));
+      out.notes.push({ text: t('ledger.run.storyLive') });
     } else {
       const ending = resolveEnding(run, coDrown ? t('ledger.cause.co') : '死亡');
       run.endingId = ending.id;

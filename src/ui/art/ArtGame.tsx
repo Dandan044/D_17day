@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { NUCLEAR_WINTER, RAD, TIME } from '../../game/balance';
 import { TIER_NAMES } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
 import { exposureTier } from '../../game/engine/exposure';
+import { SINGLE_NEED, stockDays } from '../../game/engine/economy';
 import { currentIndoor } from '../../game/engine/climate';
 import { effectiveModule, iodineActive, radiationShield, threatName } from '../../game/engine/tags';
 import { todoTier } from '../../game/engine/todos';
@@ -14,7 +15,7 @@ import { cachedPower } from '../derived';
 import { Chip } from '../kit';
 import { ArtCutout, ArtSceneFrame } from './ArtHotspot';
 import { ArtStatusHud } from './ArtStatusHud';
-import { ART, CUT_HOME, HOME_POLY, HUD_BOX, HUD_SILL, WIN_PANES, hideBrokenImg, windowArt, type WindowStage } from './skin';
+import { ART, CUT_HOME, HOME_POLY, HUD_BOX, HUD_SILL, SHELF_BOX, SHELF_POLY, WIN_PANES, hideBrokenImg, shelfStateSrc, shelfTier, windowArt, type WindowStage } from './skin';
 import './art.css';
 
 type View = 'desk' | 'side';
@@ -35,6 +36,34 @@ export default function ArtGame() {
   const [view, setView] = useState<View>('desk');
   const [leaving, setLeaving] = useState<View | null>(null);
   const [zoomEvent, setZoomEvent] = useState(false);
+
+  const nightReport = useGame((s) => s.nightReport);
+  const haul = useGame((s) => s.haul);
+  const openShop = useGame((s) => s.openShop);
+  // 自动弹本子的守卫：记住「本局本挂载里已经替哪一天开过」。用 {seed,day} 而不是只 day——
+  // 换局时种子变了，即使天数相同也要重置，否则新局第一天就不弹。
+  const autoOpened = useRef<{ seed: number; day: number } | null>(null);
+
+  // 进入第二天起，**跨天就自动翻开今日事件本**（不必再点笔记本）。
+  // 三个前提：①真的跨天了（day 变了）②队列里确实有待读事件 ③没有别的弹窗压在上面
+  //（夜间结算/结算批注/搬运/商店/浮层）——否则书会被盖住，等于没弹。
+  // 玩家手动关掉后 day 没变，不会再弹；于是「一天只自动弹一次」。
+  useEffect(() => {
+    if (!run) return;
+    const guard = autoOpened.current;
+    if (!guard || guard.seed !== run.seed) {
+      autoOpened.current = { seed: run.seed, day: run.day };
+      return; // 首次挂载 / 换局：只登记，不弹
+    }
+    if (guard.day === run.day) return;
+    if (run.queue.length === 0) {
+      autoOpened.current = { seed: run.seed, day: run.day };
+      return;
+    }
+    if (nightReport || lastChoice || haul || openShop || overlay) return; // 等这些清空后再弹
+    autoOpened.current = { seed: run.seed, day: run.day };
+    setZoomEvent(true);
+  }, [run, run?.day, run?.seed, run?.queue.length, nightReport, lastChoice, haul, openShop, overlay]);
 
   // 事件读完后**不换组件**：书本自己翻到「今日待办」那两页（同一张纸，只换内容），
   // 这样"翻完最后一件"是连续的翻页，而不是本子又飞进来一次。
@@ -63,6 +92,13 @@ export default function ArtGame() {
   const shield = radiationShield(run);
   const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
   const airLv = run.modules.airFilter;
+  // 场景里那面货架按「口粮档 × 用水档」切换贴图（口径＝单人标准人日，与物资面板一致）
+  const shelfFoodDays = stockDays(run.res.foodStaple + run.res.foodFresh, SINGLE_NEED.food);
+  const shelfWaterDays = stockDays(run.res.water, SINGLE_NEED.water);
+  const shelfFoodTier = shelfTier(shelfFoodDays);
+  const shelfWaterTier = shelfTier(shelfWaterDays);
+  const shelfDays = (d: number) =>
+    !Number.isFinite(d) || d >= 100 ? '99+' : d < 10 ? d.toFixed(1) : String(Math.round(d));
   const locked = mustRead && !zoomEvent;
   const shelterPulse = run.projects.length > 0 || (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0));
 
@@ -273,11 +309,14 @@ export default function ArtGame() {
             locked={locked}
             onClick={() => act(() => setOverlay('map'))}
           />
+          {/* 货架：贴图按「口粮档 × 用水档」切 25 态，热点轮廓沿用同一份多边形（见 skin.ts）。
+              贴图是整块补丁（含周围墙体），所以它盖住底图里原来那面架子，再被轮廓裁出架子形状。 */}
           <ArtCutout
-            {...CUT_HOME.shelf}
-            poly={HOME_POLY.shelf}
-            src={ART.cutHShelf}
+            {...SHELF_BOX}
+            poly={SHELF_POLY}
+            src={shelfStateSrc(shelfFoodTier, shelfWaterTier)}
             label={t('ui.game.supplies')}
+            sub={t('ui.supplies.shelfSub', { food: shelfDays(shelfFoodDays), water: shelfDays(shelfWaterDays) })}
             pulse={!locked && run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0)}
             locked={locked}
             onClick={() => act(() => setOverlay('supplies'))}
