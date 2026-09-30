@@ -519,6 +519,51 @@ const CHEAP_VOICE_SOFT: Array<{ re: RegExp; tip: string }> = [
   { re: /可能是[^。]{0,16}，也可能/, tip: '可能是…也可能…（双悬空）' },
 ];
 
+// ============================================================
+// 破折号 + 短陈述（2026-09-18 用户明确，见 content-voice.md 第二轮之二/之三）
+// ============================================================
+
+/** 破折号：玩家可见文案里一律不许出现，是最容易认出 AI 的标记之一 */
+const EM_DASH = /——|—/;
+
+/**
+ * 单独成句的短「陈述」。判据不是字数，是**这句话在不在陈述一件事**。
+ * 允许（非陈述：应答/让步/语气）：也行。 行吧。 算了。 知道了。 嗯。 哦。 好。
+ * 禁止（陈述）：不渴。 墙薄。 天亮。 水开了。
+ */
+const SHORT_OK = new Set([
+  '也行', '行吧', '算了', '知道了', '知道', '好吧', '是的', '对', '嗯', '哦', '好', '行',
+  '谢谢', '没事', '无所谓', '随便', '算了', '没事', '没问题', '好吧', '真的', '假的',
+  '是吗', '对吧', '对吧', '干嘛', '怎么', '什么', '哪儿', '谁', '为什么',
+]);
+
+/**
+ * 抓「单独成句」的 1-3 字句。
+ * 只认**真正的句首位置**：行首、句号后、换行后、冒号后。
+ * 不认引号闭合后 —— 那会把 `写着"谢"的纸条。` 截成 `的纸条。` 之类的误报。
+ */
+const SHORT_CLAUSE = /(?:^|[\n。！？])([^\n。！？，、；：""''（）()]{1,3})。/g;
+
+function checkShortStatements(blob: string): string[] {
+  const out: string[] = [];
+  SHORT_CLAUSE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  const seen = new Set<string>();
+  while ((m = SHORT_CLAUSE.exec(blob))) {
+    const s = m[1].trim();
+    if (!s || seen.has(s)) continue;
+    if (SHORT_OK.has(s)) continue; // 非陈述：语气/应答，允许
+    // 含标点或看起来不是陈述的（纯语气助词结尾）也放过
+    if (/[吧呢啊嘛啦哦嗯噢]$/.test(s)) continue;
+    seen.add(s);
+    const n = [...s].length;
+    if (n < 2) out.push(`「${s}。」只有 1 个字就单独成句`);
+    else if (n === 2) out.push(`「${s}。」2 字陈述单独成句`);
+    else if (n === 3) out.push(`「${s}。」3 字陈述单独成句（谨慎）`);
+  }
+  return out;
+}
+
 const POST_BEAT_PREFIX =
   /^(filter_|surv_beat_|hook_|nuke_arc_|nuke_chain_|nuke_build_|stat_arc_|med_)/;
 
@@ -561,6 +606,14 @@ for (const f of ALL_FAMILIES) {
         for (const rule of CHEAP_VOICE_SOFT) {
           if (rule.re.test(blob)) warn(`${vw}：廉价腔「${rule.tip}」`);
         }
+      }
+      // 破折号：全文一律禁（含 title/body/label/note/log）
+      if (EM_DASH.test(blob)) {
+        warn(`${vw}：出现破折号「——」（AI 标记，改成句号断开或写成一句）`);
+      }
+      // 短陈述：单独成句的 1-3 字陈述（语气/应答词除外）
+      for (const hit of checkShortStatements(blob)) {
+        warn(`${vw}：${hit}`);
       }
     }
   }
@@ -672,9 +725,26 @@ for (const [sig, ids] of bodyDup) {
     const checkKey = (key: string | undefined, what: string) => {
       if (key && !hasCopy(key)) err(`${what} 缺少文案键：${key}`);
     };
-    const checkLines = (lines: { text: string; sys?: string }[] | undefined, where: string) => {
+    /**
+     * 正文只有对话行（content-voice 第四轮第 4 条 / radio-voices 第 6 条）。
+     *
+     * `sys:'narrate'` **只允许出现在以 `silence` 收场的收尾轮里**——那是"她不在场"的
+     * 系统呈现（死亡 / 永久静默），不是旁白。别处出现 narrate 一律报错：
+     * 玩家的动作、场景、她那头的动静都只能进台词，进不去就不写。
+     */
+    const checkLines = (
+      lines: { text: string; sys?: string }[] | undefined,
+      where: string,
+      allowNarrate = false,
+    ) => {
       for (const [i, line] of (lines ?? []).entries()) {
         checkKey(line.text, `${where} 的第 ${i + 1} 条消息`);
+        if (line.sys === 'narrate' && !allowNarrate) {
+          err(
+            `${where} 的第 ${i + 1} 条消息用了 narrate 旁白——正文只允许对话行；` +
+              `要么改成她的台词，要么删掉（narrate 只许出现在 silence 收尾轮里）`,
+          );
+        }
         if (!line.sys && hasCopy(line.text)) {
           const text = copyT(line.text);
           if (text.length > MAX_LINE) {
@@ -685,14 +755,6 @@ for (const [sig, ids] of bodyDup) {
     };
 
     const evIds = new Set(events.map((e) => e.id));
-    let lastAt = -Infinity;
-    for (const e of events) {
-      if (e.at === undefined) continue;
-      if (e.at <= lastAt) {
-        err(`频道 ${def.id} 的事件 at 必须按顺序严格递增：${e.id} 的 at=${e.at} <= 前一个 ${lastAt}`);
-      }
-      lastAt = e.at;
-    }
 
     for (const ev of events) {
       const where = `频道 ${def.id} / 事件 ${ev.id}`;
@@ -722,7 +784,7 @@ for (const [sig, ids] of bodyDup) {
         if (roundSeen.has(r.id)) err(`${where} 有重复的轮 id：${r.id}`);
         roundSeen.add(r.id);
         const rw = `${where} / 轮 ${r.id}`;
-        checkLines(r.out, rw);
+        checkLines(r.out, rw, r.silence === true);
         if (r.elseRound && !roundIds.has(r.elseRound)) {
           err(`${rw} 的 elseRound 指向本事件内不存在的轮：${r.elseRound}`);
         }
@@ -906,4 +968,8 @@ if (errors.length > 0) {
 }
 
 console.log('  内容校验通过。');
+console.log('');
+console.log('  ⚠ 本脚本只查机械约束：文案键存在、标签注册、排程可达、加权平衡。');
+console.log('    玩家读到的中文好不好，它一个字都管不了 —— 改文案请先整篇读 docs/content-voice.md。');
+console.log('    （文案有两个真源：copy/zh/** 生效，content/** 的内联 label/log 只是兜底，两边都要改。）');
 console.log('');

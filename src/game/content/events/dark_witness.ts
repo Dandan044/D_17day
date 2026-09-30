@@ -87,7 +87,7 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
 
     choices: [
       ch('knock', { world: { exposure: 8 }, stats: { sanity: -2, stamina: -4 }, tone: 'neutral' }, { label: '去敲他们的门' }),
-      ch('note', { stats: { sanity: -2 }, tone: 'neutral' }, { label: '从门缝塞一张写着你门牌的纸条' }),
+      ch('note', { stats: { sanity: -2 }, tone: 'neutral' }, { label: '从门缝塞一张写着我门牌的纸条' }),
       skip({ stats: { sanity: -4 }, tone: 'bad' }),
     ],
   }),
@@ -324,8 +324,8 @@ export const DARK_WITNESS_EVENTS: EventFamily[] = [
     maxThreat: 6,
 
     choices: [
-      ch('salvage', { res: { parts: 1 }, stats: { sanity: -4 }, tone: 'neutral' }, { label: '把收音机拆走，零件能用的很多' }),
-      ch('tidy', { stats: { sanity: 2, stamina: -4 }, tone: 'good' }, { label: '把他扶正坐好，本子放回他手里' }),
+      ch('salvage', { res: { parts: 1 }, stats: { sanity: -4 }, tone: 'neutral' }, { label: '拆走收音机，零件都收了' }),
+      ch('tidy', { stats: { sanity: 2, stamina: -4 }, tone: 'good' }, { label: '把他扶正，纸条放回去' }),
       skip({ stats: { sanity: -4 }, tone: 'neutral' }),
     ],
   }),

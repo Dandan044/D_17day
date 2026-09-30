@@ -5,13 +5,13 @@
 import { BANK, CAPS, DIFFICULTY, FILTER, FOOD_NEED, LOOT, PRICE, RAD, STAMINA, TIME, WATER_NEED, WEAR } from '../balance';
 import { t } from '../copy/t';
 import { BASE_PRICE, LOCATION_BY_ID, RES_WEIGHT } from '../content/locations';
-import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { Difficulty, Location, ResourceId, RunState, WeatherId } from '../types';
 import { canElectricHeat, canFuelHeat, capHeat, comfortTemp, heatMissed, indoorBandOf, isPrecipWeather, survivalTemp, type HeatPlan } from './climate';
 import { computePower, LOAD_NAME, loadOnline, tonightHeat } from './power';
 import { ledger, type LedgerNote } from './ledger';
 import { effectiveModule, grantIodine, headcount, iodineStockCount, waterCapacity } from './tags';
+import { siteOf } from '../content/lookup';
 
 /** 每日采购上限，防止第一天把全城搬空 */
 const DAILY_BUY_CAP: Record<ResourceId, number> = {
@@ -56,7 +56,7 @@ export function dailyNeeds(run: RunState, difficulty: Difficulty = 'normal', wea
   let recycling = false;
   const filter = effectiveModule(run, 'filter');
   const precip = isPrecipWeather(weather);
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const hasWell = site.tags.includes('site:hasWell');
   const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
   if (filter > 0 && !precip && !hasWell && !cisternBusy) {
@@ -111,7 +111,7 @@ export interface ConsumeResult {
  * 雨日产水不再乘这个系数。
  */
 export function rawWaterFactor(run: RunState): number {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   if (site.tags.includes('site:hasWell')) return 1.2;
   if (run.world.waterTable === 'flooded') return 1.1;
   if (isPrecipWeather(run.world.weather)) return 1;
@@ -154,7 +154,7 @@ export function applyProduction(run: RunState): LedgerNote[] {
   const filter = effectiveModule(run, 'filter');
   const cisternBusy = run.projects.some((p) => p.moduleId === 'cistern');
   const precip = isPrecipWeather(run.world.weather);
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const hasWell = site.tags.includes('site:hasWell');
 
   if (filter > 0 && cisternBusy) {
@@ -696,7 +696,7 @@ export function buyCartridge(run: RunState, locationId: string): { ok: boolean; 
  * 两处不一致就会让平衡数据偏离真实游戏。现在两边共用同一份。
  */
 export function travelCost(run: RunState, loc: Location): { fuel: number; stamina: number } {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const longHaul = !!loc.needsVehicle || loc.distance >= 3;
   return {
     // 站点的底子（公寓 0 = 近处不耗油，农舍 2.5 = 每趟都烧）
@@ -734,13 +734,16 @@ export interface Haul {
 }
 
 export function rollHaul(run: RunState, locationId: string, night: boolean, rng: Rng, difficulty: Difficulty = 'normal'): Haul {
-  const loc = LOCATION_BY_ID[locationId]!;
+  // 导出的引擎函数，不依赖调用方先查过表（`session.scavenge` 确实查了，但顺序不该是契约）：
+  // 存档里悬空的 locationId 会让下面每一个 `loc.xxx` 变成 undefined.xxx。
+  const loc = LOCATION_BY_ID[locationId];
+  if (!loc) return { locationId, night, items: [], danger: 0 };
   const st = run.locations.find((l) => l.id === locationId);
   const stock = st?.stock ?? loc.stock;
   if (stock <= 0) {
     return { locationId, night, items: [], danger: loc.danger };
   }
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
 
   const stockMult = stock / 100;
   const threatMult = LOOT.THREAT_MULT[Math.min(LOOT.THREAT_MULT.length - 1, run.threat)] ?? 1;

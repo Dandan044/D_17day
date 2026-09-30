@@ -4,6 +4,8 @@
  * 也让"每日挑战"这种固定 seed 的玩法成立。
  */
 
+import type { RunState } from './types';
+
 export interface Rng {
   next(): number;
   int(minInclusive: number, maxInclusive: number): number;
@@ -87,6 +89,20 @@ export function randomSeed(): number {
 
 export function formatSeed(seed: number): string {
   return seed.toString(36).toUpperCase().padStart(7, '0');
+}
+
+/**
+ * 派生随机序列：**刻意与 run.rngCursor 完全隔离**。
+ * 同一个 (seed, day) 永远得到同一串数，因此不改动整局随机流——
+ * 共享 RNG 的任何额外抽签都会推后其后所有抽签（720 局 sim 基线整体漂移、
+ * 存档不可复盘），需要概率的子系统（频道调度、enqueue 选变体、搜索频道）
+ * 一律从这里拿随机性。
+ * 注意键是 (seed, day)：同一天内多次调用得到**同一条序列**，多个消费者之间
+ * 存在相关性但不漂移——这是现状已接受的语义；一天内要抽多轮且怕串扰的
+ * 场景，给 seed 拼一个消费者专属偏移量。
+ */
+export function derivedRng(run: RunState): Rng {
+  return makeRng((run.seed + run.day * 7919) >>> 0);
 }
 
 export function parseSeed(text: string): number | null {

@@ -123,8 +123,7 @@ export const FILTER_BEAT_EVENTS: EventFamily[] = [
         'swap',
         {
           ap: -1,
-          items: { filter: -1 },
-          wear: { filterLife: 30 },
+          swapFilter: true,
           stats: { stamina: -6, sanity: 3 },
 
           tone: 'good',

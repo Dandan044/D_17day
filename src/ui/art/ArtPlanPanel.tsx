@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 
 import { TIME } from '../../game/balance';
 import { t } from '../../game/copy/t';
-import { SITE_BY_ID } from '../../game/content/sites';
 import { useGame } from '../../game/store';
 import type { RunState } from '../../game/types';
-import { BodyPanel, ExposurePanel, SuppliesPanel } from '../Game';
+import { SuppliesPanel } from '../Game';
 import { Modal } from '../kit';
 import { PlanHeatColumn, PlanPowerColumn, PlanRationColumn } from './ArtPlanSheet';
 import { ART } from './skin';
 import './art.css';
+import { siteOf } from '../../game/content/lookup';
 
 /**
  * 今日计划：桌面上那张宽横纸，摊开来是一张「睡前安排」计划表。
@@ -42,7 +42,7 @@ export function ArtPlanPanel({ run }: { run: RunState }) {
     timer.current = window.setTimeout(() => setOverlay(null), SHEET_OUT_MS);
   };
 
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
 
   return (
@@ -108,24 +108,9 @@ export function ArtPlanPanel({ run }: { run: RunState }) {
   );
 }
 
-export function ArtBodyPanel({ run }: { run: RunState }) {
-  const setOverlay = useGame((s) => s.setOverlay);
-  const isPrep = run.day < TIME.COLLAPSE_DAY;
-  return (
-    <Modal title={t('ui.game.body')} onClose={() => setOverlay(null)} width="max-w-lg">
-      <BodyPanel run={run} />
-      {!isPrep && (
-        <div className="mt-3">
-          <ExposurePanel run={run} />
-        </div>
-      )}
-    </Modal>
-  );
-}
-
 export function ArtSuppliesPanel({ run }: { run: RunState }) {
   const setOverlay = useGame((s) => s.setOverlay);
-  const cap = SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0;
+  const cap = siteOf(run.siteId)?.companionCap ?? 0;
   return (
     <Modal title={t('ui.game.supplies')} onClose={() => setOverlay(null)} width="max-w-lg">
       <SuppliesPanel run={run} />

@@ -11,7 +11,10 @@ npm install
 npm run dev          # 开发服务器，默认 http://localhost:5180
 npm run build        # 类型检查 + 生产构建
 npm run lint:content # 内容一致性校验（见下）
+npm run audit:ids    # 内容里引用的条件/模块/据点/事件 id 是否都查得到
+npm run verify       # 行为回归（存档自愈、崩溃兜底、换芯结算）
 npm run sim -- 240   # 无头模拟 240 局，输出平衡报告
+npm run stress:channels -- 40  # 频道压力回放（sim 不碰收音机，另跑这个）
 ```
 
 ## 玩法结构
@@ -117,7 +120,34 @@ npm run sim -- 1000 normal passable --disaster nuclear --site apartment
 
 人格：`passable`（默认）/ `cautious` / `aggressive` / `contractor` / `oracle`（读事件数值并贪心）/ `sighted`（读得到数但不贪心）。`cautious` 与 `contractor` 会在准备期按核战囤碘片和多囤水。`all` 在总局数不变的前提下轮转人格。猜灾难与伙伴系统未实装，机器人不核实情报、不特判收人。准备期建造顺序按种子随机，尽量先把至少 3 个模块（不含无线电）升到 1 级；生存压力低时先铺满 1 级，再按同一随机序逐个升 2 级。当前医疗站治不了的病会把医疗站提前。配给降档是最后手段：还能找到物资就维持正常饮水/口粮。
 
+### 为什么要有 audit:ids（和 sim 抓不到的那半边）
+
+`lint:content` 查的是文案与结构，**不查 id 是否存在于表里**；`sim` 的人格策略**完全不碰收音机**。于是有一整类问题两边都漏：
+
+`run.conditions` 是一串**存在存档里的字符串**。内容侧改过状态 id 之后，旧档里会留下查不到的 id——引擎不在乎（它不查表，照跑），而 UI 一到渲染期取 `CONDITION_BY_ID[c].name` 就抛错，React 卸掉整棵树，玩家手里只剩一个白页面。玩家报的两次闪退都在这一类里（收音机的小桃袭击 / 特殊物品栏换滤芯）。
+
+三件事一起堵：
+
+- `npm run audit:ids` —— 静态查内容里引用的每个条件/模块/资源/技能/势力/地点/事件 id 是否都查得到；
+- `src/game/content/lookup.ts` —— 用**存档里的 id** 查表一律走它（`conditionName` / `siteOf` / …），查不到回落成 id 原文并打一次警告，绝不抛；
+- `npm run stress:channels -- 40` —— 无头回放收音机那一路（打开未读、逐个选项试、扫新频道），每走一步顺手验一遍表里的 id 还在不在。
+
+崩溃本身另有兜底：渲染期由 `src/ui/ErrorBoundary.tsx` 接住，点击回调/异步异常走 `window` 的 `error` 与 `unhandledrejection`，都汇到同一张**可复制**的报告（含当时的进度、存档体检、最近 10 次操作与调用栈）。每个玩家动作都经 `store.ts` 的 `withSession` 包装：抛错不吞、记一笔、弹提示，但**不写存档**。
+
+### 频道事件的锚：`at` 优先于 `afterDays`
+
+引擎挑下一个事件时**先扫完所有 `at`（绝对日），再扫 `afterDays` 与无锚**（`tickChannels` 空闲分支里的两趟）。
+
+- 别在 `afterDays` 上期待"早到早投"——`lastContactDay` 会被任何一条事件收场刷新，一条相对锚事件会从第 10 天起天天"到点"。`xt_alone`（`afterDays: 1`）曾排在事件表第 2 位，把后面所有 `at` 事件的日子一天一天吃光，玩家永远等不到小桃第 32 天的求救。
+- 无锚事件（两种都没有）只能被 `elseEvent` 带出来，否则永远排不上队——`npm run audit:ids` 会挡下。
+- 写频道的用例时**不要手写事件 id 清单**，用 `scripts/verify.ts` 里的 `doneBefore(频道, 第几天)` 从事件表派生：手写清单会随内容新增静默腐坏，症状是几十条断言集体翻车而报错看着像引擎坏了。
+
 ## 添加内容
+
+> **改文案前必读：[`docs/content-voice.md`](docs/content-voice.md)。**
+> 凡是玩家看得见的中文——`title` / `body` / `label` / `log` / `desc` / `reason` / 情报与系统说明——**新增一句或改一句，都先整篇读完这份规则再动手**（四条原则、禁止表、三轮增补、推荐写法、自检清单都在里面）。它是这个项目唯一的声音真源，不要发明第二套嗓音。
+> 另：玩家看到的是 `src/game/copy/zh/**`（`copy/hydrate.ts` 的 `pickCopy` **优先查文案表**），`content/**` 里的内联文字只是兜底——**两边都要改**，`lint:content` 不查两者是否一致。
+> 改完跑 `npm run lint:content` 与 `npx tsc --noEmit`。
 
 加一个事件：在 `src/game/content/events/` 下往对应数组里追加一个 `EventFamily`，然后跑 `npm run lint:content`。
 

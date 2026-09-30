@@ -33,6 +33,11 @@ PAPERS: dict[str, tuple[str, str, float, float, float, float]] = {
     "todo": ("paper-todo", "paper-todo.jpg", 0.09, 0.55, 0.06, 1.05),
     # 暖卡其旧表单纸：中调，配 --pl-ink #191b1c ≈ 7.9:1（比避难所 0.42 略亮，好和图纸分家）
     "plan": ("paper-plan", "paper-plan.jpg", 0.085, 0.46, 0.16, 1.06),
+    # 冷灰蓝旧记录纸：夜里压在手边的一页。与 plan 靠色相分家（一冷一暖），亮度反过来压低一档，
+    # 去饱和只有 0.08——冷调是这张纸的身份，去多了就退化成又一张米白纸。
+    "night": ("paper-night", "paper-night.jpg", 0.09, 0.44, 0.08, 1.06),
+    # 米黄厚卡纸：医疗箱盖的内衬。比 plan 亮一档（卡纸本来就浅），是五张纸里最亮的一张。
+    "body": ("paper-body", "paper-body.jpg", 0.07, 0.52, 0.12, 1.05),
 }
 
 

@@ -176,7 +176,7 @@ export const MODULE_IDS: ModuleId[] = MODULES.map((m) => m.id);
 /** 等级 1..3 的 spec；0 级没有 spec */
 export function moduleSpec(id: ModuleId, level: number) {
   const def = MODULE_BY_ID[id];
-  if (level < 1 || level > 3) return null;
+  if (!def || level < 1 || level > 3) return null;
   return def.levels[level - 1] ?? null;
 }
 

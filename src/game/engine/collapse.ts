@@ -5,14 +5,12 @@
  * 这里既算分，也真的施加损失——否则"猜灾难"就只是一个装饰性机制。
  */
 
-import { DISASTER_BY_ID } from '../content/disasters';
-import { MODULE_BY_ID } from '../content/modules';
-import { SITE_BY_ID } from '../content/sites';
 import { t } from '../copy/t';
 import type { Rng } from '../rng';
 import type { RunState } from '../types';
 import { addCondition, addLog } from './effects';
 import { hasIodinePrep } from './tags';
+import { disasterOf, moduleName, siteOf } from '../content/lookup';
 
 export interface CollapseReport {
   score: number;
@@ -25,8 +23,8 @@ export interface CollapseReport {
 }
 
 export function assessCollapse(run: RunState, rng: Rng): CollapseReport {
-  const def = DISASTER_BY_ID[run.world.disaster];
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const def = disasterOf(run.world.disaster);
+  const site = siteOf(run.siteId);
   const hits: string[] = [];
   const misses: string[] = [];
   const losses: string[] = [];
@@ -37,7 +35,7 @@ export function assessCollapse(run: RunState, rng: Rng): CollapseReport {
   for (const id of def.keyModules) {
     const lvl = run.modules[id];
     moduleScore += lvl * perModule;
-    const name = MODULE_BY_ID[id].name;
+    const name = moduleName(id);
     if (lvl >= 2) hits.push(t('ledger.collapse.moduleHit', { name, lvl }));
     else if (lvl === 0) misses.push(t('ledger.collapse.moduleMiss', { name }));
   }

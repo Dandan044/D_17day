@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 
 import { THREAT_DESC, TIME } from '../game/balance';
-import { DISASTER_BY_ID } from '../game/content/disasters';
 import { LOCATION_BY_ID, RES_NAME, RES_UNIT } from '../game/content/locations';
 import { SKILL_NAME, ITEM_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
@@ -12,6 +11,7 @@ import { carryCap, useGame } from '../game/store';
 import type { ResourceId, RunState } from '../game/types';
 import { Bar, Chip, Modal, Panel, SectionLabel } from './kit';
 import { ValueIcon } from './icons';
+import { disasterOf } from '../game/content/lookup';
 
 // ============================================================
 // 崩溃日
@@ -19,7 +19,7 @@ import { ValueIcon } from './icons';
 
 export function CollapseScreen({ run }: { run: RunState }) {
   const acknowledgeCollapse = useGame((s) => s.acknowledgeCollapse);
-  const def = DISASTER_BY_ID[run.world.disaster];
+  const def = disasterOf(run.world.disaster);
   const report = run.collapseReport;
   const [step, setStep] = useState(0);
 

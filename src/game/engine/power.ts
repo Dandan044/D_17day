@@ -4,10 +4,10 @@
 
 import { COLD, POWER, TIME, WEAR } from '../balance';
 import { LOAD_NAME } from '../copy/names';
-import { MODULE_BY_ID, MODULE_IDS, moduleSpec } from '../content/modules';
-import { SITE_BY_ID } from '../content/sites';
+import { MODULE_IDS, moduleSpec } from '../content/modules';
 import type { ApplianceId, ModuleId, PowerLoadId, RunState } from '../types';
 import { canElectricHeat, heatPlan, heatWantKwh, type HeatPlan } from './climate';
+import { moduleDef, siteOf } from '../content/lookup';
 
 export { LOAD_NAME };
 
@@ -85,7 +85,7 @@ export function mergedPriority(run: RunState): PowerLoadId[] {
 }
 
 function collectDraws(run: RunState, heaterKwh?: number): PowerDraw[] {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const draws: PowerDraw[] = [];
 
   for (const id of MODULE_IDS) {
@@ -110,6 +110,11 @@ function collectDraws(run: RunState, heaterKwh?: number): PowerDraw[] {
 
 /** 旧存档补齐供电/取暖/导演字段 */
 export function ensureRunDefaults(run: RunState): void {
+  // 这两个是**函数自己**马上就要用到的（flags 判碘片、conditions 做旧状态迁移），
+  // 缺了会在补别的字段之前先抛。补成空数组不会误伤任何玩法：
+  // 存档里没有这个数组，就等于"什么都没有"，不存在"被清空"的风险。
+  if (!Array.isArray(run.flags)) run.flags = [];
+  if (!Array.isArray(run.conditions)) run.conditions = [];
   if (!run.heatMode) run.heatMode = 'off';
   if (run.indoorTemp === undefined || Number.isNaN(run.indoorTemp)) run.indoorTemp = COLD.PREP_INDOOR;
   if (run.heatTarget === undefined || Number.isNaN(run.heatTarget)) run.heatTarget = COLD.COMFORT;
@@ -153,6 +158,10 @@ export function ensureRunDefaults(run: RunState): void {
     if (run.wear.generatorOil === undefined) run.wear.generatorOil = WEAR.GENERATOR_OIL;
     if (run.wear.batteryCharge === undefined) run.wear.batteryCharge = 0;
   }
+  // 特殊物品容器：`applyEffect` 的 items 分支只兜住「写」，
+  // 而 UI 与若干读取点直接取 `run.items.filter`，缺了就是 undefined 参与运算。
+  if (!run.items) run.items = { filter: 0 };
+  if (run.items.filter === undefined) run.items.filter = 0;
   if (!run.pendingUnlocks) run.pendingUnlocks = [];
   if (!run.seenVariants) run.seenVariants = [];
   if (run.world && !run.world.forecast) run.world.forecast = [];
@@ -181,7 +190,7 @@ export function computePower(run: RunState, heaterKwh?: number): PowerReport {
   // （原先这一支排在 prepGrid 之前，导致灾前只要发电机在建就误报「家电将停电」）。
   const rewiring =
     !prepGrid &&
-    run.projects.some((p) => MODULE_BY_ID[p.moduleId].buildPenaltyTags.includes('power:blackout'));
+    run.projects.some((p) => (moduleDef(p.moduleId)?.buildPenaltyTags ?? []).includes('power:blackout'));
   if (rewiring) available = 0;
 
   const draws = collectDraws(run, heaterKwh);
@@ -300,7 +309,7 @@ export function tonightHeat(run: RunState, outdoor?: number): { plan: HeatPlan; 
 
 /** 某负荷若打开时会拉多少电（关掉的模块也要能显示） */
 export function potentialDrawKwh(run: RunState, id: PowerLoadId): number {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   if (id === 'lights') return POWER.LIGHTS_KWH;
   if (id === 'fridge') return POWER.FRIDGE_KWH;
   if (id === 'heater') return heaterDrawKwh(run);

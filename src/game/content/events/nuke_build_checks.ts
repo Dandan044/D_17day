@@ -359,8 +359,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ch(
         'replace_core',
         {
-          items: { filter: -1 },
-          wear: { filterLife: 30 },
+          swapFilter: true,
           stats: { stamina: -8 },
           setFlags: ['flag:murkyReplacedCore'],
           schedule: [{ familyId: 'nuke_build_murky_3', inDays: 3 }],
@@ -443,8 +442,7 @@ export const NUKE_BUILD_CHECK_EVENTS: EventFamily[] = [
       ch(
         'swap_now',
         {
-          items: { filter: -1 },
-          wear: { filterLife: 30 },
+          swapFilter: true,
           stats: { stamina: -12, sanity: 3 },
 
           tone: 'good',

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 
 import { HEALTH } from '../../game/balance';
 import { FAMILY_BY_ID } from '../../game/content/events';
-import { SITE_BY_ID } from '../../game/content/sites';
 import { RES_NAME, SKILL_NAME } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
 import { kindName } from '../../game/engine/director';
@@ -15,6 +14,7 @@ import { scrambleText } from '../scramble';
 import { NotebookSheet } from './NotebookSheet';
 import { TodoSpread } from './TodoSpread';
 import './art.css';
+import { siteOf } from '../../game/content/lookup';
 
 /**
  * 今天的事件读法：桌面上那本本子翻开来，**左页是发生了什么，右页是怎么应对**。
@@ -128,7 +128,7 @@ export function ArtEventBook({ run, onBack }: { run: RunState; onBack: () => voi
 
   const facts = cachedFacts(run);
   const unreliable = run.stats.sanity < HEALTH.SANITY_UNRELIABLE;
-  const hideRecruit = (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) <= 0;
+  const hideRecruit = (siteOf(run.siteId)?.companionCap ?? 0) <= 0;
   const visibleChoices = (variant?.choices ?? []).filter((c) => {
     if (!hideRecruit) return true;
     const rec = c.effect?.survivor?.recruit ?? c.check?.ok?.survivor?.recruit ?? c.check?.bad?.survivor?.recruit;

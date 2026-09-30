@@ -7,11 +7,11 @@
 
 import { AP, EXPOSURE, PRICE, STAMINA, TIME, WEAR } from '../balance';
 import { t } from '../copy/t';
-import { MODULE_BY_ID, moduleSpec } from '../content/modules';
-import { SITE_BY_ID } from '../content/sites';
+import { moduleSpec } from '../content/modules';
 import type { Rng } from '../rng';
 import type { BuildPath, ModuleId, ModuleLevelSpec, Project, RunState } from '../types';
 import { addCondition, addLog } from './effects';
+import { moduleDef, moduleName, siteOf } from '../content/lookup';
 
 export interface BuildOption {
   path: BuildPath;
@@ -70,7 +70,7 @@ function diyLaborGain(run: RunState): number {
 
 /** 目标等级：当前等级 + 1 */
 export function nextLevel(run: RunState, id: ModuleId): number | null {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const cap = site.caps[id] ?? 3;
   const target = run.modules[id] + 1;
   if (target > cap) return null;
@@ -79,9 +79,9 @@ export function nextLevel(run: RunState, id: ModuleId): number | null {
 }
 
 export function blockingReason(run: RunState, id: ModuleId): string | null {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const cap = site.caps[id] ?? 3;
-  if (run.modules[id] >= cap) return t('ledger.build.capSite', { site: site.name, module: MODULE_BY_ID[id].name, cap });
+  if (run.modules[id] >= cap) return t('ledger.build.capSite', { site: site.name, module: moduleName(id), cap });
   if (run.projects.some((p) => p.moduleId === id)) return t('ledger.build.queued');
 
   const target = nextLevel(run, id);
@@ -92,7 +92,7 @@ export function blockingReason(run: RunState, id: ModuleId): string | null {
   if (spec.requiresModules) {
     for (const [dep, lvl] of Object.entries(spec.requiresModules)) {
       if (run.modules[dep as ModuleId] < (lvl ?? 0)) {
-        return t('ledger.build.needModule', { module: MODULE_BY_ID[dep as ModuleId].name, lvl: lvl ?? 0 });
+        return t('ledger.build.needModule', { module: moduleName(dep), lvl: lvl ?? 0 });
       }
     }
   }
@@ -103,6 +103,13 @@ export function blockingReason(run: RunState, id: ModuleId): string | null {
   // 地下与无信号站点的无线电需要外置天线
   if (id === 'radio' && site.tags.includes('site:noSignal') && !run.flags.includes('flag:antenna')) {
     return t('ledger.build.radioSignal');
+  }
+  // 灾难后电台功能整体下线（2026-09-18）：模块本体与准备期功能都保留，
+  // 但灾后不再允许继续升级——升级选项在建造面板里显示为不可选。
+  // 判定放引擎而不是 UI：两套皮肤（经典/档案）的 blocked 分支共用这一条，
+  // 免得规则散在两个渲染组件里各自漂移。
+  if (id === 'radio' && run.day >= TIME.COLLAPSE_DAY) {
+    return t('ledger.build.radioRetired');
   }
   return null;
 }
@@ -206,7 +213,7 @@ export function startProject(run: RunState, id: ModuleId, path: BuildPath): Star
   if (path === 'diy') {
     // 开工不预扣：材料按次施工消耗。payAsYouGo 标记新规则。
     project.payAsYouGo = true;
-    addLog(run, t('ledger.build.startDiy', { name: MODULE_BY_ID[id].name, target, penalty: MODULE_BY_ID[id].buildPenaltyDesc }), 'neutral');
+    addLog(run, t('ledger.build.startDiy', { name: moduleName(id), target, penalty: moduleDef(id)?.buildPenaltyDesc ?? '' }), 'neutral');
   } else if (path === 'hire') {
     if (run.ap < 1) return { ok: false, reason: t('ledger.build.needAp') };
     run.ap -= 1;
@@ -214,13 +221,13 @@ export function startProject(run: RunState, id: ModuleId, path: BuildPath): Star
     project.laborTotal = 0;
     project.etaDay = run.day + (opt.days ?? 2);
     project.paid = true;
-    addLog(run, t('ledger.build.startHire', { name: MODULE_BY_ID[id].name }), 'neutral');
+    addLog(run, t('ledger.build.startHire', { name: moduleName(id) }), 'neutral');
   } else if (path === 'buy') {
     run.res.cash -= opt.cash ?? 0;
     project.laborTotal = 0;
     project.etaDay = run.day + (opt.days ?? 1);
     project.paid = true;
-    addLog(run, t('ledger.build.startBuy', { name: MODULE_BY_ID[id].name, days: opt.days ?? 1 }), 'neutral');
+    addLog(run, t('ledger.build.startBuy', { name: moduleName(id), days: opt.days ?? 1 }), 'neutral');
   }
 
   run.projects.push(project);
@@ -353,10 +360,10 @@ export function completeReadyProjects(run: RunState, rng: Rng): string[] {
         if (has(run, 'perk_logistics')) days = Math.max(1, days - 1);
         const failChance = Math.min(0.75, days * PRICE.DELIVERY_FAIL_PER_DAY * (1 + (100 - run.world.lawOrder) / 90));
         if (rng.chance(failChance)) {
-          notes.push(t('ledger.build.noDelivery', { name: MODULE_BY_ID[p.moduleId].name }));
+          notes.push(t('ledger.build.noDelivery', { name: moduleName(p.moduleId) }));
           addLog(
             run,
-            t('ledger.build.noDeliveryLog', { name: MODULE_BY_ID[p.moduleId].name }),
+            t('ledger.build.noDeliveryLog', { name: moduleName(p.moduleId) }),
             'bad',
           );
           run.projects = run.projects.filter((x) => x !== p);
@@ -372,7 +379,7 @@ export function completeReadyProjects(run: RunState, rng: Rng): string[] {
   for (const p of done) {
     run.modules[p.moduleId] = Math.max(run.modules[p.moduleId], p.toLevel);
     run.projects = run.projects.filter((x) => x !== p);
-    const name = MODULE_BY_ID[p.moduleId].name;
+    const name = moduleName(p.moduleId);
     const spec = moduleSpec(p.moduleId, p.toLevel);
     notes.push(t('ledger.build.done', { name, lvl: p.toLevel }));
     addLog(run, t('ledger.build.doneLog', { name, desc: spec?.desc ?? '' }), 'good');
@@ -411,7 +418,7 @@ export function cancelProject(run: RunState, id: ModuleId): void {
         run.res.parts += Math.floor(spec.parts * 0.5);
       }
     }
-    addLog(run, t('ledger.build.cancel', { name: MODULE_BY_ID[id].name }), 'bad');
+    addLog(run, t('ledger.build.cancel', { name: moduleName(id) }), 'bad');
   }
 }
 

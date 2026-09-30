@@ -7,11 +7,11 @@
 
 import { COLD, NUCLEAR_WINTER, PRICE, SEASON_TEMP, TIME, threatOfDay } from '../balance';
 import { WEATHER_DESC, WEATHER_NAME } from '../copy/names';
-import { DISASTER_BY_ID } from '../content/disasters';
 import type { Rng } from '../rng';
 import type { DisasterId, FactionId, RunState, WeatherId, WorldState } from '../types';
 import { comfortTemp, insulateLevel, leakRate } from './climate';
 import { activateIodineProtection, effectiveModule } from './tags';
+import { disasterOf } from '../content/lookup';
 
 export { WEATHER_DESC, WEATHER_NAME };
 
@@ -86,7 +86,7 @@ export function createWorld(disaster: DisasterId, rng: Rng): WorldState {
 
 function pickWeather(run: RunState, rng: Rng): WeatherId {
   if (run.day < TIME.COLLAPSE_DAY) return rng.pick(PREP_WEATHER);
-  const def = DISASTER_BY_ID[run.world.disaster];
+  const def = disasterOf(run.world.disaster);
   const entries = Object.entries(def.weather) as Array<[WeatherId, number]>;
   const picked = rng.weighted(entries, ([, w]) => w);
   return picked ? picked[0] : 'overcast';
@@ -94,7 +94,7 @@ function pickWeather(run: RunState, rng: Rng): WeatherId {
 
 function weatherPool(run: RunState): WeatherId[] {
   if (run.day < TIME.COLLAPSE_DAY) return [...new Set(PREP_WEATHER)];
-  const def = DISASTER_BY_ID[run.world.disaster];
+  const def = disasterOf(run.world.disaster);
   return Object.keys(def.weather) as WeatherId[];
 }
 
@@ -120,7 +120,7 @@ export function tickClimate(run: RunState, rng: Rng, forDay?: number): void {
     rng.chance(Math.max(0.12, acc * 0.65)) ? dayAfter : decoyWeather(run, dayAfter, rng),
   ];
 
-  const def = DISASTER_BY_ID[w.disaster];
+  const def = disasterOf(w.disaster);
   const threat = threatOfDay(day);
   if (day < TIME.COLLAPSE_DAY) {
     w.temperature = Math.round(baseTemperature(day) + WEATHER_TEMP[w.weather] + rng.float(-1.5, 1.5));
@@ -180,7 +180,7 @@ export function advanceWorldPrep(run: RunState, rng: Rng): void {
 /** 生存期污染/势力（不含天候与暴露衰减） */
 export function tickSurvivalPressures(run: RunState, rng: Rng): void {
   const w = run.world;
-  const def = DISASTER_BY_ID[w.disaster];
+  const def = disasterOf(w.disaster);
   const threat = threatOfDay(run.day);
   const d = def.daily(run.day, threat);
 
@@ -201,7 +201,7 @@ export function tickSurvivalPressures(run: RunState, rng: Rng): void {
 
 /** 崩溃日：施加灾难的初始状态并激活专属势力 */
 export function applyOnset(run: RunState, rng: Rng): void {
-  const def = DISASTER_BY_ID[run.world.disaster];
+  const def = disasterOf(run.world.disaster);
   const w = run.world;
   w.revealed = true;
 

@@ -4,7 +4,6 @@ import { TIME } from '../../game/balance';
 import { BUILD_PATH_NAME } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
 import { MODULES, moduleHardEffect, moduleSpec, moduleTier } from '../../game/content/modules';
-import { SITE_BY_ID } from '../../game/content/sites';
 import {
   SALVAGE_TARGETS,
   blockingReason,
@@ -17,6 +16,7 @@ import { useGame } from '../../game/store';
 import type { ModuleId, RunState } from '../../game/types';
 import { ART, hideBrokenImg } from './skin';
 import './art.css';
+import { siteOf } from '../../game/content/lookup';
 
 /**
  * 避难所工程：墙上一张工程图纸的"取下来摊开"版。
@@ -67,7 +67,7 @@ export function ArtShelterPanel({ run }: { run: RunState }) {
     timer.current = window.setTimeout(() => setOverlay(null), SHEET_OUT_MS);
   };
 
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
   const stamp = `${t('ui.shelter.sheetNo')}-${site.codename}`;
 

@@ -1,3 +1,7 @@
+/**
+ * 事件内容：数值、标签、效果在这里；玩家看到的字在 copy/zh/events/**（那份生效，这里的内联 label / log 只是兜底）。
+ * 改文案前先整篇读 docs/content-voice.md。
+ */
 import '../../copy';
 import { hydrateFamilies } from '../../copy/hydrate';
 import type { EventFamily } from '../../types';

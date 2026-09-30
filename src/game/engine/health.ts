@@ -7,8 +7,6 @@
 
 import { AIR, COLD, CURE, DEHY, FILTER, HEALTH, RAD, RATION_EFFECT, WATER_EFFECT, WATER_NEED } from '../balance';
 import { t } from '../copy/t';
-import { CONDITION_BY_ID } from '../content/conditions';
-import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ConditionId, RunState } from '../types';
 import { comfortTemp, currentIndoor, HYPO_IDS, hypoStageOf, previewNight, survivalTemp } from './climate';
@@ -17,6 +15,7 @@ import { addCondition, addLog, removeCondition } from './effects';
 import { ledger, type LedgerNote } from './ledger';
 import { computePower, loadOnline } from './power';
 import { effectiveModule, iodineActive, radiationShield } from './tags';
+import { conditionDef, conditionName, siteOf } from '../content/lookup';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -58,7 +57,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   const notes: LedgerNote[] = [];
   const hpParts: HpPart[] = [];
   const hpBefore = run.stats.hp;
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   let cause: string | undefined;
   const addedTonight = new Set<ConditionId>();
 
@@ -138,7 +137,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
     } else {
       const next = (Math.min(3, prevStage + 1)) as 1 | 2 | 3;
       setDehy(next);
-      const nextName = CONDITION_BY_ID[DEHY_IDS[next - 1]].name;
+      const nextName = conditionName(DEHY_IDS[next - 1]);
       notes.push(ledger(prevStage === 0 ? t('ledger.health.dehyStart', { name: nextName }) : t('ledger.health.dehyUp', { name: nextName }), 'bad'));
       hit(DEHY.HP[next], t('ledger.cause.thirst'));
       run.stats.stamina = clamp(run.stats.stamina + DEHY.STAMINA, 0, 100);
@@ -151,7 +150,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
       const next = Math.max(0, prevStage - rec) as 0 | 1 | 2 | 3;
       if (next < prevStage) {
         setDehy(next);
-        notes.push(ledger(next === 0 ? t('ledger.health.dehyGone') : t('ledger.health.dehyEase', { name: CONDITION_BY_ID[DEHY_IDS[next - 1]].name }), 'good'));
+        notes.push(ledger(next === 0 ? t('ledger.health.dehyGone') : t('ledger.health.dehyEase', { name: conditionName(DEHY_IDS[next - 1]) }), 'good'));
       }
     }
     if (!metSelected) {
@@ -177,7 +176,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
   const medbayLv = effectiveModule(run, 'medbay');
   const medbayOnline = medbayLv > 0 && loadOnline(run, 'medbay', computePower(run));
   for (const id of [...run.conditions]) {
-    const def = CONDITION_BY_ID[id];
+    const def = conditionDef(id);
     if (!def) continue;
     let mult = 1;
     if (has(run, 'nurse_care')) mult *= 0.75;
@@ -248,7 +247,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
         // 伤口：医疗站显著降低感染概率
         if (id === 'wound') chance *= 1 / (1 + effectiveModule(run, 'medbay') * 0.4);
         if (chance > 0 && rng.chance(chance)) {
-          if (gainCond(def.worsen.into, t('ledger.health.worsen', { from: def.name, to: CONDITION_BY_ID[def.worsen.into].name }))) {
+          if (gainCond(def.worsen.into, t('ledger.health.worsen', { from: def.name, to: conditionName(def.worsen.into) }))) {
             // noted
           }
         }
@@ -447,7 +446,7 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
 
   if (effectiveModule(run, 'filter') === 0 && rng.chance(HEALTH.POOR_HYGIENE_SICK)) {
     const pick: ConditionId = rng.chance(0.5) ? 'dysentery' : 'flu';
-    gainCond(pick, t('ledger.health.hygiene', { name: CONDITION_BY_ID[pick].name }));
+    gainCond(pick, t('ledger.health.hygiene', { name: conditionName(pick) }));
   }
 
   // ---------- 8. 理智 ----------
@@ -498,7 +497,10 @@ export function resolveHealth(run: RunState, consume: ConsumeResult, rng: Rng): 
  * 不再立即治愈；每晚用药都要重新消耗药品。
  */
 export function medicateCondition(run: RunState, id: ConditionId): { ok: boolean; reason?: string } {
-  const def = CONDITION_BY_ID[id];
+  const def = conditionDef(id);
+  // 用药的入口在 UI，`id` 来自 run.conditions —— 那是存档里的字符串，
+  // 内容侧删过状态之后就会递进来一个查不到的 id，取 `.kind` 即崩。
+  if (!def) return { ok: false, reason: t('ledger.health.treatNo') };
   if (def.kind !== 'pathogenic' || !def.medsCure) return { ok: false, reason: t('ledger.health.treatNo') };
   if (!run.conditions.includes(id)) return { ok: false, reason: t('ledger.health.treatNo') };
   if (run.medicated?.includes(id)) return { ok: true };
@@ -516,7 +518,7 @@ export function medicateCondition(run: RunState, id: ConditionId): { ok: boolean
 
 /** 供 UI 显示的总治愈率（0..1）；条件型疾病返回 null。 */
 export function cureChanceOf(run: RunState, id: ConditionId): number | null {
-  const def = CONDITION_BY_ID[id];
+  const def = conditionDef(id);
   if (!def || def.kind !== 'pathogenic') return null;
   const sev = def.severity ?? 1;
   let p: number = CURE.BASE[sev] ?? 0;
@@ -533,7 +535,7 @@ export function cureChanceOf(run: RunState, id: ConditionId): number | null {
 
 /** 传染病是否处于免疫窗口内（UI 显示「已免疫」用） */
 export function isImmuneNow(run: RunState, id: ConditionId): boolean {
-  const def = CONDITION_BY_ID[id];
+  const def = conditionDef(id);
   if (!def?.infectious) return false;
   const day = run.immunity?.[id];
   return day !== undefined && run.day - day < CURE.IMMUNE_DAYS;

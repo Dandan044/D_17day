@@ -7,7 +7,6 @@ import { BASE_PRICE, LOCATIONS, RES_NAME, RES_UNIT } from '../game/content/locat
 import { BUILD_PATH_NAME, ITEM_NAME, SKILL_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES, moduleHardEffect, moduleSpec, moduleTier } from '../game/content/modules';
-import { SITE_BY_ID } from '../game/content/sites';
 import {
   SALVAGE_TARGETS,
   blockingReason,
@@ -21,6 +20,7 @@ import { waterCapacity } from '../game/engine/tags';
 import { useGame } from '../game/store';
 import type { DisasterId, IntelReading, LogEntry, ModuleId, ResourceId, RunState } from '../game/types';
 import { Bar, Chip, Empty, Modal, Panel, SectionLabel } from './kit';
+import { siteOf } from '../game/content/lookup';
 
 // ============================================================
 // 避难所
@@ -34,7 +34,7 @@ export function ShelterPanel({ run }: { run: RunState }) {
   const salvage = useGame((s) => s.salvage);
   const maintain = useGame((s) => s.maintain);
   const [open, setOpen] = useState<ModuleId | null>(null);
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const isPrep = run.day < TIME.COLLAPSE_DAY;
 
   return (
@@ -536,7 +536,7 @@ const IntelDay = memo(function IntelDay({
 export function CrewPanel({ run }: { run: RunState }) {
   // 单字段 selector：面板打开期间 toast 等无关 set 不再重渲染本面板
   const setOverlay = useGame((s) => s.setOverlay);
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
 
   return (
     <Modal

@@ -58,8 +58,6 @@ interface Outcome {
   poolLeft: number;
   /** 小桃三态 */
   xt: 'alive' | 'dead' | 'silent' | 'open' | 'unmet';
-  /** 官方台三条结局 */
-  og: 'coop' | 'suspect' | 'ignored' | 'open';
 }
 
 function runOne(seed: number, persona: Persona): Outcome {
@@ -79,7 +77,6 @@ function runOne(seed: number, persona: Persona): Outcome {
   const everFound = new Set<string>();
   const lostLogged = new Set<string>();
   let xtOutcome: Outcome['xt'] = 'unmet';
-  let ogOutcome: Outcome['og'] = 'open';
 
   // 探针需要电台与电，别让"没电"这个变量盖住内容本身
   run.modules.radio = 2;
@@ -139,7 +136,6 @@ function runOne(seed: number, persona: Persona): Outcome {
         // （下一日 openChannel 时），而本判定与回复在同一日跑。所以要等频道真的落了 `lost`
         // 才能判"死了"——否则存活线在收场当天就会被误判成死亡。
         if (run.flags.includes('flag:xtAlive')) xtOutcome = 'alive';
-        else if (st.doneEvents.includes('xt_silent')) xtOutcome = 'silent';
         else if (st.status === 'lost' && st.doneEvents.includes('xt_ambush')) xtOutcome = 'dead';
         else if (st.status === 'lost') xtOutcome = 'silent';
       }
@@ -153,13 +149,7 @@ function runOne(seed: number, persona: Persona): Outcome {
   if (xtOutcome === 'unmet' && run.channels.some((c) => c.id === 'xt' && c.status === 'active')) {
     xtOutcome = 'open';
   }
-  const ogSt = run.channels.find((c) => c.id === 'og');
-  if (ogSt) {
-    if (ogSt.doneEvents.includes('og_endgame')) ogOutcome = 'coop';
-    else if (ogSt.doneEvents.includes('og_suspect')) ogOutcome = 'suspect';
-    else if (ogSt.doneEvents.includes('og_ignored')) ogOutcome = 'ignored';
-  }
-  return { stats, poolLeft: run.channelPool.length, xt: xtOutcome, og: ogOutcome };
+  return { stats, poolLeft: run.channelPool.length, xt: xtOutcome };
 }
 
 const searchable = CHANNEL_DEFS.filter((d) => d.discover === 'search').length;
@@ -200,12 +190,6 @@ for (const persona of PERSONAS) {
       `死了 ${((xtTally.dead! / TOTAL) * 100).toFixed(1)}%  ` +
       `静默 ${((xtTally.silent! / TOTAL) * 100).toFixed(1)}%  ` +
       `未收尾 ${(((xtTally.open ?? 0) + (xtTally.unmet ?? 0)) / TOTAL * 100).toFixed(1)}%`,
-  );
-  console.log(
-    `    官方台结局：合作者 ${((ogTally.coop! / TOTAL) * 100).toFixed(1)}%  ` +
-      `可疑分子 ${((ogTally.suspect! / TOTAL) * 100).toFixed(1)}%  ` +
-      `无人应答 ${((ogTally.ignored! / TOTAL) * 100).toFixed(1)}%  ` +
-      `未收尾 ${((ogTally.open! / TOTAL) * 100).toFixed(1)}%`,
   );
 }
 

@@ -20,7 +20,7 @@ import { applyHeatWants } from './engine/climate';import {
   startProject,
   type MaintenanceKind,
 } from './engine/construction';
-import { addLog, clampResources } from './engine/effects';
+import { addLog, applyEffect, clampResources } from './engine/effects';
 import {
   buyCartridge as engineBuyCartridge,
   buyCoAlarm as engineBuyCoAlarm,
@@ -36,6 +36,7 @@ import {
   type HaulItem,
 } from './engine/economy';
 import {
+  ensureChannelDefaults,
   openChannel as engineOpenChannel,
   replyChannel as engineReplyChannel,
   hailChannel as engineHailChannel,
@@ -44,7 +45,11 @@ import {
 import { applyScavengeDanger } from './engine/exposure';
 import { medicateCondition } from './engine/health';
 import { emitHook } from './engine/hooks';
-import { batteryCapacity, heaterHeadroomKwh } from './engine/power';
+import {
+  batteryCapacity,
+  ensureRunDefaults,
+  heaterHeadroomKwh,
+} from './engine/power';
 import {
   activateIodineProtection,
   hasIodinePrep,
@@ -98,11 +103,21 @@ export interface Session {
   openShop: string | null;
 }
 
+/**
+ * 会话工厂。**所有玩家动作的唯一入口**——store 走它，无头模拟也走它。
+ *
+ * 存档自愈就落在这里，而不是散在每个动作里：绝大部分「读到一半的 undefined」
+ * 都是旧版留下的字段缺失，在入口补一次，下游谁都不用再防御。
+ * 两个 ensure 都是幂等的、只补缺的，不写任何"猜出来的"值——
+ * 真丢的数据该报还是会报（见 debug/crashReport 的 healthCheck）。
+ */
 export function createSession(
   run: RunState,
   haul: Haul | null = null,
   openShop: string | null = null,
 ): Session {
+  ensureRunDefaults(run);
+  ensureChannelDefaults(run);
   return { run, haul, openShop };
 }
 
@@ -375,15 +390,24 @@ export function buyCartridge(s: Session, locationId: string): SessionResult {
   return ok(undefined, [{ text: t('ledger.toast.filterOk', { spent: r.spent }), tone: 'good' }]);
 }
 
-/** 物品栏「使用」：滤芯=整芯替换（随时可换，旧芯剩余耐久作废）；碘片=开启辐射保护窗 */
+/**
+ * 物品栏「使用」：滤芯=整芯替换（随时可换，旧芯剩余耐久作废）；碘片=开启辐射保护窗
+ *
+ * 换芯刻意复用 `applyEffect` 的 `swapFilter` 分支，而不是在这里再写一遍
+ * 「库存减一 + 耐久置满」：同一个动作有两份实现，改口径时必然只改一处。
+ * 顺带把「滤芯耐久 x → 30 / 备用滤芯 -1（剩 N 只）」这两行摘要也统一了——
+ * 换芯在事件里和在物品栏里说的应该是同一句话。
+ */
 export function useItem(s: Session, id: 'filter' | 'iodine'): SessionResult {
   const run = s.run;
   if (id === 'filter') {
     if ((run.items?.filter ?? 0) < 1) return fail(t('ledger.toast.noCartridge'));
-    run.items.filter -= 1;
-    run.wear.filterLife = WEAR.FILTER_LIFE;
+    // 独立 rng 且不写回 cursor：这条分支一次签都不抽，不该推进整局随机流
+    const notes: SessionNote[] = applyEffect(run, { swapFilter: true }, makeRng(run.seed, run.rngCursor)).map(
+      (n) => ({ text: n.text, tone: 'good' as const }),
+    );
     hook(run, 'maintain');
-    return ok(undefined, [{ text: t('ledger.toast.filterUsed', { n: WEAR.FILTER_LIFE }), tone: 'good' }]);
+    return ok(undefined, notes.length ? notes : [{ text: t('ledger.toast.filterUsed', { n: WEAR.FILTER_LIFE }), tone: 'good' }]);
   }
   if (!hasIodinePrep(run)) return fail(t('ledger.toast.iodineNo'));
   if (iodineActive(run)) return fail(t('ledger.toast.iodineActive'));

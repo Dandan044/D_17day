@@ -24,7 +24,7 @@
 import { CHANNEL, TIME } from '../balance';
 import { t } from '../copy/t';
 import { CHANNEL_BY_ID, CHANNEL_DEFS, CHANNEL_POOL } from '../content/channels';
-import { makeRng, type Rng } from '../rng';
+import { derivedRng, type Rng } from '../rng';
 import type {
   BondLevel,
   ChannelDef,
@@ -39,15 +39,9 @@ import type {
 import { addLog, applyEffect } from './effects';
 import { checkRequirement, deriveFacts, effectiveModule, matchQuery } from './tags';
 
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+export { derivedRng };
 
-/**
- * 派生随机序列。刻意与 run.rngCursor 完全隔离——
- * 同一个 (seed, day) 永远得到同一串数，因此不改动整局随机流。
- */
-export function derivedRng(run: RunState): Rng {
-  return makeRng((run.seed + run.day * 7919) >>> 0);
-}
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 // ============================================================
 // 事件表
@@ -97,14 +91,37 @@ export function activeRound(def: ChannelDef, st: ChannelState): ChannelRound | u
 /** 旧存档补齐。放这里而不是 power.ts：power → channels → tags → power 会成环 */
 export function ensureChannelDefaults(run: RunState): void {
   if (!Array.isArray(run.channels)) run.channels = [];
-  if (!Array.isArray(run.channelPool)) {
-    const owned = new Set(run.channels.map((c) => c.id));
-    run.channelPool = CHANNEL_POOL.filter((id) => !owned.has(id));
+
+  // 内容侧删掉一个频道后，旧档里会留下一条 CHANNEL_BY_ID 查不到的记录。
+  // 留着它 = 每一处 `CHANNEL_BY_ID[st.id]` 都是 undefined.name，必炸，
+  // 所以在入口就丢掉（并留一行日志，别让它无声消失）。
+  const known = run.channels.filter((c) => c && CHANNEL_BY_ID[c.id]);
+  if (known.length !== run.channels.length) {
+    const gone = run.channels.length - known.length;
+    run.channels = known;
+    addLog(run, t('ledger.run.channelOrphan', { n: gone }), 'neutral');
   }
+
   for (const st of run.channels) {
     // 事件制之前的老档：doneBeats 与拍 id 对应，新模型按事件记，直接从头开始（频道是第 8 天后的内容）
     if (!Array.isArray(st.doneEvents)) st.doneEvents = [];
+    if (!Array.isArray(st.inbox)) st.inbox = [];
+    if (!Array.isArray(st.log)) st.log = [];
     if (st.awaiting === undefined) st.awaiting = null;
+    // 这几个是随版本逐个加进来的，旧档一定缺；缺了会变成 NaN 参与比较
+    if (!st.status) st.status = 'active';
+    if (st.affinity === undefined) {
+      const def = CHANNEL_BY_ID[st.id];
+      st.affinity = def.kind === 'org' ? CHANNEL.AFF_INIT_ORG : CHANNEL.AFF_INIT_PERSON;
+    }
+    if (st.missed === undefined) st.missed = 0;
+    if (st.lastContactDay === undefined) st.lastContactDay = 0;
+    if (st.active && (st.active.eventId === undefined || st.active.roundId === undefined)) st.active = undefined;
+  }
+
+  if (!Array.isArray(run.channelPool)) {
+    const owned = new Set(run.channels.map((c) => c.id));
+    run.channelPool = CHANNEL_POOL.filter((id) => !owned.has(id));
   }
 }
 
@@ -116,8 +133,18 @@ export function bondOf(affinity: number): BondLevel {
   return 'stranger';
 }
 
+/** 好感度的数值档位：1=陌生 2=熟悉 3=交心 4=依赖。事件 `minBond` 用它比较 */
+export function bondRankOf(affinity: number): 1 | 2 | 3 | 4 {
+  const [a, b, c] = CHANNEL.BOND_CUTS;
+  if (affinity >= c) return 4;
+  if (affinity >= b) return 3;
+  if (affinity >= a) return 2;
+  return 1;
+}
+
+/** 未读数。用 ?. 兜一下：UI 在渲染期逐条调它，旧档里缺 inbox 不该炸掉频段列表 */
 export function channelUnread(st: ChannelState): number {
-  return st.inbox.length;
+  return st.inbox?.length ?? 0;
 }
 
 function makeState(def: ChannelDef): ChannelState {
@@ -129,7 +156,6 @@ function makeState(def: ChannelDef): ChannelState {
     inbox: [],
     log: [],
     missed: 0,
-    repliedCount: 0,
     lastContactDay: 0,
     awaiting: null,
   };
@@ -143,27 +169,15 @@ function deliverLines(run: RunState, st: ChannelState, lines: ChatLine[] | undef
   if (!lines || lines.length === 0) return;
   st.inbox.push(...lines.map((l) => ({ ...l, day: run.day })));
   st.lastContactDay = run.day;
-  st.offlineSinceDay = undefined;
 }
 
 // ============================================================
 // 事件推进
 // ============================================================
 
-/**
- * 事件到点了没有。
- *
- * `at`（绝对日）> `afterDays`（距上次联系）。两个都没有的事件只能被 `elseEvent` 带出来。
- * `isFirst`：频道的第一条事件允许"无锚开场"——被搜到的频道应当当场说话，而不是等第二天。
- */
-function eventDue(ev: ChannelEvent, st: ChannelState, run: RunState, isFirst: boolean): boolean {
-  if (ev.at !== undefined) return run.day >= ev.at;
-  if (ev.afterDays !== undefined) return run.day - st.lastContactDay >= ev.afterDays;
-  return isFirst;
-}
-
 function eventGatesFail(ev: ChannelEvent, st: ChannelState, facts: Facts): boolean {
   if (ev.need && !ev.need.every((n) => st.doneEvents.includes(n))) return true;
+  if (ev.minBond !== undefined && bondRankOf(st.affinity) < ev.minBond) return true;
   if (ev.minAffinity !== undefined && st.affinity < ev.minAffinity) return true;
   if (ev.require && !matchQuery(ev.require, facts)) return true;
   return false;
@@ -175,20 +189,48 @@ function roundGatesFail(round: ChannelRound, st: ChannelState, facts: Facts): bo
   return false;
 }
 
-/** 沿 elseEvent 一路走到第一个条件成立的替代事件（旧 resolveElse 的事件级版本） */
-function resolveElseEvent(
-  def: ChannelDef,
-  ev: ChannelEvent,
-  st: ChannelState,
-  facts: Facts,
-): ChannelEvent | undefined {
-  let cur = ev.elseEvent ? eventById(def, ev.elseEvent) : undefined;
-  let guard = 0;
-  while (cur && guard++ < 16) {
-    if (!eventGatesFail(cur, st, facts)) return cur;
-    cur = cur.elseEvent ? eventById(def, cur.elseEvent) : undefined;
-  }
-  return undefined;
+/**
+ * 事件池抽签（2026-09-15 重构：旧的 at/afterDays 固定日锚已废除）。
+ *
+ * 事件属于「末日阶段 × 好感度」的池子，每天频道空闲时按三优先级抽**至多一个**：
+ *
+ * 1. **关联关键**（`key` 且 `need` 满足且 stage 覆盖当前阶段）：前置达成、人也到了
+ *    该出现的阶段——下一事件必触发它。这是「达成了某件事，紧接着必然有下文」的钩子。
+ * 2. **关键**（`key`，未完成的）：取 stage 最早的那个（**过期 key 保留优先级**——
+ *    错过自己阶段的关键事件不会凭空消失，只是不再受 stage 窗口限制；好感不够时
+ *    它继续等，不触发也不作废）。
+ * 3. **随机池**：stage 覆盖当前阶段 && minBond 达标 && need 满足 的普通事件，
+ *    用 `derivedRng` 抽 1。池空 = 今天没有消息（沉默也是内容）。
+ *
+ * 抽签只用 `derivedRng`（不触碰 run.rngCursor），sim 基线不漂移。
+ */
+function pickEvent(def: ChannelDef, st: ChannelState, facts: Facts, run: RunState): ChannelEvent | undefined {
+  const undone = channelEvents(def).filter((e) => !st.doneEvents.includes(e.id));
+  const inStage = (e: ChannelEvent) => {
+    if (!e.stage) return true; // 没有 stage 的事件任何阶段都可能在池里（lint 会劝住 key 这么写）
+    const s = run.threat;
+    return s >= e.stage[0] && s <= e.stage[1];
+  };
+  const gated = undone.filter((e) => !eventGatesFail(e, st, facts));
+
+  // 1. 关联关键：prereq（need）已满足 + 阶段覆盖 → 必触发
+  const linkedKey = gated.find((e) => e.key && !!e.need?.length && inStage(e));
+  if (linkedKey) return linkedKey;
+
+  // 2. 关键：**阶段已到**的未完成 key（过期保留——错过自己阶段的关键事件不会凭空消失，
+  //    只是不再受 stage 上界限制，靠 `minBond`/`need` 继续等）。
+  //    ⚠️ 必须挡掉「阶段还没到」的 key：否则匮乏期的关键事件会在恐慌期第一天就抢先触发，
+  //    把开场的试音（xt_hello）顶掉。这是加第一个后期 key 事件时才暴露出来的 bug——
+  //    在此之前线上没有任何 key 事件，这条路径从来没被走过。
+  const key = gated
+    .filter((e) => e.key && run.threat >= (e.stage?.[0] ?? 0))
+    .sort((a, b) => (a.stage?.[0] ?? 99) - (b.stage?.[0] ?? 99))[0];
+  if (key) return key;
+
+  // 3. 普通池随机
+  const pool = gated.filter((e) => !e.key && inStage(e));
+  if (pool.length === 0) return undefined;
+  return derivedRng(run).pick(pool);
 }
 
 /** 事件收场。`silence` / `lost` 会让频道永久静默 */
@@ -299,6 +341,10 @@ function registerSend(run: RunState, st: ChannelState, choice: ChatChoice, rng: 
     st.log.push({ from: 'you', text: choice.say, day: run.day });
     if (st.log.length > CHANNEL.LOG_CAP) st.log = st.log.slice(-CHANNEL.LOG_CAP);
   }
+  // 选项声明的耗电在这里兑现（门槛在 replyChannel/hailChannel 已挡），扣到 0 为止
+  if (choice.kwh && choice.kwh > 0) {
+    run.wear.batteryCharge = Math.max(0, (run.wear.batteryCharge ?? 0) - choice.kwh);
+  }
   if (choice.effect) applyEffect(run, choice.effect, rng);
   if (choice.say) {
     const [lo, hi] = CHANNEL.TX_EXPOSURE;
@@ -333,7 +379,6 @@ export function tickChannels(run: RunState): void {
     // 静默可以回归：够久没联系就再把频道推回在播态
     if (st.status === 'silent' && run.day - st.lastContactDay >= CHANNEL.OFFLINE_RECONNECT) {
       st.status = 'active';
-      st.offlineSinceDay = undefined;
     }
     if (st.status !== 'active') continue;
 
@@ -376,24 +421,13 @@ export function tickChannels(run: RunState): void {
       continue;
     }
 
-    // ---------- 空闲：按日历挑一个事件开始 ----------
-    // 到点但门槛不满足时：有 elseEvent 就走替代事件；没有就**跳过它继续往后看**，
-    // 不做"整线停滞"（一条只在特定条件下才该出现的事件不该把后面永久堵死）。
-    const evs = channelEvents(def);
-    for (let i = 0; i < evs.length; i++) {
-      const ev = evs[i]!;
-      if (st.doneEvents.includes(ev.id)) continue;
-      if (!eventDue(ev, st, run, i === 0)) continue;
-      if (!eventGatesFail(ev, st, facts)) {
-        startEvent(run, st, def, ev, facts);
-        break;
-      }
-      const alt = resolveElseEvent(def, ev, st, facts);
-      if (alt && !st.doneEvents.includes(alt.id)) {
-        startEvent(run, st, def, alt, facts);
-        break;
-      }
-    }
+    // ---------- 空闲：从事件池抽一个开始 ----------
+    // 2026-09-15 重构：固定日锚（at/afterDays）已废除。事件按「末日阶段 × 好感度」
+    // 分池，每天空闲时按三优先级抽至多一个（关联关键 → 关键 → 普通池随机）。
+    // 详见 pickEvent 的注释。抽不到（池空/门槛都不过）= 今天这一头没有消息，
+    // 不做"整线停滞"兜底——沉默是池子的一部分，不是 bug。
+    const ev = pickEvent(def, st, facts, run);
+    if (ev) startEvent(run, st, def, ev, facts);
   }
 }
 
@@ -446,14 +480,16 @@ export function searchChannel(run: RunState): SearchResult {
  *
  * 不这么做的话，玩家花 1 AP 搜出一个新频段，打开只看到一片空白，
  * 得等到第二天夜间结算才有第一条消息——发现新频道的那一下就没有了。
+ * （抽签制下没有"固定首事件"，取事件表第一条过得了门槛的。）
  */
 function deliverOpening(run: RunState, st: ChannelState, def: ChannelDef): void {
-  const first = channelEvents(def)[0];
-  if (!first || st.doneEvents.includes(first.id)) return;
-  if (!eventDue(first, st, run, true)) return;
   const facts = deriveFacts(run);
-  if (eventGatesFail(first, st, facts)) return;
-  startEvent(run, st, def, first, facts);
+  for (const first of channelEvents(def)) {
+    if (st.doneEvents.includes(first.id)) continue;
+    if (eventGatesFail(first, st, facts)) continue;
+    startEvent(run, st, def, first, facts);
+    return;
+  }
 }
 
 export interface OpenResult {
@@ -529,12 +565,15 @@ export function replyChannel(run: RunState, id: string, choiceId: string): Reply
 
   const apCost = choice.effect?.ap ?? 0;
   if (apCost < 0 && run.ap < -apCost) return { ok: false, reason: t('channels.err.noAp') };
+  // 电量门槛：选择前由 note 明示（{kwh} 占位），不足则这一条发不出去
+  if (choice.kwh && choice.kwh > 0 && (run.wear.batteryCharge ?? 0) < choice.kwh) {
+    return { ok: false, reason: t('channels.err.noPower') };
+  }
 
   const rng = derivedRng(run);
   registerSend(run, st, choice, rng);
   st.seenLines = st.log.length;
   st.affinity = clamp(st.affinity + (choice.affinity ?? 0), 0, 100);
-  st.repliedCount += 1;
   st.active = { ...st.active, lastActionDay: run.day };
   st.awaiting = null;
 
@@ -572,12 +611,14 @@ export function hailChannel(run: RunState, id: string, choiceId: string): ReplyR
   if (!req.ok) return { ok: false, reason: t(req.reason ?? 'channels.err.noChoice') };
   const apCost = choice.effect?.ap ?? 0;
   if (apCost < 0 && run.ap < -apCost) return { ok: false, reason: t('channels.err.noAp') };
+  if (choice.kwh && choice.kwh > 0 && (run.wear.batteryCharge ?? 0) < choice.kwh) {
+    return { ok: false, reason: t('channels.err.noPower') };
+  }
 
   const rng = derivedRng(run);
   registerSend(run, st, choice, rng);
   st.seenLines = st.log.length;
   st.affinity = clamp(st.affinity + (choice.affinity ?? 0), 0, 100);
-  st.repliedCount += 1;
   st.active = { ...st.active, lastActionDay: run.day };
   st.awaiting = null;
 

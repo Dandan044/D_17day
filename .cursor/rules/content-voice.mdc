@@ -1,12 +1,14 @@
 ---
-description: 写或改玩家可见中文时，贴地、禁八股与意识流。细则见 docs/content-voice.md
-globs: src/game/content/**/*.ts,src/ui/**/*.{ts,tsx},src/game/balance.ts,src/game/engine/world.ts,src/game/engine/exposure.ts,src/game/engine/collapse.ts,src/game/engine/director.ts,src/game/engine/health.ts,src/game/engine/economy.ts,src/game/engine/construction.ts
+description: 凡玩家可见中文（title/body/label/log/desc/reason/情报/系统说明）的增删改，动手前必须先整篇读 docs/content-voice.md
+globs: src/game/copy/**/*.{ts,tsx},src/game/content/**/*.ts,src/ui/**/*.{ts,tsx},src/game/balance.ts,src/game/engine/*.ts
 alwaysApply: false
 ---
 
 # 玩家文案：贴地，不要 AI 味
 
-写 `title` / `body` / `label` / `log` / `desc` / `text` 之前读 [docs/content-voice.md](docs/content-voice.md)。只改字符串，不动 `id`、数值、`effect`、`flags`、`requires`、`schedule`。
+**任何玩家可见中文的增删改，先整篇读 [docs/content-voice.md](docs/content-voice.md)**（四条原则 / 禁止表 / 三轮增补 / 推荐写法 / 自检清单）。它是唯一的声音真源，不要发明第二套嗓音。只改字符串，不动 `id`、数值、`effect`、`flags`、`requires`、`schedule`。
+
+两个真源都要改：生效的是 `src/game/copy/zh/**`（`copy/hydrate.ts` 的 `pickCopy` 优先查表），`content/**` 里 `ch(..., { label })` 与 `effect.log` 的内联文字只是兜底，`lint:content` 不查两者是否一致。
 
 ## 必须
 

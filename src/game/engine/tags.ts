@@ -8,12 +8,12 @@
 import { AIR, CAPS, EXPOSURE, HEALTH, RAD, TIME, THREAT_NAMES } from '../balance';
 import { RES_NAME, SKILL_NAME } from '../copy/names';
 import { t } from '../copy/t';
-import { MODULE_BY_ID, MODULE_IDS } from '../content/modules';
-import { SITE_BY_ID } from '../content/sites';
+import { MODULE_IDS } from '../content/modules';
 import { parseTag } from '../tags';
 import type { Facts, ModuleId, Requirement, RunState, TagQuery, WeatherId } from '../types';
 import { isPrecipWeather, currentIndoor, indoorBandOf } from './climate';
 import { computePower, loadOnline, type PowerReport, tonightHeat } from './power';
+import { moduleDef, siteOf } from '../content/lookup';
 
 export { computePower, loadOnline, type PowerReport } from './power';
 
@@ -59,7 +59,7 @@ export function effectiveModule(run: RunState, id: ModuleId, power?: PowerReport
 
 /** 辐射屏蔽等级：地下 + 保温 + 空气过滤。1 级过滤在高楼也能至少挡到下一档。 */
 export function radiationShield(run: RunState): number {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const air = effectiveModule(run, 'airFilter');
   const insulate = effectiveModule(run, 'insulate');
   let shield = 0;
@@ -100,7 +100,7 @@ export function activateIodineProtection(run: RunState, days = RAD.IODINE_DAYS):
 }
 
 export function waterCapacity(run: RunState): number {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   return Math.round((CAPS.WATER[run.modules.cistern] ?? 40) * site.waterCapMult);
 }
 
@@ -117,7 +117,7 @@ export function deriveFacts(run: RunState): Facts {
   const flags = new Set<string>();
   const nums: Record<string, number> = {};
   const w = run.world;
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const power = computePower(run);
 
   const add = (t: string) => flags.add(t);
@@ -162,6 +162,10 @@ export function deriveFacts(run: RunState): Facts {
   const [t0, t1, t2, t3] = EXPOSURE.TIERS;
   add(band(w.exposure, [t0!, t1!, t2!, t3!], ['exposure:calm', 'exposure:noticed', 'exposure:watched', 'exposure:marked', 'exposure:hunted']));
 
+  // --- 今日足迹：emitHook('scavenge') 不携带位置信息，钩子种子靠这些标签
+  // 区分"去的是哪儿"（例如一次性剧情点 sig_xt_building 的专属事件）。
+  for (const id of run.visitedToday ?? []) add(`visited:${id}`);
+
   // --- 站点 ---
   for (const t of site.tags) add(t);
 
@@ -174,7 +178,7 @@ export function deriveFacts(run: RunState): Facts {
     // power:blackout（线路改接中，全屋断电）——以前这里是硬编码拼 building:${id}，
     // 那第二个标签永远不会被注入，于是"施工期间全屋断电"这句承诺落了空。
     add(`building:${p.moduleId}`);
-    for (const tag of MODULE_BY_ID[p.moduleId].buildPenaltyTags) add(tag);
+    for (const tag of moduleDef(p.moduleId)?.buildPenaltyTags ?? []) add(tag);
     if (p.path === 'buy' && !p.laborDone) add(`delivery:${p.moduleId}`);
   }
   if (effectiveModule(run, 'insulate', power) >= 2) add('sealed');

@@ -6,18 +6,20 @@
 import { EXPOSURE, HEALTH, LOG, WEAR } from '../balance';
 import { HOOK_NAME, RES_NAME, STAT_NAME } from '../copy/names';
 import { t } from '../copy/t';
-import { CONDITION_BY_ID } from '../content/conditions';
+import { FAMILY_BY_ID } from '../content/events';
 import { LOCATION_BY_ID } from '../content/locations';
-import { MODULE_BY_ID } from '../content/modules';
-import { SITE_BY_ID } from '../content/sites';
 import { SURVIVORS, SURVIVOR_BY_ID } from '../content/survivors';
-import type { Rng } from '../rng';
-import type { ActionHook, ConditionId, Effect, ModuleId, ResourceId, RunState, StatId, Survivor, ValueIconId, ValueNote } from '../types';
+import { derivedRng, type Rng } from '../rng';
+import type { ActionHook, ConditionId, Effect, EventFamily, EventVariant, ModuleId, ResourceId, RunState, StatId, Survivor, ValueIconId, ValueNote } from '../types';
 import { clampBattery, batteryCapacity } from './power';
 import { markGunshotRecent } from './exposure';
-import { grantIodine, waterCapacity } from './tags';
+import { deriveFacts, grantIodine, matchQuery, waterCapacity } from './tags';
+import { conditionName, moduleName, siteOf } from '../content/lookup';
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** 摘要行里的小数一律只留一位：0.1 精度的耐久值不该显示成 6.399999 */
+const round1 = (n: number) => `${Math.round(n * 10) / 10}`;
 
 export function clampResources(run: RunState): void {
   const waterCap = waterCapacity(run);
@@ -74,7 +76,7 @@ export function removeCondition(run: RunState, id: ConditionId): boolean {
 }
 
 export function recruit(run: RunState, templateId: string, rng: Rng): Survivor | null {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   if (site.companionCap <= 0) return null;
   if (run.survivors.length >= site.companionCap) return null;
 
@@ -99,6 +101,46 @@ export function recruit(run: RunState, templateId: string, rng: Rng): Survivor |
 }
 
 /** 应用一个 Effect。返回给玩家看的结果摘要行（带该行代表的数值 id，用于画图标）。 */
+/** enqueue 指向未知家族的一次性警告（lookup.ts 的 warnOnce 是私有的，这里就地自持） */
+const enqueueWarned = new Set<string>();
+function warnOnceEnqueue(familyId: string): void {
+  if (enqueueWarned.has(familyId)) return;
+  enqueueWarned.add(familyId);
+  console.warn(`[七日之前] enqueue 指向未知的事件家族 ${familyId}，后果没有送达`);
+}
+
+/**
+ * 为 enqueue 选定变体：优先用内容显式给的 variantId；缺省时在过 require 的变体里
+ * 挑「require 最具体」的（与 director.pickVariant 同构），并列时用 derivedRng 挑。
+ * 没有任何变体可用 → 返回 null，这次 enqueue 放弃（塞死条目会被 pruneOrphanQueue 清掉）。
+ */
+function pickEnqueueVariant(run: RunState, family: EventFamily, explicit: string | undefined): string | null {
+  if (explicit) {
+    return family.variants.some((v) => v.id === explicit) ? explicit : null;
+  }
+  const facts = deriveFacts(run);
+  const eligible = family.variants.filter((v) => !v.require || matchQuery(v.require, facts));
+  if (eligible.length === 0) return null;
+  const specificity = (v: EventVariant): number => {
+    const r = v.require;
+    if (!r) return 0;
+    const count = (q: unknown): number => {
+      if (Array.isArray(q)) return q.reduce((n: number, x) => n + count(x), 0);
+      if (q && typeof q === 'object') {
+        return Object.entries(q as Record<string, unknown>).reduce(
+          (n, [k, val]) => (val === undefined ? n : n + (k === 'all' || k === 'any' || k === 'not' ? count(val) : 1)),
+          0,
+        );
+      }
+      return 1;
+    };
+    return count(r);
+  };
+  const max = Math.max(...eligible.map(specificity));
+  const best = eligible.filter((v) => specificity(v) === max);
+  return derivedRng(run).pick(best).id;
+}
+
 export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
   const notes: ValueNote[] = [];
   /** 有对应数值的行才带图标；状态/人物/提示类只给文本 */
@@ -140,17 +182,17 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
 
   if (eff.addCond) {
     for (const c of eff.addCond) {
-      if (addCondition(run, c)) push(t('ledger.effect.condAdd', { name: CONDITION_BY_ID[c].name }));
+      if (addCondition(run, c)) push(t('ledger.effect.condAdd', { name: conditionName(c) }));
     }
   }
   if (eff.removeCond) {
     for (const c of eff.removeCond) {
-      if (removeCondition(run, c)) push(t('ledger.effect.condRemove', { name: CONDITION_BY_ID[c].name }));
+      if (removeCondition(run, c)) push(t('ledger.effect.condRemove', { name: conditionName(c) }));
     }
   }
 
   if (eff.shelter) {
-    const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+    const site = siteOf(run.siteId);
     for (const [k, delta] of Object.entries(eff.shelter)) {
       if (!delta) continue;
       const id = k as ModuleId;
@@ -158,7 +200,7 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
       const before = run.modules[id];
       run.modules[id] = clamp(before + delta, 0, cap);
       if (run.modules[id] !== before) {
-        const name = MODULE_BY_ID[id].name;
+        const name = moduleName(id);
         push(delta > 0 ? t('ledger.effect.moduleUp', { name, lvl: run.modules[id] }) : t('ledger.effect.moduleDown', { name, lvl: run.modules[id] }));
       }
     }
@@ -167,10 +209,15 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
   if (eff.wear) {
     if (eff.wear.filterLife) {
       // 单芯总耐久 30 封顶；负增量合法（额外磨损），正增量只允许补到满芯
+      const before = run.wear.filterLife;
       run.wear.filterLife = Math.min(
         WEAR.FILTER_LIFE,
         Math.max(0, Math.round((run.wear.filterLife + eff.wear.filterLife) * 10) / 10),
       );
+      // 只有回升才报——日常磨损天天发生，逐日报会刷屏
+      if (run.wear.filterLife > before) {
+        push(t('ledger.effect.filterLife', { before: round1(before), after: round1(run.wear.filterLife) }), 'cartridge');
+      }
     }
     if (eff.wear.generatorOil) run.wear.generatorOil = Math.max(0, run.wear.generatorOil + eff.wear.generatorOil);
     if (eff.wear.batteryCharge) {
@@ -181,12 +228,21 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
     }
   }
 
+  // 换上备用滤芯：显式动作，耐久置满而不是靠「补 30 恰好等于上限」的巧合
+  if (eff.swapFilter && (run.items?.filter ?? 0) > 0) {
+    const before = run.wear.filterLife;
+    run.items.filter -= 1;
+    run.wear.filterLife = WEAR.FILTER_LIFE;
+    push(t('ledger.effect.filterLife', { before: round1(before), after: round1(run.wear.filterLife) }), 'cartridge');
+    push(t('ledger.effect.cartridge', { delta: '-1', left: run.items.filter }), 'cartridge');
+  }
+
   if (eff.items) {
     if (!run.items) run.items = { filter: 0 };
     const d = eff.items.filter ?? 0;
     if (d) {
       run.items.filter = Math.max(0, run.items.filter + d);
-      push(t('ledger.effect.cartridge', { n: run.items.filter }), 'cartridge');
+      push(t('ledger.effect.cartridge', { delta: `${d > 0 ? '+' : ''}${d}`, left: run.items.filter }), 'cartridge');
     }
   }
 
@@ -300,6 +356,31 @@ export function applyEffect(run: RunState, eff: Effect, rng: Rng): ValueNote[] {
     }
     if (waitHints.length) push(t('ledger.effect.sequelWait', { hooks: waitHints.join('、') }));
     else push(t('ledger.effect.sequel'));
+  }
+
+  /**
+   * 对话后果的「今日待办」通道：把事件家族**当场推进 run.queue**。
+   *
+   * 刻意绕过 pending/emitHook 那条路（MAX_PENDING_PER_DAY:2 的每日限流会把
+   * 对话答应好的事吞掉或顺延）——对话里说好的事，今天就得到来。
+   * 变体必须当场选定：pruneOrphanQueue 会清掉指向不存在变体的队列条目，
+   * 塞一个空 variantId 等于白塞。变体选择用 derivedRng——applyEffect 收到的
+   * rng 可能来自共享流（家族事件结算），用它会推后 sim 基线。
+   * 同一家族去重：对话里连说两次的事，待办里只该出现一次。
+   * （变体挑选逻辑与 director.pickVariant 同构，但这里不能 import director——
+   * director 依赖 effects（addLog），会成环。）
+   */
+  if (eff.enqueue?.length) {
+    for (const item of eff.enqueue) {
+      const family = FAMILY_BY_ID[item.familyId];
+      if (!family) {
+        warnOnceEnqueue(item.familyId);
+        continue;
+      }
+      if (run.queue.some((q) => q.familyId === item.familyId)) continue;
+      const variantId = pickEnqueueVariant(run, family, item.variantId);
+      if (variantId) run.queue.push({ familyId: item.familyId, variantId });
+    }
   }
 
   if (eff.unlock?.length) {

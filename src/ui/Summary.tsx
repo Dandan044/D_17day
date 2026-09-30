@@ -1,20 +1,19 @@
 import { TIME } from '../game/balance';
 import { CLASS_BY_ID } from '../game/content/classes';
-import { DISASTER_BY_ID } from '../game/content/disasters';
 import { UNLOCK_NAMES } from '../game/content/perks';
-import { SITE_BY_ID } from '../game/content/sites';
 import { DIFFICULTY_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { formatSeed } from '../game/rng';
 import { useGame } from '../game/store';
 import { Chip, Panel, SectionLabel } from './kit';
+import { disasterOf, siteOf } from '../game/content/lookup';
 
 export default function Summary() {
   const { run, settlement, claimSettlement, toast } = useGame();
   if (!run || !settlement) return null;
   const { ending } = settlement;
-  const disaster = DISASTER_BY_ID[run.world.disaster];
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const disaster = disasterOf(run.world.disaster);
+  const site = siteOf(run.siteId);
   const cls = CLASS_BY_ID[run.classId];
 
   const title = ending.name.replace('{day}', String(settlement.daysSurvived));

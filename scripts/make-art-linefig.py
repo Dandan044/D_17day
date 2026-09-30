@@ -156,6 +156,18 @@ def process(key: str) -> dict:
         info["left"] = bbox_xy(m, 0, split_x)
         info["right"] = bbox_xy(m, split_x, W)
         info["split"] = round(split_x / W, 4)
+        # 蓄电池柜**单独**的 bbox：`right` 的左沿正好切在那条电缆上（split 取的是中段最窄处），
+        # 想只画电池柜就会带进来一整段电缆弧。柜身列密度远高于电缆（实测 415 vs 152），
+        # 于是从 split 往右找第一段「连续 6% 宽都超过 1/4 峰值密度」的列，再往左让 1.5%
+        # 把柜体左立面那条边收回来。量得 0.6442，与肉眼看的柜沿 0.643 一致。
+        # 清点单那屏的「蓄电」格用它裁出右半张线稿（见 ArtSupplyShelf.tsx）。
+        run_w = max(3, int(W * 0.06))
+        peak = col[split_x:].max()
+        hit = next(
+            (x for x in range(split_x, W - run_w) if all(col[x + k] >= peak * 0.25 for k in range(run_w))),
+            split_x,
+        )
+        info["batt"] = bbox_xy(m, max(split_x, hit - int(W * 0.015)), W)
     elif key == "thermo":
         lab, n = ndimage.label(m)
         sizes = ndimage.sum(m, lab, range(1, n + 1))

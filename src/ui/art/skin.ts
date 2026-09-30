@@ -1,3 +1,4 @@
+import { NUCLEAR_WINTER, TIME } from '../../game/balance';
 import type { WeatherId } from '../../game/types';
 import winGeo from './windowPanes.json';
 import artLayout from './artLayout.json';
@@ -78,10 +79,18 @@ export const ART = {
   sceneHomeSide: './art/scene-home-side.jpg',
   /** 避难所工程图纸面板的纸面底（ImageGen 生成，scripts/make-shelter-paper.py 裁切）。 */
   shelterPaper: './art/paper-shelter.jpg',
-  /** 今日待办：笔记本内页的冷米白纸底（make-todo-paper.py）。 */
+  /** 今日待办：笔记本内页的冷米白纸底（make-art-paper.py todo）。 */
   todoPaper: './art/paper-todo.jpg',
-  /** 今日计划：计划表纸的暖卡其纸底（make-plan-paper.py）。 */
+  /** 今日计划：计划表纸的暖卡其纸底（make-art-paper.py plan）。 */
   planPaper: './art/paper-plan.jpg',
+  /** 过夜：床头近景，虚焦当景深底（make-art-scene-inset.py night）。 */
+  sceneNightBed: './art/scene-night-bed.jpg',
+  /** 过夜：夜间记录纸的冷灰蓝纸底（make-art-paper.py night）。 */
+  nightPaper: './art/paper-night.jpg',
+  /** 身体状况：敞开的医疗箱近景，虚焦当景深底（make-art-scene-inset.py body）。 */
+  sceneBodyKit: './art/scene-body-kit.jpg',
+  /** 身体状况：体征记录卡的米黄卡纸底（make-art-paper.py body）。 */
+  bodyPaper: './art/paper-body.jpg',
   /** 今日计划三栅的手绘线稿（make-art-linefig.py 生成）。线稿与其 -mask 成对使用：
    *  线稿内部透明、压在填充层之上；掩膜把填充色裁进形状内部（否则颜色会从轮廓外渗出）。 */
   linePower: './art/line-power.png',
@@ -248,6 +257,18 @@ export const WIN_PANES: { l: number; t: number; r: number; b: number }[] = winGe
 
 /** 窗景阶段：灾前 / 灾变早期（threat 1-3，城市还立着但已死）/ 核冬天（threat ≥4）。 */
 export type WindowStage = 'prep' | 'early' | 'winter';
+
+/**
+ * 由 run 定窗景阶段。
+ *
+ * 抽在这里是**必须**的：墙面上的窗玻璃洞（`ArtGame`）与「窗户」浮层的景深底
+ * 是同一扇窗看到的同一片天。两处各算一遍迟早会走岔——比如浮层里已入核冬天、
+ * 墙上的窗外还挂着雨。stage 只取决于 `day` 与 `threat`，所以收窄入参而不收整个 RunState。
+ */
+export function windowStageOf(run: { day: number; threat: number }): WindowStage {
+  if (run.day < TIME.COLLAPSE_DAY) return 'prep';
+  return run.threat >= NUCLEAR_WINTER.THREAT_PHASE ? 'winter' : 'early';
+}
 
 /** 窗外景色：同一城市峡谷（公寓六楼机位）× 阶段 × 天气。核交火专用。 */
 export function windowArt(weather: WeatherId, stage: WindowStage): string {

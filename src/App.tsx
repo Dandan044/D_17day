@@ -15,17 +15,25 @@ import ArtMainMenu from './ui/art/ArtMainMenu';
 import ArtSetup from './ui/art/ArtSetup';
 import ArtSiteSelect from './ui/art/ArtSiteSelect';
 import ArtGame from './ui/art/ArtGame';
-import { ArtBodyPanel, ArtPlanPanel } from './ui/art/ArtPlanPanel';
+import { ArtBodyPanel } from './ui/art/ArtBodyPanel';
+import { ArtLogPanel } from './ui/art/ArtLogPanel';
+import { ArtMapPanel } from './ui/art/ArtMapPanel';
+import { ArtItemsPanel } from './ui/art/ArtItemsPanel';
+import { ArtNightPanel } from './ui/art/ArtNightPanel';
+import { ArtPlanPanel } from './ui/art/ArtPlanPanel';
 import { ArtShelterPanel } from './ui/art/ArtShelterPanel';
+import { ArtWindowPanel } from './ui/art/ArtWindowPanel';
 import { ArtSupplyShelf } from './ui/art/ArtSupplyShelf';
 import { ArtTodoPanel } from './ui/art/ArtTodoPanel';
 import { isArtSkin } from './ui/art/skin';
 import { ChoiceResultModal, CollapseScreen, HaulModal, NightReportModal, Toasts } from './ui/modals';
 import { CrewPanel, IntelPanel, LogPanel, MapPanel, ShelterPanel, ShopModal } from './ui/panels';
-import { RadioPanel } from './ui/RadioPanel';
+// RadioPanel 已从渲染树摘除（2026-09-18 灾后电台下线）。组件与频道引擎都保留，
+// 想恢复只需把 App.tsx 里 overlay === 'intel' 的分流改回按 day 二选一。
 import { PowerPanel } from './ui/PowerPanel';
 import { HelpPanel } from './ui/Help';
 import { ItemsPanel } from './ui/ItemsPanel';
+import { siteOf } from './game/content/lookup';
 
 export default function App() {
   // 逐字段 selector 订阅（zustand v5 下整体订阅 = 任何字段变化都重渲染整棵路由树，
@@ -157,19 +165,31 @@ export default function App() {
         overlay === 'shelter' &&
         (art && gameUi === 'art' ? <ArtShelterPanel run={run} /> : <ShelterPanel run={run} />)}
       {run && overlay === 'power' && <PowerPanel run={run} />}
-      {run && overlay === 'map' && <MapPanel run={run} />}
-      {/* 一个 overlay 值分两个面板：准备期情报板 → 灾后频段网络。
-          分流放这里而不是塞进 IntelPanel，是为了让准备期分支保持原样。 */}
+      {/* 外出/采购：档案皮肤下是「钉在墙上的地图」，经典界面沿用原面板。 */}
       {run &&
-        overlay === 'intel' &&
-        (run.day < TIME.COLLAPSE_DAY ? <IntelPanel run={run} /> : <RadioPanel run={run} />)}
-      {run && overlay === 'crew' && (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) > 0 && (
+        overlay === 'map' &&
+        (art && gameUi === 'art' ? <ArtMapPanel run={run} /> : <MapPanel run={run} />)}
+      {/* 一个 overlay 值分两个面板：准备期情报板 → 灾后频段网络。
+          分流放这里而不是塞进 IntelPanel，是为了让准备期分支保持原样。
+          2026-09-18：灾后电台入口整体下线，RadioPanel 不再可达；这里保留
+          准备期分支，灾后即使 overlay 残留为 'intel' 也什么都不渲染（不炸）。 */}
+      {run && overlay === 'intel' && run.day < TIME.COLLAPSE_DAY && <IntelPanel run={run} />}
+      {run && overlay === 'crew' && (siteOf(run.siteId)?.companionCap ?? 0) > 0 && (
         <CrewPanel run={run} />
       )}
-      {run && overlay === 'log' && <LogPanel run={run} />}
-      {run && overlay === 'items' && <ItemsPanel run={run} />}
+      {/* 日志：档案皮肤下是「挂在墙上那页逐日划掉的日历」，经典界面沿用原面板。
+          入口只有底部工具条那条 .art-link 一处——房间里没有日历的场景热点。 */}
+      {run &&
+        overlay === 'log' &&
+        (art && gameUi === 'art' ? <ArtLogPanel run={run} /> : <LogPanel run={run} />)}
+      {/* 物品栏：档案皮肤下是「掀开的工具箱」，经典界面沿用原面板。 */}
+      {run &&
+        overlay === 'items' &&
+        (art && gameUi === 'art' ? <ArtItemsPanel run={run} /> : <ItemsPanel run={run} />)}
       {run && overlay === 'plan' && <ArtPlanPanel run={run} />}
       {run && overlay === 'body' && <ArtBodyPanel run={run} />}
+      {/* 窗户：入口只有 ArtGame 的窗热点一处，所以与 plan/body 一样天然是档案皮肤专属 */}
+      {run && overlay === 'window' && <ArtWindowPanel run={run} />}
       {run && overlay === 'todo' && <ArtTodoPanel run={run} />}
       {run && overlay === 'supplies' && <ArtSupplyShelf run={run} />}
       {overlay === 'meta' && <MetaPanel />}
@@ -179,7 +199,11 @@ export default function App() {
       {/* 模态 */}
       {run && openShop && <ShopModal run={run} locationId={openShop} />}
       {run && haul && <HaulModal run={run} />}
-      {run && nightReport && <NightReportModal run={run} />}
+      {/* 过夜：档案皮肤下是「床边那一晚」的记录纸，经典皮肤沿用原 Modal。
+          两者逐字段等价（见 ArtNightPanel 顶部注释），分流放在这里而不是塞进任一个面板。 */}
+      {run &&
+        nightReport &&
+        (art && gameUi === 'art' ? <ArtNightPanel run={run} /> : <NightReportModal run={run} />)}
       {/* 档案皮肤的事件在书页里就地结算（结果写成页上手写批注），所以屏蔽这个公共弹窗；
           经典皮肤照旧。 */}
       {!(art && gameUi === 'art') && <ChoiceResultModal />}

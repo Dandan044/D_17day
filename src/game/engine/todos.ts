@@ -6,7 +6,7 @@
  * 阈值弧负责「讲故事」，这里只负责「报状态」。
  */
 import { AP, EXPOSURE, FOOD_NEED, HEALTH, RAD, TIME, WATER_NEED, WEAR } from '../balance';
-import { CONDITION_BY_ID } from '../content/conditions';
+import { conditionDef, conditionName } from '../content/lookup';
 import type { ActionHook, ConditionId, RunState } from '../types';
 import { LOAD_NAME, computePower } from './power';
 import { radiationShield } from './tags';
@@ -23,11 +23,13 @@ export interface TodoItem {
   fix: string;
 }
 
-/** 重症：显式列举（无 severity 字段的条件型重症）+ severity≥4 的病理性重症 */
+/** 重症：显式列举（无 severity 字段的条件型重症）+ severity≥4 的病理性重症。
+ *  导出是给「身体状况」人体图上色用的——图上的斜纹标记必须与这里的判断同真源，
+ *  否则同一张病在左页被标成重症、在身体图上却没有斜纹。 */
 const SEVERE_CONDITIONS: ConditionId[] = ['dehydrationSevere', 'hypothermiaSevere', 'coPoisoning'];
 
-function isSevere(c: ConditionId): boolean {
-  return SEVERE_CONDITIONS.includes(c) || (CONDITION_BY_ID[c]?.severity ?? 0) >= 4;
+export function isSevereCondition(c: ConditionId): boolean {
+  return SEVERE_CONDITIONS.includes(c) || (conditionDef(c)?.severity ?? 0) >= 4;
 }
 
 function heads(run: RunState): number {
@@ -148,14 +150,17 @@ export function collectTodos(run: RunState): TodoItem[] {
   }
 
   // ---- 病情：重症红、轻中症橙 ----
-  const severe = run.conditions.filter(isSevere);
-  const mild = run.conditions.filter((c) => !isSevere(c));
+  // `run.conditions` 是存档里的字符串，可能是旧版状态 id。
+  // 这里的 `.map` 一旦取到 undefined 的 `.name`，整块待办列表就渲染不出来（React 卸树）。
+  const known = run.conditions.filter((c) => conditionDef(c));
+  const severe = known.filter(isSevereCondition);
+  const mild = known.filter((c) => !isSevereCondition(c));
   if (severe.length > 0) {
     const lines = severe.map((c) => {
-      const def = CONDITION_BY_ID[c];
       const age = run.conditionAge[c] ?? 0;
-      const w = def.worsen ? `，再拖可能恶化为${CONDITION_BY_ID[def.worsen.into]?.name ?? def.worsen.into}` : '';
-      return `${def.name} · 已 ${age} 天${w}。`;
+      const into = conditionDef(c)?.worsen?.into;
+      const w = into ? `，再拖可能恶化为${conditionName(into)}` : '';
+      return `${conditionName(c)} · 已 ${age} 天${w}。`;
     });
     red.push({
       id: 'condition-severe',
@@ -167,12 +172,15 @@ export function collectTodos(run: RunState): TodoItem[] {
   }
   if (mild.length > 0) {
     const lines = mild.map((c) => {
-      const def = CONDITION_BY_ID[c];
       const age = run.conditionAge[c] ?? 0;
-      const w = def.worsen?.afterDays !== undefined ? `，拖过 ${def.worsen.afterDays} 天可能恶化为${CONDITION_BY_ID[def.worsen.into]?.name ?? def.worsen.into}` : '';
-      return `${def.name} · 已 ${age} 天${w}。`;
+      const worsen = conditionDef(c)?.worsen;
+      const w =
+        worsen?.afterDays !== undefined
+          ? `，拖过 ${worsen.afterDays} 天可能恶化为${conditionName(worsen.into)}`
+          : '';
+      return `${conditionName(c)} · 已 ${age} 天${w}。`;
     });
-    const hint = mild.some((c) => CONDITION_BY_ID[c]?.kind === 'pathogenic')
+    const hint = mild.some((c) => conditionDef(c)?.kind === 'pathogenic')
       ? '用药治疗；医疗站等级足够时今晚可治愈。'
       : '按病因处理（通风／保暖／喝水），或用药缓解。';
     orange.push({
@@ -191,8 +199,8 @@ export function collectTodos(run: RunState): TodoItem[] {
       id: 'filter-dead',
       level: 'red',
       title: '滤芯报废',
-      lines: ['滤芯耐久已耗尽，净水器与空气过滤器全部停摆。', `备用滤芯库存：${run.items.filter}`],
-      fix: run.items.filter > 0 ? '去物资面板换上备用滤芯。' : '尽快找到滤芯或五金零件应急。',
+      lines: ['滤芯耐久已耗尽，净水器与空气过滤器全部停摆。', `备用滤芯库存：${run.items?.filter ?? 0}`],
+      fix: (run.items?.filter ?? 0) > 0 ? '去物资面板换上备用滤芯。' : '尽快找到滤芯或五金零件应急。',
     });
   } else if (filterInUse && run.wear.filterLife < 6) {
     orange.push({

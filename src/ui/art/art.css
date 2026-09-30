@@ -1008,18 +1008,8 @@ button.art-link {
   border: 1px solid rgba(211, 219, 226, 0.12);
 }
 
-/* 纯装饰抠图层（如窗）：有遮挡关系但无交互，不出光晕轮廓，不接事件。 */
-.art-decor {
-  position: absolute;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.art-decor img {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
+/* 2026-09-21：`.art-decor`（纯装饰抠图层）随窗户改成可点热点一并删除——
+   它此前只服务窗户一处，窗成了 `ArtCutout` 之后没有任何元素再挂这个类。 */
 
 /* 左下角常驻身体三要素：黑白末世风。fixed z-50 压在弹窗（z-40）与事件层之上。 */
 .art-stat-hud {
@@ -4107,20 +4097,24 @@ button.art-link {
 
 
 /* ============================================================
-   三栅的手绘线稿（发电/配给/温度计）
+   手绘线稿的填色引擎（计划表 / 清点单 / 过夜温差图共用）
    ------------------------------------------------------------
-   线稿与 -mask 成对使用：填充层在下、线稿在上，色块被 mask 裁进形状内部。
+   线稿与 -mask 成对使用：填充层在下、线稿在上，色块被 mask 裁进形状内部
+   （不裁的话线稿是白底、轮廓之外也透明，颜色会从形状外面渗出来糊成一片）。
    父层**不带 z-index**——定位元素一旦有 z-index 就形成 stacking context（隔离组），
    里面的 mask/clip 会失效，表现是"色块糊成一片、形状边界全无"。
+
+   类名不带 `pl`：组件已抽到 `LineFig.tsx`，"计划表"这个名字会误导后来的人
+   以为只有那一屏能用。色值一律由调用方经 `--fill-c` 传进来，所以这里与纸色无关。
    ============================================================ */
 
-.art-pl-linefig {
+.art-lfig {
   position: relative;
   display: block;
   width: 100%;
 }
 
-.art-pl-fill {
+.art-lfig-fill {
   position: absolute;
   inset: 0;
   -webkit-mask-position: center;
@@ -4134,7 +4128,7 @@ button.art-link {
 /* 色带锚在底部，高度 = 该段占比；两层叠出"液体分层"的观感 */
 /* 色带：底边在 --fill-b、高度 --fill-h——**两段不重叠**才是两层液体；
    早先让两段都从底部起、上层会把下层整个盖掉，看起来永远单色（踩过）。 */
-.art-pl-fill > i {
+.art-lfig-fill > i {
   position: absolute;
   left: 0;
   right: 0;
@@ -4143,7 +4137,7 @@ button.art-link {
   background: var(--fill-c);
 }
 
-.art-pl-linefig-line {
+.art-lfig-line {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -4330,26 +4324,6 @@ button.art-link {
   color: var(--pl-ink-3);
 }
 
-/* 供电图的形状标注（发电机 / 蓄电池）：按量出的分割线宽度分配，与图上两形状对齐 */
-.art-pl-powerfig {
-  display: block;
-}
-
-.art-pl-powerfig-cap {
-  display: flex;
-  margin-top: 2px;
-}
-
-.art-pl-powerfig-cap em {
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--pl-ink-3);
-}
-
 /* 已选的那一项：朱红框 + 淡底，让人一眼看出"这条是我刚落的那手"。
    结算没关掉之前，右页会一直停在这一件上（否则结果会跑到下一条正文下面）。 */
 .art-book-choice.is-picked {
@@ -4379,6 +4353,8 @@ button.art-link {
   --sh-rule: rgba(20, 22, 21, 0.3);
   --sh-rule-2: rgba(20, 22, 21, 0.58);
   --sh-rule-3: rgba(20, 22, 21, 0.86);
+  /* 四角 tick 的墨色（见 .art-paper-tick） */
+  --tick-c: var(--sh-rule-2);
   --sh-red: #8f2a12;
   --sh-ochre: #5c3f0a;
   --sh-green: #27492f;
@@ -4386,6 +4362,15 @@ button.art-link {
   --sh-paper-hi: #cfc09a;
   --sh-card: rgba(20, 22, 21, 0.05);
   --sh-stage: #241d16;
+  /* 水位表填色：口粮墨绿 / 水靛蓝 / 蓄电浅赭。
+     **色相刻意与今日计划表一致**（`--pl-green-lt` / `--pl-blue-lt` / `--pl-ochre-lt`）——
+     同一份库存在两屏必须是同一个颜色，否则玩家会以为是两种口径。
+     `.art-pl-veil` 的变量不继承（浮层挂在 `.art-root` 外），所以在这里各定义一份。
+     蓄电没照抄计划表那支**深**赭 `#5c3f0a`：色块垫在线稿下面，深赭会把电池柜的墨线整个吃掉
+     （实测那一格看成一块实心深色方块），所以提亮一档。 */
+  --sh-green-lt: #6f9e78;
+  --sh-blue-lt: #5f86a6;
+  --sh-ochre-lt: #b08a3c;
   color: var(--sh-ink);
   font-weight: 500;
 }
@@ -4423,7 +4408,7 @@ button.art-link {
   display: flex;
   flex-direction: column;
   width: min(1180px, 96vw);
-  height: min(780px, 90vh);
+  height: min(640px, 88vh);
   background: var(--sh-paper);
   box-shadow:
     0 40px 88px -26px rgba(0, 0, 0, 0.8),
@@ -4576,10 +4561,141 @@ button.art-link {
   padding: 16px 20px 12px;
 }
 
-/* 面板现在只剩台账：窄栏居中，读起来像一张夹在框里的清单 */
+/* 面板现在只剩「水位表 + 台账」两段：窄栏居中，读起来像一张夹在框里的清单 */
 .art-shelf-body.is-ledger .art-shelf-ledger {
-  max-width: 560px;
+  max-width: 720px;
   margin: 0 auto;
+}
+
+/* ============================================================
+   水位表：水 / 口粮 / 蓄电 三格线稿填色
+   ============================================================ */
+
+.art-shelf-gauges {
+  display: flex;
+  gap: 24px;
+  max-width: 720px;
+  margin: 0 auto 16px;
+  padding-bottom: 14px;
+  border-bottom: 1.4px solid var(--sh-rule-2);
+}
+
+.art-shelf-gauge {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+}
+
+.art-shelf-gaugename {
+  font-family: var(--art-serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  /* 名字居中压在实物上方 —— 三格的图各自居中、宽度不一，名称跟着图走才像「这件东西的标签」 */
+  text-align: center;
+  color: var(--sh-ink);
+}
+
+/* 线稿槽：定高，靠 aspect-ratio 反推宽度 —— 水是竖图（0.8714）、蓄电裁出来是 0.77，
+   三张摆在一起高度必须一样，宽度各随各的比例。 */
+.art-shelf-gaugebox {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 150px;
+}
+
+.art-shelf-gaugebox .art-lfig {
+  width: auto;
+  height: 150px;
+}
+
+/* 「无容器」：分母为 0 时线稿只描边，读数位置说清为什么没有百分比 */
+.art-shelf-nocap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--sh-ink-3);
+}
+
+/* ---- 蓄电格：从 line-power 右半裁出电池柜 ---- */
+.art-shelf-crop {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  height: 150px;
+}
+
+.art-shelf-cropshift {
+  position: absolute;
+  display: block;
+}
+
+/* 裁进来的那张完整线稿撑满被放大的框（宽高都给死，`aspect-ratio` 自然让位）。
+   ⚠️ 这一层链路上**不能出现 z-index**：一旦形成 stacking context，mask 会失效。 */
+.art-shelf-crop .art-lfig.is-cropped {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.art-shelf-gaugeread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.art-shelf-gaugeval {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sh-ink);
+}
+
+.art-shelf-gaugeval em {
+  margin-left: 3px;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--sh-ink-3);
+}
+
+.art-shelf-gaugepct {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sh-ochre);
+}
+
+.art-shelf-gaugedays,
+.art-shelf-gaugenote {
+  flex: 0 0 100%;
+  margin-top: -2px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--sh-ink-3);
+}
+
+.art-shelf-gaugenote {
+  color: var(--sh-ink-2);
+}
+
+/* 剩不到 3 天：读数与百分比一起转告警色（线稿的填色不动 —— 那是「有多少」，
+   颜色已经承担了「是什么」；再染色读取会乱） */
+.art-shelf-gauge.is-low .art-shelf-gaugeval,
+.art-shelf-gauge.is-low .art-shelf-gaugepct {
+  color: var(--sh-red);
 }
 
 /* 图签最后一格放入口按钮：两个并排，撑满该格 */
@@ -4590,19 +4706,8 @@ button.art-link {
 }
 
 /* 注：货架的主视觉已搬回**场景里**（局内那个货架贴图按「口粮档 × 用水档」切成 25 态），
-   这里不再画码放舞台——本面板只剩纸面台账。 */
-
-/* 口粮/饮水两行的「约够 N 天（单人标准）」小注 */
-.art-shelf-rowdays {
-  margin-left: 7px;
-  padding-left: 7px;
-  border-left: 1px solid var(--sh-rule);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 600;
-  color: var(--sh-ochre);
-}
+   这里不再画码放舞台——本面板只剩「水位表 + 台账」。
+   口粮/饮水的「约够 N 天」原来贴在这两行的行内，现在归水位表的第三行（`.art-shelf-gaugedays`）。 */
 
 .art-shelf-ledger {
   padding: 10px 14px 12px;
@@ -4631,7 +4736,11 @@ button.art-link {
   background: var(--sh-rule);
 }
 
+/* 台账六项分两栏：一行一个数值摊在 720px 上会很稀，两栏读起来像一张真单子 */
 .art-shelf-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 32px;
   margin: 0;
 }
 
@@ -4660,10 +4769,6 @@ button.art-link {
   font-size: 13px;
   font-weight: 700;
   color: var(--sh-ink);
-}
-
-.art-shelf-row.is-batt dd {
-  color: var(--sh-green);
 }
 
 .art-shelf-unit {
@@ -4744,10 +4849,4097 @@ button.art-link {
   color: var(--sh-ink);
 }
 
+@media (max-width: 900px) {
+  /* 窄屏：水位表三格竖排，台账回一栏 */
+  .art-shelf-gauges {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .art-shelf-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .art-shelf-sheet,
   .art-shelf-room,
   .art-shelf-veil::before {
     animation: none;
+  }
+}
+
+/* ============================================================
+   纸面浮层：过夜 / 身体状况（共享骨架）
+   ------------------------------------------------------------
+   两屏是同一件事的两张纸：一张冷灰蓝的夜间记录纸、一张米黄的体征记录卡。
+   「热点实物在景深之外虚焦 + 纸铺满整屏 + 文字线条全走 CSS」这套骨架完全一样，
+   所以抽成一个 .art-paper-* 前缀共用，两屏只用 .is-nt / .is-bd 换墨色与纸色，
+   不在各自的命名空间里把同一段骨架再抄一遍。
+   （老三屏 art-shelter-* / art-pl-* / art-nb-* 各写了一套，是历史原因，本次未动它们。）
+
+   **墨色必须换**：深色 UI 的琥珀与告警在浅纸上没有对比度。纸上改走墨色系——
+   朱红=坏、墨绿=好、赭石=警示、墨蓝=信息。
+   ============================================================ */
+
+/* 默认值＝过夜的冷灰蓝纸 */
+.art-paper-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 2vh 3vw;
+  /* 浮层挂在 .art-root 外面，--art-serif 不继承，这里必须重新定义一次 */
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  --pp-ink: #1b2028;
+  --pp-ink-2: #39434c;
+  --pp-ink-3: #4d5860;
+  --pp-rule: rgba(24, 30, 38, 0.26);
+  --pp-rule-2: rgba(24, 30, 38, 0.5);
+  --pp-rule-3: rgba(24, 30, 38, 0.85);
+  --pp-red: #8f2a12;
+  --pp-red-2: #a83a1c;
+  --pp-green: #27492f;
+  --pp-ochre: #5c3f0a;
+  --pp-blue: #23425c;
+  --pp-paper: #97a5ae;
+  --pp-card: rgba(20, 26, 32, 0.06);
+  --pp-detail: rgba(20, 26, 32, 0.09);
+  --pp-edge: rgba(20, 28, 36, 0.42);
+  --pp-vignette: rgba(24, 32, 40, 0.3);
+  color: var(--pp-ink);
+  font-weight: 500;
+  font-family: var(--art-serif);
+}
+
+/* 身体状况：米黄卡纸（比计划纸亮一档，靠亮度与它分家、靠色相与冷灰蓝纸分家） */
+.art-paper-veil.is-bd {
+  --pp-ink: #1d1a15;
+  --pp-ink-2: #3a342a;
+  --pp-ink-3: #4c463a;
+  --pp-rule: rgba(30, 26, 18, 0.26);
+  --pp-rule-2: rgba(30, 26, 18, 0.5);
+  --pp-rule-3: rgba(30, 26, 18, 0.85);
+  --pp-red: #93270f;
+  --pp-red-2: #ad3a1b;
+  --pp-green: #2c4a2f;
+  --pp-ochre: #6b4a0c;
+  --pp-paper: #cbbd9c;
+  --pp-card: rgba(30, 26, 18, 0.06);
+  --pp-detail: rgba(30, 26, 18, 0.09);
+  --pp-edge: rgba(40, 30, 15, 0.42);
+  --pp-vignette: rgba(50, 36, 16, 0.28);
+}
+
+/* ---- 景深底：手里拿着纸，房间在焦点之外 ---- */
+.art-paper-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.33) saturate(0.7);
+  animation: art-paper-lift 460ms ease both;
+}
+
+.art-paper-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.3) 24%, rgba(4, 6, 8, 0.86) 100%);
+  animation: art-paper-lift 400ms ease both;
+}
+
+@keyframes art-paper-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---- 纸 ---- */
+.art-paper-sheet {
+  position: relative;
+  z-index: 2;
+  width: min(1108px, 94vw);
+  height: min(884px, 94vh);
+  background: var(--pp-paper);
+  /* 缩放锚点＝场景里那个热点实物的位置，纸从它那儿飞过来：
+     床在侧墙偏左下（artLayout box [0, .52, .39, .48] → 中心 20% 76%）。
+     框一改这里要跟着改——别凭感觉写。 */
+  transform-origin: 20% 76%;
+  box-shadow:
+    0 44px 92px -28px rgba(0, 0, 0, 0.82),
+    0 8px 20px rgba(0, 0, 0, 0.48);
+  animation: art-paper-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 身体状况的纸大一点（五项体征 + 伤病卡 + 暴露度），锚点也在别处：
+   医疗箱 box [.4, .548, .082, .079] → 中心 44% 59%。 */
+.art-paper-veil.is-bd .art-paper-sheet {
+  width: min(1176px, 95vw);
+  height: min(944px, 95vh);
+  transform-origin: 44% 59%;
+  animation-name: art-bd-in;
+}
+
+.art-paper {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 0 1px var(--pp-edge),
+    inset 0 0 150px var(--pp-vignette);
+}
+
+@keyframes art-paper-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-26vw, 22vh, 0) scale(0.2) rotate(-2.5deg);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes art-bd-in {
+  from {
+    opacity: 0;
+    transform: translate3d(-7vw, 15vh, 0) scale(0.22) rotate(-1.5deg);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-paper-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-paper-veil.is-closing .art-paper-sheet {
+  animation: art-paper-out 240ms ease-in both;
+}
+
+.art-paper-veil.is-closing .art-paper-room,
+.art-paper-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-paper-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(-20vw, 18vh, 0) scale(0.24) rotate(-2deg);
+  }
+}
+
+/* ---- 边框与角标 ---- */
+.art-paper-frame {
+  position: absolute;
+  inset: 1.2% 1.2%;
+  display: flex;
+  flex-direction: column;
+  border: 1.6px solid var(--pp-rule-3);
+}
+
+.art-paper-frame::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 0.8px solid var(--pp-rule);
+  pointer-events: none;
+}
+
+/* 四角 tick：档案系统里「这是一张表单」的标记。
+   颜色走 --tick-c 兜底到纸族的 --pp-rule-2，别的屏（挂历 / 清点单）只要在自己的
+   veil 上声明一次 --tick-c 就能复用同一套角标，不必各写四份。
+   ⚠️ 只给**纸面**用：地图是钉在墙上的板、工具箱是掀开的箱，都不是表单，不挂角标。 */
+.art-paper-tick {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  pointer-events: none;
+}
+
+.art-paper-tick.is-tl {
+  left: -6px;
+  top: -6px;
+  border-left: 1.2px solid var(--tick-c, var(--pp-rule-2));
+  border-top: 1.2px solid var(--tick-c, var(--pp-rule-2));
+}
+
+.art-paper-tick.is-tr {
+  right: -6px;
+  top: -6px;
+  border-right: 1.2px solid var(--tick-c, var(--pp-rule-2));
+  border-top: 1.2px solid var(--tick-c, var(--pp-rule-2));
+}
+
+.art-paper-tick.is-bl {
+  left: -6px;
+  bottom: -6px;
+  border-left: 1.2px solid var(--tick-c, var(--pp-rule-2));
+  border-bottom: 1.2px solid var(--tick-c, var(--pp-rule-2));
+}
+
+.art-paper-tick.is-br {
+  right: -6px;
+  bottom: -6px;
+  border-right: 1.2px solid var(--tick-c, var(--pp-rule-2));
+  border-bottom: 1.2px solid var(--tick-c, var(--pp-rule-2));
+}
+
+/* ---- 图头 ---- */
+.art-paper-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 22px 9px;
+  border-bottom: 1.6px solid var(--pp-rule-3);
+}
+
+.art-paper-headmain {
+  min-width: 0;
+}
+
+.art-paper-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  color: var(--pp-ink-2);
+}
+
+.art-paper-stamp {
+  padding: 1px 7px;
+  border: 1px solid var(--pp-rule-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--pp-ink);
+}
+
+.art-paper-title {
+  margin: 5px 0 0;
+  font-family: var(--art-serif);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--pp-ink);
+}
+
+.art-paper-sub {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  letter-spacing: 0.05em;
+  color: var(--pp-ink-2);
+}
+
+.art-paper-headside {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.art-paper-seal {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 2.4px solid var(--pp-red);
+  color: var(--pp-red);
+  font-family: var(--art-serif);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  transform: rotate(-7deg);
+}
+
+.art-paper-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1.3px solid var(--pp-rule-2);
+  background: var(--pp-card);
+  color: var(--pp-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.art-paper-close:hover {
+  border-color: var(--pp-red);
+  color: var(--pp-red);
+}
+
+/* ---- 正文 ---- */
+.art-paper-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 22px 4px;
+}
+
+.art-paper-body::-webkit-scrollbar {
+  width: 9px;
+}
+
+.art-paper-body::-webkit-scrollbar-track {
+  background: rgba(20, 22, 21, 0.06);
+}
+
+.art-paper-body::-webkit-scrollbar-thumb {
+  background: var(--pp-rule-2);
+}
+
+.art-paper-sec {
+  margin-bottom: 11px;
+}
+
+.art-paper-sechead {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 6px;
+}
+
+.art-paper-sechead span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--pp-ink-2);
+  white-space: nowrap;
+}
+
+.art-paper-sechead i {
+  flex: 1;
+  height: 1px;
+  background: var(--pp-rule-2);
+}
+
+.art-paper-sechead em {
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  color: var(--pp-ink-3);
+}
+
+/* ---- 图签 ---- */
+.art-paper-tb {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1.45fr 1.15fr 0.85fr 0.95fr 0.75fr;
+  margin: 4px 22px 0;
+  border-top: 1.6px solid var(--pp-rule-3);
+  border-bottom: 1.6px solid var(--pp-rule-3);
+}
+
+.art-paper-tbcell {
+  min-width: 0;
+  padding: 6px 10px;
+  border-right: 1px solid var(--pp-rule-2);
+}
+
+.art-paper-tbcell:last-child {
+  border-right: 0;
+}
+
+.art-paper-tbk {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--pp-ink-3);
+}
+
+.art-paper-tbv {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--art-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pp-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- 主按钮 ---- */
+.art-paper-act {
+  flex: none;
+  margin: 10px 22px 12px;
+  padding: 11px 16px;
+  border: 1.8px solid var(--pp-ink);
+  background: var(--pp-ink);
+  color: var(--pp-paper);
+  font-family: var(--art-serif);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.art-paper-act:hover {
+  background: var(--pp-red);
+  border-color: var(--pp-red);
+}
+
+/* ============================================================
+   过夜：结算条目
+   ============================================================ */
+
+.art-nt-week {
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--pp-red);
+  background: var(--pp-card);
+}
+
+.art-nt-weektitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--pp-red);
+}
+
+.art-nt-weekbody {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--pp-ink);
+}
+
+.art-nt-died {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--pp-red);
+  background: var(--pp-card);
+  font-size: 13.5px;
+  line-height: 1.7;
+  font-weight: 700;
+  color: var(--pp-red);
+}
+
+/* ---- 折痕让位 ---- */
+/* 夜间记录纸的横折痕是**一对**暗带：47.0–49.4% 与 52.6–53.9%，中间 49.4–52.6% 是折脊
+   （实测 paper-night.jpg，最暗 -4.9 灰阶，纸均值 174）。span 合计约 7% 高，
+   比密集台账里任何一条空白通道都宽——所以折痕一定会压到某几行字，这是折过的纸本来就有的样子，
+   不去消除。真正要躲的是它和 CSS 画的标题横线（.art-paper-sechead i）重合：
+   两条线挨在一起就不读成折痕了，读成画歪了。
+
+   做法：把分区标题错开那两条带（见 night-body-shot.mjs 的 crease 探针，它逐条量净空）；
+   20px 的空当在稀疏的日子是白花（.art-paper-body 是 flex:1，内容比区域短时底部自然留白），
+   所以同一条规则里把周报块内衬收一点，密集的日子靠这 ~20px 抵掉。 */
+.art-paper-veil.is-nt .art-paper-sec + .art-paper-sec {
+  margin-top: 10px;
+}
+.art-paper-veil.is-nt .art-nt-week {
+  margin-bottom: 8px;
+  padding: 5px 12px;
+}
+.art-paper-veil.is-nt .art-paper-sechead {
+  margin-bottom: 5px;
+}
+
+/* 标题万一还是压到折痕上时的兜底：折痕位置随当天结算条数浮动，不可能每屏都错开，
+   所以给标题一层极轻的浮雕，任何位置压在暗带上都还立得住。 */
+.art-paper-veil.is-nt .art-paper-sechead span {
+  text-shadow:
+    0 1px 0 rgba(226, 235, 241, 0.34),
+    0 -1px 0 rgba(20, 28, 36, 0.16);
+}
+
+/* 注：原来的「环境行」（室外/室内估/实际 + 油电）与「三个大数」（生命·理智·暴露度）
+   已被四块图解取代 —— 三针在图 3、油电对账在图 2、生命在图 1 的终点与头右读数、
+   暴露度在图 4、理智在图 1 的标题行右端。同一屏里同一个数字出现两次就是冗余。 */
+
+/* ============================================================
+   身体状况：体征条与伤病卡
+   ============================================================ */
+
+.art-bd-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.art-bd-gauge {
+  display: grid;
+  grid-template-columns: 54px 1fr 44px;
+  align-items: center;
+  gap: 13px;
+}
+
+.art-bd-glabel {
+  font-family: var(--art-serif);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--pp-ink);
+}
+
+.art-bd-bar {
+  position: relative;
+  height: 12px;
+  border: 1px solid var(--pp-rule-2);
+  background: var(--pp-card);
+  overflow: hidden;
+}
+
+.art-bd-bar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: block;
+  /* 条上刻一道细斜线，像纸上尺子的刻度，不是纯色块 */
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.18) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+/* 语义色：生命朱红 / 体力赭石 / 理智墨蓝 / 人性墨绿 / 名声灰 */
+.art-bd-bar i.t-hp {
+  background-color: var(--pp-red-2);
+}
+
+.art-bd-bar i.t-stamina {
+  background-color: var(--pp-ochre);
+}
+
+.art-bd-bar i.t-sanity {
+  background-color: var(--pp-blue);
+}
+
+.art-bd-bar i.t-humanity {
+  background-color: var(--pp-green);
+}
+
+.art-bd-bar i.t-reputation {
+  background-color: var(--pp-ink-3);
+}
+
+.art-bd-gval {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--pp-ink);
+}
+
+/* ---- 伤病卡 ---- */
+.art-bd-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.art-bd-card {
+  position: relative;
+  /* 压到两行：病名一行、恶化倒计时一行（有才出）。原来的大边框 + 描述段占掉近一半纸高 */
+  padding: 5px 9px 6px;
+  border-left: 3px solid var(--pp-rule-2);
+  background: var(--pp-detail);
+}
+
+.art-bd-card.is-treatable {
+  border-left-color: var(--pp-red);
+}
+
+.art-bd-cardtop {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.art-bd-name {
+  font-family: var(--art-serif);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--pp-red);
+}
+
+.art-bd-immune {
+  font-size: 11.5px;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--pp-ink-3);
+}
+
+.art-bd-tier {
+  padding: 0 6px;
+  border: 1px solid var(--pp-rule-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--pp-ink-2);
+}
+
+.art-bd-tier.is-bad {
+  border-color: var(--pp-red);
+  color: var(--pp-red);
+}
+
+.art-bd-tier.is-warn {
+  border-color: var(--pp-ochre);
+  color: var(--pp-ochre);
+}
+
+.art-bd-tier.is-good {
+  border-color: var(--pp-green);
+  color: var(--pp-green);
+}
+
+.art-bd-tier.is-cond {
+  border-color: var(--pp-blue);
+  color: var(--pp-blue);
+}
+
+.art-bd-med {
+  margin-left: auto;
+  flex: none;
+  padding: 3px 10px;
+  border: 1.3px solid var(--pp-rule-2);
+  background: var(--pp-card);
+  color: var(--pp-ink);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.art-bd-med:hover:not(:disabled) {
+  border-color: var(--pp-green);
+  color: var(--pp-green);
+}
+
+.art-bd-med:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.art-bd-desc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--pp-ink-2);
+}
+
+/* 悬停条：默认藏起来，鼠标进卡才出现（照纸面弹一条便签的做法） */
+.art-bd-tip {
+  position: absolute;
+  right: 0;
+  top: calc(100% - 3px);
+  z-index: 6;
+  display: none;
+  width: 320px;
+  padding: 9px 11px;
+  border: 1.3px solid var(--pp-rule-3);
+  background: var(--pp-paper);
+  box-shadow: 3px 5px 12px rgba(0, 0, 0, 0.32);
+}
+
+.art-bd-card:hover .art-bd-tip {
+  display: block;
+}
+
+.art-bd-tiprow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.art-bd-tiprow + .art-bd-tiprow {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--pp-rule);
+}
+
+.art-bd-tiprow.is-sub {
+  border-top: 0;
+  margin-top: 2px;
+  padding-top: 0;
+  padding-left: 10px;
+}
+
+.art-bd-tipk {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--pp-ink-3);
+}
+
+.art-bd-tipv {
+  text-align: right;
+  color: var(--pp-ink);
+}
+
+.art-bd-tipv.is-bad {
+  color: var(--pp-red);
+}
+
+.art-bd-tipv.is-good {
+  color: var(--pp-green);
+}
+
+.art-bd-note {
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--pp-rule);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--pp-ink-3);
+}
+
+/* ---- 暴露度（灾后） ---- */
+.art-bd-tonight {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pp-rule);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-paper-sheet,
+  .art-paper-room,
+  .art-paper-veil::before {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   暴露度之眼（EyeFigure）——窗浮层 / 身体状况 / 过夜图解三处共用
+   ------------------------------------------------------------
+   开合只靠两片眼睑帘的 translateY（见 EyeFigure.tsx 文件头）：
+   SVG 的 path d 不能过渡，而 transform 可以。所以这里**只**有两件事：
+   按档位给 --eye-open / 瞳孔位移，以及按档位给轮廓光。
+
+   眼睑不是靠 mask 而是靠**不透明填充**盖住虹膜，所以 --eye-lid
+   必须是不透明色，且要跟它所在的那一屏的背景同族：
+   纸面上是暖灰（像眼皮），窗玻璃前是近黑（像夜色）。
+   ============================================================ */
+
+.art-eye {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  /* 默认＝纸面（身体状况 / 过夜） */
+  --eye-open: 0.1;
+  --pupil-x: 0;
+  --pupil-y: 0;
+  --pupil-s: 1;
+  --eye-ink: currentColor;
+  --eye-sclera: #c3ccd1;
+  --eye-iris: #7c6742;
+  --eye-lid: #ded2b6;
+  --eye-pupil: #16191d;
+  --eye-glint: rgba(255, 255, 255, 0.7);
+}
+
+.art-eye > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ---- 五档开度 + 瞳孔朝向 ----
+   瞳孔从「视线避开」（偏向外侧、瞳孔放大）走到「正对锁定」（居中、收缩）。
+   「被盯上了」这一层意思靠朝向比靠开度更直接。 */
+.art-eye[data-tier='0'] {
+  --eye-open: 0.1;
+  --pupil-x: 7px;
+  --pupil-y: 3px;
+  --pupil-s: 1;
+}
+
+.art-eye[data-tier='1'] {
+  --eye-open: 0.28;
+  --pupil-x: 5px;
+  --pupil-y: 1px;
+  --pupil-s: 0.923;
+}
+
+.art-eye[data-tier='2'] {
+  --eye-open: 0.48;
+  --pupil-x: 2px;
+  --pupil-y: -1px;
+  --pupil-s: 0.846;
+}
+
+.art-eye[data-tier='3'] {
+  --eye-open: 0.7;
+  --pupil-x: 0px;
+  --pupil-y: 0px;
+  --pupil-s: 0.731;
+}
+
+.art-eye[data-tier='4'] {
+  --eye-open: 0.94;
+  --pupil-x: 0px;
+  --pupil-y: 0px;
+  --pupil-s: 0.615;
+}
+
+/* ---- 五档轮廓光 ----
+   色值与 .art-cut.is-pulse 同族：琥珀→朱红，越靠后越亮、越远。
+   光在 svg 上而不在外层 span 上，否则图注文字也会被镶边。 */
+.art-eye[data-tier='0'] > svg {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.1));
+}
+
+.art-eye[data-tier='1'] > svg {
+  filter: drop-shadow(0 0 4px rgba(224, 161, 18, 0.28));
+}
+
+.art-eye[data-tier='2'] > svg {
+  filter: drop-shadow(0 0 7px rgba(224, 161, 18, 0.45));
+}
+
+.art-eye[data-tier='3'] > svg {
+  filter: drop-shadow(0 0 10px rgba(190, 90, 20, 0.7)) drop-shadow(0 0 26px rgba(190, 90, 20, 0.35));
+}
+
+.art-eye[data-tier='4'] > svg {
+  filter: drop-shadow(0 0 12px rgba(190, 40, 20, 0.95)) drop-shadow(0 0 34px rgba(190, 40, 20, 0.5));
+}
+
+/* ---- 眼球 ---- */
+.art-eye-sclera {
+  fill: var(--eye-sclera);
+}
+
+.art-eye-iris {
+  fill: var(--eye-iris);
+}
+
+.art-eye-iris-ring {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.32);
+  stroke-width: 2;
+}
+
+.art-eye-pupil {
+  fill: var(--eye-pupil);
+  /* circle 的默认 transform-origin 在画布原点，缩放会把瞳孔甩飞；
+     fill-box 让原点落在它自己的包围盒中心。 */
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: translate(var(--pupil-x), var(--pupil-y)) scale(var(--pupil-s));
+  transition:
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    fill 520ms;
+}
+
+.art-eye-glint {
+  fill: var(--eye-glint);
+  opacity: 0.85;
+}
+
+.art-eye-outline {
+  fill: none;
+  stroke: var(--eye-ink);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+}
+
+/* ---- 眼睑帘：只动 transform，过渡就出在这里 ----
+   下睑行程 28 而不是 22：眼裂下缘的弧在中线最深（y≈89，见 EyeFigure 的 APERTURE），
+   22 到了 4 档（--eye-open .94）只走到 y≈82.7，会在瞳孔下面留一条 6 单位的黑月牙。
+   窗浮层里眼睑是近黑（夜色），那条月牙会被读成「眼睛下面有个洞」而不是「下眼睑」。 */
+.art-eye-lid {
+  fill: var(--eye-lid);
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.art-eye-lid.is-upper {
+  transform: translateY(calc(var(--eye-open) * -30px));
+}
+
+.art-eye-lid.is-lower {
+  transform: translateY(calc(var(--eye-open) * 28px));
+}
+
+.art-eye-cap {
+  font-family: var(--art-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--eye-ink);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* 小图（过夜图解 92px）：描边换成不随缩放变细的那种，否则糊成一片 */
+.art-eye.is-mini .art-eye-outline {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.4px;
+}
+
+.art-eye.is-mini .art-eye-iris-ring {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+
+.art-eye.is-mini .art-eye-cap {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+}
+
+/* ---- 窗玻璃前：夜色的底，眼睛在外侧 ---- */
+.art-eye.is-window {
+  --eye-sclera: #93a7b4;
+  --eye-iris: #7d4a1e;
+  --eye-lid: #0b0f14;
+  --eye-pupil: #05070a;
+  --eye-glint: rgba(255, 255, 255, 0.55);
+}
+
+/* 纸面场景：纸本身很亮，光晕按一半来，否则眼睛像贴了个发光贴纸 */
+.art-eye.is-on-paper[data-tier='3'] > svg {
+  filter: drop-shadow(0 0 8px rgba(190, 90, 20, 0.42)) drop-shadow(0 0 20px rgba(190, 90, 20, 0.18));
+}
+
+.art-eye.is-on-paper[data-tier='4'] > svg {
+  filter: drop-shadow(0 0 9px rgba(190, 40, 20, 0.6)) drop-shadow(0 0 24px rgba(190, 40, 20, 0.26));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-eye-lid,
+  .art-eye-pupil {
+    transition: none;
+  }
+}
+
+/* ============================================================
+   窗外（ArtWindowPanel）
+   这一屏没有纸：暗底亮字，所以不复用 --pp-*（那是「深墨写在浅纸上」的方向）。
+   ============================================================ */
+
+.art-wn-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  /* 浮层挂在 .art-root 外面，--art-serif 不继承，这里必须重新定义一次 */
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  --wn-ink: #e6edf2;
+  --wn-ink-2: #b6c2cb;
+  --wn-ink-3: #98a6b2;
+  --wn-rule: rgba(200, 216, 230, 0.22);
+  --wn-amber: #e0a112;
+  --wn-red: #d4482c;
+  --wn-red-2: #e2603c;
+  color: var(--wn-ink);
+  font-family: var(--art-serif);
+  background: #05080b;
+}
+
+.art-wn-sheet {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* 缩放锚点＝墙面上那个窗洞的中心（CUT_HOME.window 中心 ≈ 50% 30.5%）：
+     纸从热点实物那儿飞过来，这里同理——天从那扇窗的位置张开。 */
+  transform-origin: 50% 30.5%;
+  animation: art-wn-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.art-wn-veil.is-closing .art-wn-sheet {
+  animation: art-wn-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes art-wn-in {
+  from {
+    transform: translate3d(0, 6vh, 0) scale(0.16);
+    filter: blur(6px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    filter: none;
+    opacity: 1;
+  }
+}
+
+@keyframes art-wn-out {
+  from {
+    transform: none;
+    filter: none;
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(0, 4vh, 0) scale(0.34);
+    filter: blur(5px);
+    opacity: 0;
+  }
+}
+
+/* 景深底＝窗景本身。放大 1.08 是为了让 blur 的软边落在视口外，不露出一圈发虚的框。 */
+.art-wn-room {
+  position: absolute;
+  inset: -5%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(18px) brightness(0.52) saturate(0.72);
+}
+
+/* ---- 正文 ---- */
+
+.art-wn-body {
+  position: relative;
+  z-index: 3;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 3.4vh 6vw 4vh;
+  text-align: center;
+  /* 暗底上叠照片，没有这层投影字会糊进背景 */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 18px rgba(0, 0, 0, 0.6);
+}
+
+.art-wn-head {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+}
+
+.art-wn-kicker {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+  color: var(--wn-ink-3);
+}
+
+.art-wn-title {
+  margin: 2px 0 0;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--wn-ink);
+}
+
+.art-wn-sub {
+  margin: 3px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--wn-ink-3);
+}
+
+.art-wn-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--wn-rule);
+  background: rgba(6, 10, 14, 0.45);
+  color: var(--wn-ink-2);
+  font-family: var(--art-serif);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.art-wn-close:hover {
+  border-color: var(--wn-ink-2);
+  color: var(--wn-ink);
+}
+
+/* ---- 眼睛 ---- */
+
+.art-wn-eye {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 6px 0;
+}
+
+/* 眼睛本身在暗底上要看得清：把眼白压冷、眼睑提亮一档，
+   与 .art-eye.is-window 那组是同一套思路（那里是「玻璃前的夜色」）。 */
+.art-wn-eye .art-eye {
+  --eye-sclera: #9fb3c0;
+  --eye-iris: #6f4620;
+  --eye-lid: #10161c;
+  --eye-pupil: #04070a;
+  --eye-glint: rgba(255, 255, 255, 0.62);
+  --eye-ink: rgba(222, 234, 244, 0.62);
+}
+
+/* ---- 读数 ---- */
+
+.art-wn-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+}
+
+.art-wn-tk {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--wn-ink-3);
+}
+
+.art-wn-tv {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--wn-ink);
+}
+
+.art-wn-val {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 0.9;
+  color: var(--wn-red-2);
+}
+
+.art-wn-desc {
+  max-width: 46ch;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--wn-ink-2);
+}
+
+.art-wn-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+  max-width: 420px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--wn-rule);
+  border-bottom: 1px solid var(--wn-rule);
+  background: rgba(6, 10, 14, 0.32);
+}
+
+.art-wn-nrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.art-wn-nrow.is-sub {
+  padding-left: 12px;
+}
+
+.art-wn-nk {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--wn-ink-3);
+}
+
+.art-wn-nrow.is-head .art-wn-nk {
+  color: var(--wn-ink-2);
+}
+
+.art-wn-nv {
+  font-family: var(--font-mono);
+  color: var(--wn-ink);
+}
+
+.art-wn-nv.is-bad {
+  color: var(--wn-red-2);
+}
+
+.art-wn-nv.is-good {
+  color: #7fb08a;
+}
+
+.art-wn-hint {
+  max-width: 52ch;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--wn-ink-3);
+}
+
+/* ---- 玻璃：反光 + 暗角 ----
+   z 序：景深底 1 → 暗角 2 → 正文/眼睛 3 → 反光 4。
+   **反光必须在眼睛之上**（不然读成「眼睛贴纸贴在玻璃上」），
+   而**暗角必须在正文之下**：它上下各压一条 55% 的暗带，压在正文上会把
+   标题与底部说明直接吃掉（第一版就是这么糊掉的）。 */
+.art-wn-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background:
+    /* 主反光带：斜切一道，横过瞳孔 */
+    linear-gradient(
+      108deg,
+      rgba(214, 232, 245, 0) 0 16%,
+      rgba(214, 232, 245, 0.11) 22% 26%,
+      rgba(214, 232, 245, 0.03) 30% 34%,
+      rgba(214, 232, 245, 0) 40% 68%,
+      rgba(214, 232, 245, 0.07) 74% 78%,
+      rgba(214, 232, 245, 0) 84%
+    ),
+    /* 雨痕/水渍：两个不同周期的栅格叠着，单一周期会看出规律（像一层纱窗） */
+    repeating-linear-gradient(
+        92deg,
+        rgba(200, 220, 235, 0.035) 0 1px,
+        rgba(200, 220, 235, 0) 1px 26px
+      ),
+    repeating-linear-gradient(
+        89deg,
+        rgba(200, 220, 235, 0.028) 0 1px,
+        rgba(200, 220, 235, 0) 1px 61px
+      ),
+    /* 玻璃没擦干净的低频脏斑 */
+    radial-gradient(38% 22% at 22% 68%, rgba(190, 205, 215, 0.09), transparent 70%),
+    radial-gradient(30% 18% at 78% 24%, rgba(190, 205, 215, 0.07), transparent 70%);
+}
+
+.art-wn-vig {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(122% 96% at 50% 44%, transparent 38%, rgba(0, 0, 0, 0.62) 100%),
+    /* 上下两条压边，把眼睛夹进「一个洞口」里 */
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent 14% 84%, rgba(0, 0, 0, 0.55));
+}
+
+@media (max-width: 720px) {
+  .art-wn-val {
+    font-size: 30px;
+  }
+
+  .art-wn-title {
+    font-size: 20px;
+  }
+
+  .art-wn-note {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-wn-sheet,
+  .art-wn-veil.is-closing .art-wn-sheet {
+    animation-duration: 1ms;
+  }
+}
+
+/* 呼吸/常亮的窗口热点：tier 决定色相，pulse 决定要不要起伏。
+   不写这两组的话 `.art-cut.is-pulse` 的琥珀色动画会盖掉 is-tier 的色。 */
+.art-cut.is-pulse.is-tier-orange .art-cut-svg {
+  animation: art-cut-breathe-orange 2.2s ease-in-out infinite;
+}
+
+.art-cut.is-pulse.is-tier-red .art-cut-svg {
+  animation: art-cut-breathe-red 1.7s ease-in-out infinite;
+}
+
+@keyframes art-cut-breathe-orange {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 0 3px rgba(224, 134, 42, 0.5))
+      drop-shadow(0 0 9px rgba(224, 134, 42, 0.24));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 8px rgba(224, 134, 42, 1))
+      drop-shadow(0 0 22px rgba(224, 134, 42, 0.6));
+  }
+}
+
+@keyframes art-cut-breathe-red {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 0 4px rgba(211, 58, 44, 0.6))
+      drop-shadow(0 0 12px rgba(211, 58, 44, 0.3));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 10px rgba(211, 58, 44, 1))
+      drop-shadow(0 0 26px rgba(211, 58, 44, 0.65));
+  }
+}
+
+/* ============================================================
+   人体轮廓图（BodyMap）
+   与线稿四件套同一笔迹：描边定形、填充表意，无渐变。
+   ============================================================ */
+
+.art-bmy {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.art-bmy > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 高度由 aspect 决定；容器太矮时靠 max-height + meet 缩放，不裁切 */
+  max-height: 100%;
+  overflow: visible;
+}
+
+/* ---- 人体本身 ---- */
+
+.art-bmy-part {
+  stroke: var(--pp-ink-2);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  fill: none;
+  transition: fill-opacity 240ms ease;
+}
+
+/* 整身那条画细一档、淡一档：它是底，不该跟器官抢线 */
+.art-bmy-part.is-skin {
+  stroke: var(--pp-ink-3);
+  stroke-width: 1;
+}
+
+.art-bmy-part.is-hot {
+  fill: var(--pp-red);
+}
+
+.art-bmy-part.is-cond {
+  fill: var(--pp-ochre);
+}
+
+/* 重症斜纹：只加纹理不加颜色，色深仍由 fill-opacity 表达严重度 */
+.art-bmy-hatchline {
+  stroke: var(--pp-ink);
+  stroke-opacity: 0.42;
+  stroke-width: 1.3;
+}
+
+.art-bmy-hatch {
+  stroke: none;
+}
+
+/* ---- 标注：引线 + 端点 + 病名 ---- */
+
+.art-bmy-lead path {
+  fill: none;
+  stroke: var(--pp-rule-2);
+  stroke-width: 0.9;
+}
+
+.art-bmy-lead circle {
+  fill: var(--pp-red);
+  stroke: none;
+}
+
+/* 重症的引线压深一档，一眼能挑出「这条要处理」 */
+.art-bmy-lead.is-severe path {
+  stroke: var(--pp-rule-3);
+  stroke-width: 1.2;
+}
+
+.art-bmy-lead.is-severe circle {
+  fill: var(--pp-red-2);
+}
+
+.art-bmy-lbl {
+  font-family: var(--art-serif);
+  /* 9.5 是视框单位，实际渲染约 12px（图列 524px 时缩放 1.35）。
+     视框宽 388 就是按这个字号加 6 字病名反推的，改字号必须回头重算 VIEW.w。 */
+  font-size: 9.5px;
+  font-weight: 700;
+  fill: var(--pp-ink);
+  letter-spacing: 0.02em;
+}
+
+.art-bmy-lead.is-severe .art-bmy-lbl {
+  fill: var(--pp-red);
+}
+
+/* ---- 颅环 ---- */
+
+.art-bmy-ring {
+  fill: none;
+  stroke: var(--pp-rule-2);
+  stroke-width: 2.6;
+}
+
+.art-bmy-ring.is-val {
+  stroke-linecap: round;
+  transition: stroke-dasharray 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.art-bmy-ringg.is-ok .art-bmy-ring.is-val {
+  stroke: var(--pp-ink-2);
+}
+
+.art-bmy-ringg.is-warn .art-bmy-ring.is-val {
+  stroke: var(--pp-ochre);
+}
+
+.art-bmy-ringg.is-break .art-bmy-ring.is-val {
+  stroke: var(--pp-red-2);
+}
+
+.art-bmy-tick {
+  stroke: var(--pp-red);
+  stroke-width: 1.2;
+  stroke-opacity: 0.62;
+}
+
+.art-bmy-sanity {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.art-bmy-sanity-k {
+  font-family: var(--art-serif);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  font-weight: 500;
+  fill: var(--pp-ink-3);
+}
+
+.art-bmy-sanity-v {
+  font-size: 15px;
+  fill: var(--pp-ink);
+}
+
+.art-bmy-ringg.is-warn .art-bmy-sanity-v {
+  fill: var(--pp-ochre);
+}
+
+.art-bmy-ringg.is-break .art-bmy-sanity-v {
+  fill: var(--pp-red-2);
+}
+
+/* ---- 图注 ---- */
+
+.art-bmy-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 5px;
+  border-top: 1px solid var(--pp-rule);
+}
+
+.art-bmy-hint,
+.art-bmy-warn,
+.art-bmy-off {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--pp-ink-3);
+}
+
+.art-bmy-warn {
+  color: var(--pp-red);
+  font-weight: 700;
+}
+
+/* ============================================================
+   身体状况：人体图 + 右侧清单 的两栏骨架
+   ============================================================ */
+
+.art-bd-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* 窄屏（<880px 的纸面）退回单栏：人体图在上、清单在下。
+   人体图两列标注共占 62% 宽，再窄就没地方写字了。 */
+@media (max-width: 880px) {
+  .art-bd-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+.art-bd-colL {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.art-bd-colR {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+/* 图下两条（生命 / 体力）：值留给图，条只做参照 */
+.art-bd-vitals {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--pp-rule);
+}
+
+/* 清单行里把用药按钮顶到最右的撑杆 */
+.art-bd-fill {
+  flex: 1;
+  min-width: 6px;
+}
+
+/* 恶化倒计时：行动信号，留在明处 */
+.art-bd-worsen {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--pp-red);
+}
+
+/* 悬停条里的病程描述：整行左对齐，不复用右侧值列的右对齐 */
+.art-bd-tiprow.is-desc {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.art-bd-tiprow.is-desc .art-bd-tipv {
+  font-family: var(--art-serif);
+  font-size: 12.5px;
+  line-height: 1.65;
+  text-align: left;
+  color: var(--pp-ink-2);
+}
+
+/* ---- 暴露度：眼睛 + 数值 + 分档说明 ---- */
+.art-bd-eye {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.art-bd-eye > .art-eye {
+  flex: none;
+}
+
+.art-bd-eyeside {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.art-bd-eyenum {
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--pp-ink);
+}
+
+/* 眼睛到 3 档起会打红光，数字跟着一起变，否则「数值不高但眼睛红了」会显得矛盾 */
+.art-bd-eye:has(.art-eye[data-tier='3']) .art-bd-eyenum {
+  color: var(--pp-ochre);
+}
+
+.art-bd-eye:has(.art-eye[data-tier='4']) .art-bd-eyenum {
+  color: var(--pp-red-2);
+}
+
+.art-bd-eye .art-bd-desc {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* ============================================================
+   日志：挂在墙上的日历（逐日划掉）
+   ============================================================
+   入口是底部工具条那条 `.art-link`，房间里没有对应实物热点 —— 这屏没有斜向飞入的
+   锚点，纸只能从正面推近（`transform-origin: 50% 50%`）。
+
+   纸复用本子的冷米白内页（`ART.todoPaper`，零新生图），所以墨色也照抄本子那一族的
+   冷调蓝黑圆珠笔；但类名自成 `.art-cal-*` 一套，**不去动 `.art-nb-*`**
+   （那是待办与事件书共用的骨架，改它会波及两个已验收的面板）。 */
+
+.art-cal-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3.2vh 3vw;
+  /* 浮层挂在 .art-root 外面，--art-serif 不继承，必须自己重定义一份 */
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  /* 写在日历上的字：同本子那张纸，所以同一条手写楷体栈 */
+  --cal-hand: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  /* 四角 tick 的墨色（见 .art-paper-tick） */
+  --tick-c: var(--cal-rule-2);
+  /* 冷调米白纸 + 蓝黑圆珠笔，与 .art-nb-veil 同族（同一张纸不该有两套墨） */
+  --cal-ink: #1c2026;
+  --cal-ink-2: #3a4048;
+  --cal-ink-3: #5a616b;
+  --cal-rule: rgba(58, 78, 110, 0.28);
+  --cal-rule-2: rgba(58, 78, 110, 0.5);
+  --cal-rule-3: rgba(58, 78, 110, 0.78);
+  /* 点色：好事墨绿 / 坏事朱红 / 惨事墨紫 / 记事灰 */
+  --cal-green: #2c5b3c;
+  --cal-red: #9c2a18;
+  --cal-grim: #4a3a6e;
+  --cal-slash: rgba(28, 32, 38, 0.5);
+  --cal-paper: #e3e1d4;
+  --cal-card: rgba(28, 32, 38, 0.045);
+  color: var(--cal-ink);
+  font-weight: 500;
+}
+
+.art-cal-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.33) saturate(0.7);
+  animation: art-cal-lift 460ms ease both;
+}
+
+.art-cal-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.3) 24%, rgba(4, 6, 8, 0.86) 100%);
+  animation: art-cal-lift 400ms ease both;
+}
+
+@keyframes art-cal-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+  纸的高度**跟着行数长**，不是一个定死的大页面。
+  日历是逐日累积的：开局一行、两周两行，七行以上要活到第 43 天。若把纸钉在 700px，
+  常见局面（一到两行）就是一条贴在顶部的窄表 + 四百多像素空纸，读起来像没写完。
+  所以高度 = max(520px, 161px 固定家具 + 74px × 行数)，上限 700px：
+  四行以内都落在 520px 这一档（余量由留白吸收），五行起纸才继续长，七行正好满。
+  161px 与 74px 是量出来的：前者＝页边距 + 表头 + 星期行 + 图例 + 各段内衬，
+  后者＝「七天一行正好填满本栏」的行高（`--cal-rows` 由 ArtLogPanel 传进来）。
+*/
+.art-cal-sheet {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, 94vw);
+  height: min(700px, 90vh, max(520px, calc(161px + var(--cal-rows, 1) * 74px)));
+  background: var(--cal-paper);
+  /* 没有实物锚点 → 正面推近，不做斜向飞入 */
+  transform-origin: 50% 50%;
+  box-shadow:
+    0 40px 88px -26px rgba(0, 0, 0, 0.8),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: art-cal-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.art-cal-paper {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(60, 52, 34, 0.22);
+}
+
+@keyframes art-cal-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 7vh, 0) scale(0.9);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-cal-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-cal-veil.is-closing .art-cal-sheet {
+  animation: art-cal-out 240ms ease-in both;
+}
+
+.art-cal-veil.is-closing .art-cal-room,
+.art-cal-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-cal-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 5vh, 0) scale(0.94);
+  }
+}
+
+/* ---- 纸边框 / 表头 ---- */
+.art-cal-frame {
+  position: absolute;
+  inset: 1.6% 1.5%;
+  display: flex;
+  flex-direction: column;
+  border: 1.6px solid var(--cal-rule-3);
+}
+
+.art-cal-frame::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 0.8px solid rgba(58, 78, 110, 0.38);
+  pointer-events: none;
+}
+
+.art-cal-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 12px 20px 10px;
+  border-bottom: 1.6px solid var(--cal-rule-3);
+}
+
+.art-cal-headmain {
+  min-width: 0;
+}
+
+.art-cal-title {
+  margin: 0;
+  font-family: var(--art-serif);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--cal-ink);
+}
+
+.art-cal-sub {
+  margin: 3px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--cal-ink-3);
+}
+
+.art-cal-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.3px solid var(--cal-rule-2);
+  background: var(--cal-card);
+  color: var(--cal-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-cal-close:hover {
+  background: var(--cal-ink);
+  border-color: var(--cal-ink);
+  color: #f2ece0;
+}
+
+/* ---- 正文：左栅格 / 右选中日（62% : 38%） ---- */
+.art-cal-body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.62fr) minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+
+.art-cal-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 13px 18px 11px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-right: 1.5px solid var(--cal-rule-2);
+}
+
+/*
+  星期行与图例各带一个 auto 外边距（上 / 下），于是「星期行 + 栅格 + 图例」这一整块
+  在剩余空间里垂直居中 —— 早局只有一两行时，留白会平均落在上下两侧，读作排版留白；
+  若全挤在顶部，同样的留白就读作「下面还没写」。
+  用 auto 外边距而不是 `justify-content: center`：溢出时 auto 外边距自动归零（不裁顶），
+  而 center 会把第一行推到可视区外、滚不回来。
+*/
+.art-cal-wk {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-top: auto;
+  padding-bottom: 5px;
+  border-bottom: 1.2px solid var(--cal-rule-2);
+}
+
+.art-cal-wk span {
+  text-align: center;
+  font-family: var(--cal-hand);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--cal-ink-2);
+}
+
+/* 周末红字是挂历的惯例，也是唯一一处能看出「这真是日历」的冗余线索 */
+.art-cal-wk span.is-rest {
+  color: var(--cal-red);
+}
+
+.art-cal-gridwrap {
+  flex: none;
+  margin-top: 5px;
+  padding-right: 2px;
+}
+
+/*
+  行高固定 74px，栅格**贴顶**排，不撑满整栏。
+  试过 `minmax(63px, 1fr)` 让行分摊剩余高度：开局只有一两行时格子会被拉到 200px 以上，
+  对角线变成两个占满整格的大叉，日期数字和点阵缩在角上，整屏只剩一排大叉——比留白难看得多。
+  74px 是「七天一行正好填满本栏」的高度，于是满一周时没有留白，不足一周时下方留白；
+  留白是纸，不是空——所以栅格与图例都贴顶，空白全归到下边当页脚余量，读起来才像一页纸。
+*/
+.art-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: 74px;
+  border-top: 1.4px solid var(--cal-rule-3);
+  border-left: 1.4px solid var(--cal-rule-3);
+}
+
+.art-cal-cell {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  min-height: 62px;
+  /* 底部留白给右下角的点阵，右侧留白给 D-n 角标 */
+  padding: 5px 7px 15px 6px;
+  overflow: hidden;
+  border-right: 1.4px solid var(--cal-rule-3);
+  border-bottom: 1.4px solid var(--cal-rule-3);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 130ms ease;
+}
+
+.art-cal-cell:hover {
+  background: var(--cal-card);
+}
+
+.art-cal-cell:focus-visible {
+  outline: 2px solid var(--cal-ink-2);
+  outline-offset: -3px;
+}
+
+.art-cal-num {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--cal-ink);
+}
+
+/* 选中的那天：格子加底 + 内描边（描边画在格子里侧，不压到网格线上） */
+.art-cal-cell.is-sel {
+  background: rgba(28, 32, 38, 0.08);
+  box-shadow: inset 0 0 0 1.6px var(--cal-ink-2);
+}
+
+/* 今天：双圈（外细内粗，都画在格子里侧） */
+.art-cal-cell.is-today::before {
+  content: '';
+  position: absolute;
+  inset: 4.5px;
+  border: 1.5px solid var(--cal-red);
+  box-shadow: 0 0 0 1.1px rgba(156, 42, 24, 0.4);
+  pointer-events: none;
+}
+
+/* 过去的日子：对角双斜线划掉。
+   两层 linear-gradient 各画一条对角线 —— `to bottom right` 的渐变轴与主对角线平行，
+   所以 50% 处的色停线正好落在另一条对角线上，**与格子宽高比无关**，
+   比写死旋转角度的两根伪元素稳（格子宽度随屏宽变，旋转角度可不会自己跟着变）。 */
+.art-cal-cell.is-past::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(
+      to bottom right,
+      transparent calc(50% - 0.8px),
+      var(--cal-slash) calc(50% - 0.8px) calc(50% + 0.8px),
+      transparent calc(50% + 0.8px)
+    ),
+    linear-gradient(
+      to top right,
+      transparent calc(50% - 0.8px),
+      var(--cal-slash) calc(50% - 0.8px) calc(50% + 0.8px),
+      transparent calc(50% + 0.8px)
+    );
+}
+
+.art-cal-cell.is-past .art-cal-num {
+  color: var(--cal-ink-3);
+}
+
+/* 灾前七天倒计时角标 */
+.art-cal-tag {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--cal-ink-3);
+}
+
+/* 那天写了几条：右下角点阵，一点一条，颜色按 tone */
+.art-cal-dots {
+  position: absolute;
+  left: 6px;
+  right: 5px;
+  bottom: 4px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.art-cal-dots i {
+  width: 4.5px;
+  height: 4.5px;
+  border-radius: 50%;
+}
+
+.art-cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: auto;
+  padding-top: 9px;
+}
+
+.art-cal-lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--cal-ink-3);
+}
+
+.art-cal-lg i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ---- 右侧：选中那天的正文 ---- */
+.art-cal-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 13px 16px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 与左栏同一套垂直居中（auto 外边距）——两栏的块要落在同一水平线上，
+   否则左栏浮在中间、右栏贴在顶上，读起来像两页拼在一起 */
+.art-cal-sidehead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: auto;
+  padding-bottom: 7px;
+  border-bottom: 1.2px solid var(--cal-rule-2);
+}
+
+.art-cal-sidenum {
+  font-family: var(--art-serif);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--cal-ink);
+}
+
+.art-cal-sidetag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--cal-ink-3);
+}
+
+.art-cal-sidetoday {
+  padding: 1px 6px;
+  border: 1.2px solid var(--cal-red);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--cal-red);
+}
+
+.art-cal-sidecount {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--cal-ink-3);
+}
+
+/* 第一次打开时的一句提示：玩家一点格子就不见了 */
+.art-cal-pick {
+  margin: 9px 0 0;
+  font-family: var(--cal-hand);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cal-ink-3);
+}
+
+.art-cal-items {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: 9px;
+  min-height: 0;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.art-cal-items li {
+  border-left: 2.4px solid var(--cal-rule-2);
+  padding: 1px 0 1px 11px;
+  font-family: var(--cal-hand);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--cal-ink-2);
+}
+
+.art-cal-none {
+  margin: 10px 0 0;
+  font-family: var(--cal-hand);
+  font-size: 12.5px;
+  color: var(--cal-ink-3);
+}
+
+.art-cal-copy {
+  flex: none;
+  margin-top: 10px;
+  margin-bottom: auto;
+  padding: 7px 12px;
+  border: 1.4px solid var(--cal-rule-2);
+  background: var(--cal-card);
+  color: var(--cal-ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-cal-copy:hover {
+  background: var(--cal-ink);
+  border-color: var(--cal-ink);
+  color: #f2ece0;
+}
+
+/* 窄屏：栅格与选中日叠成一栏 */
+@media (max-width: 900px) {
+  .art-cal-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+
+  .art-cal-left {
+    border-right: 0;
+    border-bottom: 1.5px solid var(--cal-rule-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-cal-sheet,
+  .art-cal-room,
+  .art-cal-veil::before {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   外出：钉在墙上的地图
+   ============================================================
+   左栏是地图**本体**（`map-board.jpg`，不虚焦）；右栏是一张压在旁边的纸「行程单」。
+   于是这屏有两套墨：暗框上的亮字（表头、图钉标签）与纸上写给人看的暗字（行程单）。
+   两套都在 `.art-board-veil` 上定义，不再往下传 —— B 泳道不碰 `.art-*` 的公共 token。 */
+
+.art-board-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3vh 3vw;
+  /* 浮层挂在 .art-root 外面，--art-serif 不继承，必须自己重定义一份 */
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  --bd-hand: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  /* 暗框：地图照片本身是暖光下的旧桌子，框用中性深灰蓝才不会跟照片抢暖调 */
+  --bd-frame: #1d2126;
+  --bd-rule: rgba(226, 210, 172, 0.22);
+  --bd-rule-2: rgba(226, 210, 172, 0.42);
+  --bd-lit: #e9e1d0;
+  --bd-lit-2: #a8a091;
+  /* 行程单那张纸：略黄的旧纸，比日历的冷米白更暖，两屏不会看成一叠 */
+  --bd-paper: #ded6c1;
+  --bd-ink: #23201a;
+  --bd-ink-2: #474138;
+  --bd-ink-3: #6d6659;
+  --bd-prule: rgba(70, 60, 40, 0.28);
+  --bd-prule-2: rgba(70, 60, 40, 0.5);
+  /* 分档色：写在这张纸上的四档 */
+  --bd-good: #2c5b3c;
+  --bd-warn: #8a5210;
+  --bd-bad: #9c2a18;
+  --bd-info: #1f3a52;
+  color: var(--bd-lit);
+  font-weight: 500;
+}
+
+.art-board-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.3) saturate(0.68);
+  animation: art-board-lift 460ms ease both;
+}
+
+.art-board-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(4, 6, 8, 0.34) 22%, rgba(4, 6, 8, 0.88) 100%);
+  animation: art-board-lift 400ms ease both;
+}
+
+@keyframes art-board-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+  纸宽受 `128vh` 约束：这屏的高度是**由宽度推出来的**（地图画布吃满左栏宽、
+  比例固定 1664:928），宽度一超，矮屏上整张纸就顶出视口。128vh 这个系数
+  是「地图列占比 1/1.62 + 表头 + 内衬」折算后的经验值，比给纸加 max-height 稳 ——
+  max-height 只会把画布压扁，图钉坐标立刻报废。
+*/
+.art-board-sheet {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(1320px, 95vw, 128vh);
+  background: var(--bd-frame);
+  border: 1.6px solid var(--bd-rule);
+  box-shadow:
+    0 40px 88px -26px rgba(0, 0, 0, 0.86),
+    0 6px 18px rgba(0, 0, 0, 0.5);
+  animation: art-board-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes art-board-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 7vh, 0) scale(0.9);
+    filter: blur(4px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-board-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-board-veil.is-closing .art-board-sheet {
+  animation: art-board-out 240ms ease-in both;
+}
+
+.art-board-veil.is-closing .art-board-room,
+.art-board-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-board-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 5vh, 0) scale(0.94);
+  }
+}
+
+/* ---- 表头（深底亮字） ---- */
+.art-board-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 12px 18px 11px;
+  border-bottom: 1.6px solid var(--bd-rule);
+}
+
+.art-board-headmain {
+  min-width: 0;
+}
+
+.art-board-title {
+  margin: 0;
+  font-family: var(--art-serif);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--bd-lit);
+}
+
+.art-board-sub {
+  margin: 3px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--bd-lit-2);
+}
+
+.art-board-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.3px solid var(--bd-rule-2);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--bd-lit);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-board-close:hover {
+  background: var(--bd-lit);
+  border-color: var(--bd-lit);
+  color: #1d2126;
+}
+
+/* ---- 正文：地图 / 行程单 ---- */
+.art-board-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.62fr);
+  align-items: start;
+  gap: 14px;
+  padding: 14px;
+}
+
+.art-board-map {
+  display: flex;
+  min-width: 0;
+}
+
+/*
+  画布必须与图片同宽高比：容器比例＝图片比例时 `object-fit` 是 cover 还是 fill 都一样
+  （不裁不拉），图钉的百分比坐标才与画上的地物对得上。比例一旦不符，
+  图会被裁掉一条，所有钉子集体偏位 —— 这是这屏唯一一处「错了也看不出来」的地方。
+*/
+.art-board-canvas {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1664 / 928;
+}
+
+.art-board-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 三圈等距线：铅笔虚线，视框单位＝图片像素（与画布同比例 ⇒ 1:1 映射，不畸变） */
+.art-board-rings {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.art-board-rings ellipse {
+  fill: none;
+  stroke: rgba(255, 241, 214, 0.36);
+  stroke-width: 3.4;
+  stroke-dasharray: 13 11;
+  stroke-linecap: round;
+}
+
+/* ---- 家钉 ---- */
+.art-board-home {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.art-board-homehead {
+  position: absolute;
+  left: 0;
+  bottom: 4px;
+  width: 15px;
+  height: 15px;
+  margin-left: -7.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fdf6e8 0 13%, #cfd6dc 48%, #7c8792 100%);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.6),
+    0 0 0 2.2px rgba(20, 24, 28, 0.72);
+}
+
+.art-board-homehead::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1.4px;
+  height: 5px;
+  margin-left: -0.7px;
+  background: linear-gradient(180deg, rgba(20, 24, 28, 0.9), rgba(20, 24, 28, 0));
+}
+
+.art-board-hometip {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f2ece0;
+  background: rgba(18, 22, 26, 0.8);
+  border: 1px solid rgba(226, 210, 172, 0.35);
+}
+
+/* ---- 图钉 ----
+   按钮本体是 0×0 的锚点（left/top 就是针尖落点），所有部件绝对定位挂在它周围。
+   若把部件塞进按钮的正常流，「按钮底边＝锚点」这条就没了 —— 标签一变高，针尖就离开地物。 */
+.art-board-pin {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  --pin: #b8382a;
+}
+
+.art-board-pin.is-tone-good {
+  --pin: #2f7a4a;
+}
+
+.art-board-pin.is-tone-warn,
+.art-board-pin.is-tone-shop {
+  --pin: #c8842a;
+}
+
+.art-board-pin.is-tone-bad {
+  --pin: #b8382a;
+}
+
+.art-board-pinhead {
+  position: absolute;
+  left: 0;
+  bottom: 6px;
+  width: 15px;
+  height: 15px;
+  margin-left: -7.5px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 34% 30%,
+    #fff8ec 0 12%,
+    var(--pin) 46%,
+    color-mix(in srgb, var(--pin) 58%, #000) 100%
+  );
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(24, 18, 12, 0.55);
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.art-board-pinhead::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1.4px;
+  height: 7px;
+  margin-left: -0.7px;
+  background: linear-gradient(180deg, rgba(38, 30, 20, 0.92), rgba(38, 30, 20, 0));
+}
+
+.art-board-pin:hover .art-board-pinhead {
+  transform: scale(1.16);
+}
+
+.art-board-pin.is-sel .art-board-pinhead {
+  transform: scale(1.2);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.6),
+    0 0 0 3px rgba(255, 241, 214, 0.5);
+}
+
+.art-board-pin:focus-visible {
+  outline: none;
+}
+
+.art-board-pin:focus-visible .art-board-pinhead {
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.6),
+    0 0 0 3px rgba(255, 241, 214, 0.7);
+}
+
+.art-board-tip {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  white-space: nowrap;
+  font-family: var(--art-serif);
+  font-size: 11px;
+  font-weight: 600;
+  color: #f4ede0;
+  background: rgba(18, 22, 26, 0.8);
+  border: 1px solid rgba(226, 210, 172, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.art-board-pin:hover .art-board-tip,
+.art-board-pin:focus-visible .art-board-tip,
+.art-board-pin.is-sel .art-board-tip {
+  opacity: 1;
+}
+
+/* 存量：钉下一条细横条（只在经典口径允许看存量时才画） */
+.art-board-stockbar {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 24px;
+  height: 3px;
+  margin-left: -12px;
+  background: rgba(18, 22, 26, 0.62);
+  box-shadow: 0 0 0 1px rgba(24, 18, 12, 0.45);
+}
+
+.art-board-stockbar i {
+  display: block;
+  height: 100%;
+  background: var(--pin);
+}
+
+/* 今日已去过：钉头上打一个叉 */
+.art-board-x {
+  position: absolute;
+  left: -9px;
+  bottom: 3px;
+  width: 18px;
+  height: 18px;
+  background:
+    linear-gradient(to bottom right, transparent 45%, rgba(240, 232, 214, 0.92) 45% 55%, transparent 55%),
+    linear-gradient(to top right, transparent 45%, rgba(240, 232, 214, 0.92) 45% 55%, transparent 55%);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+}
+
+/* 设卡：一枚朱红小方章 */
+.art-board-seal {
+  position: absolute;
+  left: 8px;
+  bottom: 12px;
+  padding: 0 3px;
+  border: 1.2px solid #d8563c;
+  color: #e2705a;
+  font-family: var(--art-serif);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+
+.art-board-veh {
+  position: absolute;
+  left: 6px;
+  bottom: -4px;
+  padding: 0 3px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f2ece0;
+  background: rgba(18, 22, 26, 0.82);
+  border: 1px solid rgba(226, 210, 172, 0.32);
+  pointer-events: none;
+}
+
+/* ---- 行程单（纸面） ---- */
+.art-board-strip {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px 12px 9px;
+  background: var(--bd-paper);
+  border: 1.4px solid var(--bd-prule-2);
+  color: var(--bd-ink);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.art-board-when {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1.2px solid var(--bd-prule);
+}
+
+.art-board-whenk {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--bd-ink-3);
+}
+
+.art-board-whenb {
+  padding: 3px 9px;
+  border: 1.3px solid var(--bd-prule-2);
+  background: rgba(35, 32, 26, 0.04);
+  color: var(--bd-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.art-board-whenb.is-on {
+  background: var(--bd-ink);
+  border-color: var(--bd-ink);
+  color: #f2ece0;
+}
+
+.art-board-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.art-board-list > li {
+  border-bottom: 1px solid var(--bd-prule);
+}
+
+.art-board-list > li.is-sel {
+  background: rgba(35, 32, 26, 0.07);
+}
+
+.art-board-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.art-board-row:hover {
+  background: rgba(35, 32, 26, 0.04);
+}
+
+.art-board-row:focus-visible {
+  outline: 2px solid var(--bd-ink-2);
+  outline-offset: -2px;
+}
+
+.art-board-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #b8382a;
+  box-shadow: 0 0 0 1px rgba(30, 22, 14, 0.35);
+}
+
+.art-board-dot[data-tone='good'] {
+  background: #2f7a4a;
+}
+
+.art-board-dot[data-tone='warn'],
+.art-board-dot[data-tone='shop'] {
+  background: #c8842a;
+}
+
+.art-board-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--art-serif);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bd-ink);
+}
+
+.art-board-tag {
+  padding: 0 4px;
+  border: 1px solid var(--bd-prule-2);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--bd-ink-3);
+}
+
+.art-board-tag.is-good {
+  border-color: rgba(44, 91, 60, 0.5);
+  color: var(--bd-good);
+}
+
+.art-board-tag.is-warn {
+  border-color: rgba(138, 82, 16, 0.5);
+  color: var(--bd-warn);
+}
+
+.art-board-tag.is-bad {
+  border-color: rgba(156, 42, 24, 0.5);
+  color: var(--bd-bad);
+}
+
+.art-board-tag.is-info {
+  border-color: rgba(31, 58, 82, 0.5);
+  color: var(--bd-info);
+}
+
+/* ---- 展开的详情 ---- */
+.art-board-detail {
+  padding: 2px 4px 10px;
+}
+
+.art-board-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.72;
+  color: var(--bd-ink-2);
+}
+
+.art-board-loot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.art-board-lootc {
+  padding: 0 5px;
+  background: rgba(35, 32, 26, 0.07);
+  border: 1px solid var(--bd-prule);
+  font-size: 10.5px;
+  line-height: 1.7;
+  color: var(--bd-ink-2);
+}
+
+.art-board-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.art-board-act {
+  padding: 6px 12px;
+  border: 1.4px solid var(--bd-prule-2);
+  background: rgba(35, 32, 26, 0.06);
+  color: var(--bd-ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-board-act:hover:not(:disabled) {
+  background: var(--bd-ink);
+  border-color: var(--bd-ink);
+  color: #f2ece0;
+}
+
+.art-board-act:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* ---- 图例 ---- */
+.art-board-legend {
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1.2px solid var(--bd-prule);
+}
+
+.art-board-lg {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--bd-ink-3);
+}
+
+.art-board-pick {
+  margin: 0 0 5px;
+  font-family: var(--bd-hand);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--bd-warn);
+}
+
+@media (max-width: 900px) {
+  .art-board-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-board-sheet,
+  .art-board-room,
+  .art-board-veil::before {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   工具箱摊开（物品栏 · 档案皮肤）
+   ============================================================
+   三样东西（滤芯 / 报警器 / 碘片）摊成箱子里的三个凹槽。凹槽是 CSS 挖的，
+   不用位图 —— 形简单，线稿比「工具箱照片」清楚，也省一次生图。
+   前缀 `.art-tbox-*` 是本屏的领地，不碰老三屏，也不复用日历/地图的 token。
+   ============================================================ */
+
+.art-tbox-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 3vh 3vw;
+  /* 浮层挂在 .art-root 外面，--art-serif 不继承，必须自己重定义一份 */
+  --art-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', 'Times New Roman', serif;
+  --tb-hand: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  /* 箱体：深墨绿塑钢。地图那屏的暗框是中性格灰蓝、日历是冷米白纸，
+     这里换成偏绿的墨色，三屏摆一起不会看成一家的盒子 */
+  --tb-shell: #1a211f;
+  --tb-shell-2: #242c29;
+  --tb-rule: rgba(208, 226, 214, 0.2);
+  --tb-rule-2: rgba(208, 226, 214, 0.42);
+  --tb-lit: #dbe4de;
+  --tb-lit-2: #98a29b;
+  /* 箱底垫的那张纸（与计划表同一抽屉，但只用一小块） */
+  --tb-paper: #c9b994;
+  --tb-ink: #23201a;
+  --tb-ink-2: #474138;
+  --tb-ink-3: #6d6659;
+  --tb-prule: rgba(70, 60, 40, 0.3);
+  --tb-prule-2: rgba(70, 60, 40, 0.56);
+  /* 凹槽：比纸再深一层，靠内阴影下沉 */
+  --tb-well: rgba(38, 32, 20, 0.14);
+  --tb-well-2: rgba(24, 20, 12, 0.34);
+  --tb-good: #2c5b3c;
+  --tb-warn: #8a5210;
+  --tb-bad: #9c2a18;
+  color: var(--tb-lit);
+  font-weight: 500;
+}
+
+.art-tbox-room {
+  position: absolute;
+  inset: -8%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(22px) brightness(0.3) saturate(0.66);
+  animation: art-tbox-lift 460ms ease both;
+}
+
+.art-tbox-veil::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(4, 6, 8, 0.36) 20%, rgba(4, 6, 8, 0.88) 100%);
+  animation: art-tbox-lift 400ms ease both;
+}
+
+@keyframes art-tbox-lift {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 箱体总成：翻到后面的盖子 + 箱身 */
+.art-tbox-case {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: min(1240px, 95vw);
+  animation: art-tbox-in 470ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 掀开的盖子：只露一条边（rotateX 把它压扁），说明这是个开着的箱子而不是一块板 */
+.art-tbox-lid {
+  height: 30px;
+  margin: 0 26px;
+  background: linear-gradient(180deg, var(--tb-shell-2), var(--tb-shell));
+  border: 1.6px solid var(--tb-rule);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  transform: perspective(720px) rotateX(-63deg);
+  transform-origin: 50% 100%;
+  box-shadow: 0 -14px 26px -14px rgba(0, 0, 0, 0.72);
+}
+
+.art-tbox-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: var(--tb-shell);
+  border: 1.6px solid var(--tb-rule);
+  box-shadow:
+    0 40px 88px -26px rgba(0, 0, 0, 0.86),
+    0 6px 18px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 16px 34px -20px rgba(0, 0, 0, 0.9);
+}
+
+/* 垫在箱底的那张纸：inset 12px 正好落在箱身内衬里，外圈留出绒面沿 */
+.art-tbox-liner {
+  position: absolute;
+  inset: 12px;
+  background-color: var(--tb-paper);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(40, 30, 15, 0.42),
+    inset 0 0 120px rgba(50, 36, 16, 0.24);
+}
+
+.art-tbox-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 22px 12px;
+}
+
+@keyframes art-tbox-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 9vh, 0) scale(0.86) rotateX(9deg);
+    filter: blur(5px);
+  }
+  38% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.art-tbox-veil.is-closing {
+  pointer-events: none;
+}
+
+.art-tbox-veil.is-closing .art-tbox-case {
+  animation: art-tbox-out 240ms ease-in both;
+}
+
+.art-tbox-veil.is-closing .art-tbox-room,
+.art-tbox-veil.is-closing::before {
+  animation: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+@keyframes art-tbox-out {
+  to {
+    opacity: 0;
+    transform: translate3d(0, 5vh, 0) scale(0.94);
+    filter: blur(3px);
+  }
+}
+
+/* ---- 表头：纸上那片印刷区 ---- */
+.art-tbox-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1.4px solid var(--tb-prule);
+}
+
+.art-tbox-plate {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.art-tbox-platek {
+  font-family: var(--art-serif);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--tb-ink);
+}
+
+.art-tbox-plates {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--tb-ink-3);
+}
+
+.art-tbox-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  padding: 4px 11px;
+  border: 1.3px solid var(--tb-prule-2);
+  background: rgba(35, 32, 26, 0.06);
+  color: var(--tb-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-tbox-close:hover {
+  background: var(--tb-ink);
+  border-color: var(--tb-ink);
+  color: #efe9dc;
+}
+
+/* ---- 三个凹槽 ---- */
+.art-tbox-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 18px 0 2px;
+}
+
+.art-tbox-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.art-tbox-k {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--tb-ink-3);
+}
+
+/* 凹槽本体：1px 描边 + 内阴影下沉，槽底一层斜纹绒面 */
+.art-tbox-well {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 172px;
+  border: 1.4px solid var(--tb-prule-2);
+  background-color: var(--tb-well);
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.045) 0 2px, transparent 2px 5px);
+  box-shadow:
+    inset 0 7px 16px -4px var(--tb-well-2),
+    inset 0 -3px 9px -5px rgba(0, 0, 0, 0.3);
+}
+
+/* 空槽：描边改虚线，绒面变淡 —— 「这个位子空着」 */
+.art-tbox-slot.is-empty .art-tbox-well {
+  border-style: dashed;
+  border-color: rgba(70, 60, 40, 0.36);
+  background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.028) 0 2px, transparent 2px 5px);
+  box-shadow: inset 0 5px 13px -6px rgba(0, 0, 0, 0.24);
+}
+
+/* 「空槽」摆在凹槽正中，不是压在底边上 —— 底边那道虚线就是凹槽的边，
+   字贴上去会和它叠成一条。 */
+.art-tbox-void {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-family: var(--tb-hand);
+  font-size: 12.5px;
+  letter-spacing: 0.22em;
+  color: var(--tb-ink-3);
+  opacity: 0.68;
+}
+
+/* ---- 槽里的实物：n 件并排 / 叠放 ---- */
+.art-tbox-stack {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 8px 8px;
+}
+
+.art-tbox-piece {
+  display: block;
+  color: var(--tb-ink-2);
+}
+
+.art-tbox-glyph {
+  display: block;
+}
+
+/* 滤芯：立着的一排。**不重叠** —— 细高筒子挨着摆会糊成一道栅栏，
+   留 7px 缝才一眼数得出「三支」。细高才有滤芯的样子（早先 24×64 的方筒像线轴）。 */
+.art-tbox-stack.is-filter {
+  gap: 7px;
+}
+
+.art-tbox-stack.is-filter .art-tbox-glyph {
+  width: 48px;
+  height: 160px;
+}
+
+/* 报警器：一块，居中 */
+.art-tbox-stack.is-coAlarm .art-tbox-glyph {
+  width: 130px;
+  height: 130px;
+}
+
+/* 碘片：两块板斜着叠（第二块往上错半张、略转，读作一摞） */
+.art-tbox-stack.is-iodine {
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.art-tbox-stack.is-iodine .art-tbox-glyph {
+  width: 138px;
+  height: 86px;
+}
+
+.art-tbox-stack.is-iodine .art-tbox-piece + .art-tbox-piece {
+  margin-top: -38px;
+  margin-left: 0;
+}
+
+.art-tbox-stack.is-iodine .art-tbox-piece:nth-child(2) {
+  transform: rotate(-3.5deg) translateX(6px);
+}
+
+.art-tbox-stack.is-iodine .art-tbox-piece:nth-child(3) {
+  transform: rotate(3deg) translateX(-6px);
+}
+
+/* 摆不下的件数：右下角一枚小角标 */
+.art-tbox-more {
+  position: absolute;
+  right: 8px;
+  bottom: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tb-ink-2);
+}
+
+/* 服用过：整叠压淡 + 一道对角朱红划线。
+   划线**只跨实物那一块**（内缩的框），不是把整个凹槽切成两半 —— 后者读起来
+   像把格子划掉了，而这里要划掉的是那几板药。`to bottom right` 的渐变轴与主对角线平行，
+   与框的宽高比无关，比写死旋转角度稳。 */
+.art-tbox-slot.is-burned .art-tbox-stack {
+  opacity: 0.42;
+}
+
+.art-tbox-used {
+  position: absolute;
+  left: 21%;
+  right: 19%;
+  top: 20%;
+  bottom: 26%;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 1.5px),
+    var(--tb-bad) calc(50% - 1.5px) calc(50% + 1.5px),
+    transparent calc(50% + 1.5px)
+  );
+}
+
+/* ---- 槽下：名称 / 数量 / 状态 ---- */
+.art-tbox-tag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 19px;
+}
+
+.art-tbox-name {
+  font-family: var(--art-serif);
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--tb-ink);
+}
+
+.art-tbox-count {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tb-ink-2);
+}
+
+.art-tbox-count.is-on {
+  color: var(--tb-good);
+}
+
+.art-tbox-chip {
+  padding: 1px 6px;
+  border: 1.2px solid var(--tb-prule-2);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--tb-ink-3);
+}
+
+.art-tbox-chip.is-on {
+  border-color: var(--tb-good);
+  color: var(--tb-good);
+}
+
+/* 在装那支的耐久 */
+.art-tbox-life {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.art-tbox-lifek {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--tb-ink-3);
+}
+
+.art-tbox-lifebar {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 34px;
+  height: 6px;
+  border: 1.2px solid var(--tb-prule-2);
+  background: rgba(35, 32, 26, 0.08);
+}
+
+.art-tbox-lifebar i {
+  display: block;
+  height: 100%;
+  background: currentColor;
+}
+
+.art-tbox-lifebar[data-tone='good'] {
+  color: var(--tb-good);
+}
+
+.art-tbox-lifebar[data-tone='warn'] {
+  color: var(--tb-warn);
+}
+
+.art-tbox-lifebar[data-tone='bad'] {
+  color: var(--tb-bad);
+}
+
+.art-tbox-lifen {
+  font-size: 10.5px;
+  color: var(--tb-ink-2);
+}
+
+.art-tbox-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.68;
+  color: var(--tb-ink-3);
+}
+
+.art-tbox-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--tb-warn);
+}
+
+/* 按钮：`margin-top:auto` 让三个槽的按钮落在同一条底线（槽是等高的 grid 项） */
+.art-tbox-act {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: 5px 14px;
+  border: 1.4px solid var(--tb-prule-2);
+  background: rgba(35, 32, 26, 0.06);
+  color: var(--tb-ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.art-tbox-act:hover:not(:disabled) {
+  background: var(--tb-ink);
+  border-color: var(--tb-ink);
+  color: #efe9dc;
+}
+
+.art-tbox-act:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+/* ---- 箱沿 ---- */
+.art-tbox-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.art-tbox-footrule {
+  flex: 1 1 auto;
+  height: 1.4px;
+  background: var(--tb-prule);
+}
+
+.art-tbox-footno {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--tb-ink-3);
+}
+
+@media (max-width: 900px) {
+  .art-tbox-slots {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .art-tbox-well {
+    height: 148px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-tbox-case,
+  .art-tbox-room,
+  .art-tbox-veil::before {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   过夜：四块图解（生命瀑布 / 消耗对账 / 夜间温度 / 暴露度）
+   ============================================================
+   全部住在 `.art-paper-veil.is-nt` 里，墨色沿用那套冷灰蓝的 `--pp-*`。
+   前缀取 `.art-nf-*` 而不是 `.art-nt-*`：后者是这一屏**原有**的平铺行类名，
+   重名会让「面板表头被图钉样式压扁」那类事故再来一次。
+   ============================================================ */
+
+/* 图解区三栏一行：对账 / 温度 / 暴露度。
+   为什么是「三栏一行」而不是「两栏、右栏叠两块」：温度计最高（148），而对账那栏的高度
+   随当晚「有没有开取暖」在 91～175 之间浮动 —— 两栏布局下整块的高度取两栏的**较大者**，
+   温度那栏就被对账的波动拖着走，一开取暖整屏就顶出滚动条。三栏并排后高度取三者最大，
+   波动只影响自己那一栏。 */
+.art-nf-figs {
+  display: grid;
+  grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr) minmax(0, 0.8fr);
+  grid-template-areas: 'res temp eye';
+  column-gap: 24px;
+  align-items: start;
+}
+
+.art-nf-figs .is-res {
+  grid-area: res;
+}
+
+.art-nf-figs .is-temp {
+  grid-area: temp;
+}
+
+.art-nf-figs .is-eye {
+  grid-area: eye;
+}
+
+/* 三块都是 grid 的孩子，`+ .art-paper-sec` 的上边距会跟 row-gap 叠起来。
+   ⚠️ 选择器必须带上 `.art-paper-veil.is-nt` 前缀：那条 `is-nt` 规则是 4 个类（0,4,0），
+   只写 `.art-nf-figs .art-paper-sec + .art-paper-sec` 是 3 个类，权重不够、被它压掉，
+   表现是温度那一节凭空比左栏低一个 row-gap（两节标题不在同一条水平线上）。 */
+.art-paper-veil.is-nt .art-nf-figs .art-paper-sec + .art-paper-sec {
+  margin-top: 0;
+}
+
+/* 块标题右端的「理智 / 生命」读数 + 增减 */
+.art-nf-headread {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-headread b {
+  color: var(--pp-ink);
+  font-weight: 700;
+}
+
+.art-nf-headdelta {
+  font-size: 12px;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.art-nf-headdelta.is-bad {
+  color: var(--pp-red);
+}
+
+.art-nf-headdelta.is-good {
+  color: var(--pp-green);
+}
+
+/* ---- 1. 生命瀑布 ---- */
+.art-nf-fall {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* 条宽 = 生命上限 100 点，一格 1 点。不做任何缩放，坐标只有这一套。 */
+.art-nf-falltrack {
+  position: relative;
+  height: 22px;
+  border: 1px solid var(--pp-rule-2);
+  background: var(--pp-card);
+}
+
+.art-nf-rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--pp-rule);
+  opacity: 0.55;
+}
+
+.art-nf-seg {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* 掉血朱红、回血墨绿；残差那一段用灰斜纹，一眼看出「这不是某个来源」 */
+.art-nf-seg.is-down {
+  background: rgba(143, 42, 18, 0.74);
+  box-shadow: inset 0 0 0 1px var(--pp-red);
+}
+
+.art-nf-seg.is-up {
+  background: rgba(39, 73, 47, 0.68);
+  box-shadow: inset 0 0 0 1px var(--pp-green);
+}
+
+.art-nf-seg.is-rest {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(77, 88, 96, 0.5) 0 3px,
+    rgba(77, 88, 96, 0.12) 3px 6px
+  );
+  box-shadow: inset 0 0 0 1px var(--pp-ink-3);
+}
+
+.art-nf-seglab {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  color: #f2f6f9;
+}
+
+.art-nf-seg.is-rest .art-nf-seglab,
+.art-nf-seg.is-narrow .art-nf-seglab {
+  display: none;
+}
+
+/* 窄段：条里画不出字，编号在条上、名字在条下的引线列表里 */
+.art-nf-segn {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #f2f6f9;
+}
+
+/* 起止竖线：「昨夜」与「今晨」 */
+.art-nf-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--pp-ink);
+}
+
+.art-nf-mark.is-start {
+  background: var(--pp-ink-3);
+}
+
+.art-nf-fallaxis {
+  position: relative;
+  height: 12px;
+  font-size: 10.5px;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-fallaxis span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.art-nf-fallaxis span.is-end {
+  color: var(--pp-ink);
+  font-weight: 600;
+}
+
+.art-nf-falllist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 1px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.art-nf-falllist li {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--pp-ink-2);
+}
+
+.art-nf-falllist li > b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--pp-rule-2);
+  font-size: 8.5px;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-falllist li > .is-val {
+  font-weight: 700;
+  color: var(--pp-ink);
+}
+
+.art-nf-falllist li > .is-val:not(:has(+ span)) {
+  color: var(--pp-ink);
+}
+
+/* ---- 2. 消耗对账 ---- */
+.art-nf-ledgerwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* 一行一块：名字与读数同一行、两条对账条压下面 —— 名字单独占一行会白吃 16px，
+   而对账这栏的高度直接决定整屏放不放得下（见 .art-nf-figs 的注释）。 */
+.art-nf-ledger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'k read'
+    'bars bars';
+  align-items: baseline;
+  gap: 2px 12px;
+}
+
+.art-nf-ledgerk {
+  grid-area: k;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--pp-ink-2);
+}
+
+.art-nf-ledgerbars {
+  grid-area: bars;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* 两条同底的条，都按 max(估, 实扣) 归一 —— 谁长一眼可见 */
+.art-nf-bar {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.art-nf-bar em {
+  font-size: 9.5px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-bartrack {
+  position: relative;
+  height: 7px;
+  background: var(--pp-card);
+  box-shadow: inset 0 0 0 1px var(--pp-rule);
+}
+
+.art-nf-bartrack i {
+  display: block;
+  height: 100%;
+}
+
+.art-nf-bar.is-est .art-nf-bartrack i {
+  background: rgba(92, 63, 10, 0.42);
+}
+
+.art-nf-bar.is-spent .art-nf-bartrack i {
+  background: var(--pp-ink-2);
+}
+
+.art-nf-ledger.is-over .art-nf-bar.is-spent .art-nf-bartrack i {
+  background: var(--pp-red);
+}
+
+.art-nf-ledger.is-under .art-nf-bar.is-spent .art-nf-bartrack i {
+  background: var(--pp-green);
+}
+
+.art-nf-ledgerread {
+  grid-area: read;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.art-nf-ledgerread > .num {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--pp-ink);
+}
+
+.art-nf-ledgerdif {
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.art-nf-ledger.is-over .art-nf-ledgerdif {
+  color: var(--pp-red);
+}
+
+.art-nf-ledger.is-under .art-nf-ledgerdif {
+  color: var(--pp-green);
+}
+
+/* 食 / 水：线稿填色 + 剩几天 */
+.art-nf-stocks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--pp-rule);
+}
+
+.art-nf-stock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.art-nf-stockfig {
+  flex: none;
+  display: block;
+  height: 40px;
+}
+
+.art-nf-stockfig .art-lfig {
+  width: auto;
+  height: 40px;
+}
+
+.art-nf-stockinfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.art-nf-stockk {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-stockread {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pp-ink);
+}
+
+.art-nf-stockread em {
+  margin-left: 2px;
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-stockdays {
+  font-size: 10.5px;
+  color: var(--pp-ink-2);
+}
+
+/* ---- 3. 夜间温度 ---- */
+.art-nf-temp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 4px 10px;
+  align-items: start;
+}
+
+/* 管高 112：三根针 + 两条线 + 17 个刻度点都得住在这条管子上，矮了会挤成一坨；
+   高了会把整屏顶出滚动条 —— 这一屏的内容本来就只有一页纸的量，
+   而纸上的折痕（47.0–49.4% / 52.6–53.9%）是个硬约束：内容一高，
+   分区标题就会落到暗带上。124 是「刻度还分得开」与「标题躲得开折痕」之间的那个值。 */
+.art-nf-thermo {
+  position: relative;
+  height: 112px;
+}
+
+.art-nf-thermo .art-lfig {
+  width: auto;
+  height: 112px;
+}
+
+.art-nf-tick {
+  position: absolute;
+  left: 50px;
+  width: 6px;
+  height: 1px;
+  background: var(--pp-rule-2);
+}
+
+.art-nf-tick.is-major {
+  width: 10px;
+  background: var(--pp-rule-3);
+}
+
+.art-nf-tick.is-zero {
+  width: 15px;
+  height: 1.4px;
+  background: var(--pp-ink);
+}
+
+.art-nf-tmark {
+  position: absolute;
+  left: 64px;
+  transform: translateY(50%);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.art-nf-tmark.is-survival {
+  color: var(--pp-red);
+}
+
+.art-nf-tmark.is-comfort {
+  color: var(--pp-green);
+}
+
+/* 三根针：短＝室外、中＝估室内（虚线）、长＝实际室内。长度不同是为了叠在一起也分得清。 */
+.art-nf-needle {
+  position: absolute;
+  transform: translateY(50%);
+  border-radius: 1px;
+}
+
+.art-nf-needle.is-out {
+  width: 30px;
+  height: 1.6px;
+  background: var(--pp-red);
+}
+
+.art-nf-needle.is-est {
+  width: 46px;
+  height: 1.6px;
+  background-image: repeating-linear-gradient(to right, var(--pp-ochre) 0 5px, transparent 5px 9px);
+}
+
+.art-nf-needle.is-in {
+  width: 64px;
+  height: 2.6px;
+  background: var(--pp-ink);
+}
+
+.art-nf-tempreads {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.art-nf-tempreads li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-tempreads li b {
+  display: block;
+  height: 2px;
+  background: var(--pp-ink);
+}
+
+.art-nf-tempreads li.is-out b {
+  background: var(--pp-red);
+}
+
+.art-nf-tempreads li.is-est b {
+  background-image: repeating-linear-gradient(to right, var(--pp-ochre) 0 4px, transparent 4px 7px);
+}
+
+.art-nf-tempreads li.is-in b {
+  height: 2.6px;
+  background: var(--pp-ink);
+}
+
+.art-nf-tempreads li span.num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pp-ink);
+}
+
+/* ---- 4. 暴露度 ---- */
+.art-nf-eye {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.art-nf-eyeread {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.art-nf-eyeval {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--pp-ink);
+}
+
+.art-nf-eyedelta {
+  font-size: 12.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.art-nf-eyedelta.is-bad {
+  color: var(--pp-red);
+}
+
+.art-nf-eyedelta.is-good {
+  color: var(--pp-green);
+}
+
+.art-nf-eyek {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--pp-ink-3);
+}
+
+/* ---- 结算条目：按 icon 归栏 ---- */
+.art-nf-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+/* 身体附注：两栏排。一夜四五条是常态，一栏排会把「图解区」整块往下推 ——
+   纸上的折痕是硬的（47.0–49.4% / 52.6–53.9%），下面每多一行，分区标题就离暗带近一分。 */
+.art-nf-notes.is-single {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+  row-gap: 0;
+  margin-top: 2px;
+}
+
+.art-nf-note {
+  flex: 1 1 148px;
+  min-width: 0;
+}
+
+/* 「附注」栏装的是最长的那几行（无图标的散条），不给它多分点宽度就会排出三四行 */
+.art-nf-note.is-other {
+  flex: 1.7 1 240px;
+}
+
+.art-nf-notek {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 2px;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--pp-rule);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-notek em {
+  font-size: 9px;
+  font-style: normal;
+  color: var(--pp-ink-3);
+  opacity: 0.75;
+}
+
+/* 11/1.42 而不是 11.5/1.5：附注栏最多四行，这一档差正好把整屏压回一页之内
+   （纸上的折痕是硬的，内容一高分区标题就落进暗带）。 */
+.art-nf-noterow {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.42;
+  color: var(--pp-ink-2);
+}
+
+.art-nf-noterow.is-good {
+  color: var(--pp-green);
+}
+
+.art-nf-noterow.is-bad {
+  color: var(--pp-red);
+}
+
+.art-nf-noteico {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  color: var(--pp-ink-3);
+}
+
+.art-nf-notemk {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  color: var(--pp-ink-3);
+}
+
+/* 一夜没有 HP 增减：瀑布不画（画出来是一条没头的空槽），直接说清 */
+.art-nf-flat {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--pp-ink-2);
+}
+
+@media (max-width: 1000px) {
+  .art-nf-figs {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 18px;
+  }
+
+  .art-nf-stocks {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

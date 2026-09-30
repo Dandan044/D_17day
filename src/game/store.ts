@@ -9,6 +9,7 @@ import { CLASS_BY_ID } from './content/classes';
 import { ENDING_BY_ID } from './content/endings';
 import { FAMILY_BY_ID } from './content/events';
 import { PERK_BY_ID, UNLOCK_COST } from './content/perks';
+import { noteAction, reportCrash, setSnapshotProvider } from './debug/crashReport';
 import { addLog } from './engine/effects';
 import { carryCapacity, type Haul, type HaulItem } from './engine/economy';
 import { settle, resolveEnding, type Settlement } from './engine/endings';
@@ -88,6 +89,7 @@ export type Overlay =
   | 'plan'
   | 'body'
   | 'supplies'
+  | 'window'
   | 'todo';
 export type Screen = 'menu' | 'setup' | 'game' | 'summary';
 export type GameUi = 'art' | 'classic';
@@ -165,8 +167,29 @@ function createThrottledStorage(): PersistStorage<PersistedSlice> {
   return {
     // 读路径保持同步：模块加载时 rehydrate 的时序不变
     getItem: (name) => {
-      const raw = localStorage.getItem(name);
-      return raw ? (JSON.parse(raw) as StorageValue<PersistedSlice>) : null;
+      let raw: string | null = null;
+      try {
+        raw = localStorage.getItem(name);
+      } catch {
+        return null; // 隐私模式 / 存储被禁
+      }
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw) as StorageValue<PersistedSlice>;
+        // 只做形状闸门：真是半截的 JSON（写盘被打断）在这里就该扔掉，
+        // 不然它会在 store 模块初始化时抛出，React 还没挂载 → 永远白屏、连面板都没有。
+        if (!parsed || typeof parsed !== 'object' || !('state' in parsed)) return null;
+        return parsed;
+      } catch {
+        // 留一份残档再放手：万一还能人工捞回进度，也不至于被下一次存档覆盖掉。
+        try {
+          localStorage.setItem(`${name}.broken`, raw);
+        } catch {
+          /* 配额满就算了，别为了备份把启动卡住 */
+        }
+        console.warn('[七日之前] 存档不是合法 JSON，已忽略；残档另存为', `${name}.broken`);
+        return null;
+      }
     },
     setItem: (_name, value) => {
       pending = value;
@@ -275,19 +298,66 @@ export const useGame = create<GameState>()(
         setTimeout(() => get().dropToast(t.id), 3600);
       };
 
-      const withSession = <T,>(fn: (s: ReturnType<typeof createSession>) => SessionOutcome<T>) => {
+      /**
+       * 兜底三件事，少一件就退化成白屏或静默：
+       * 记一笔最近操作（崩溃报告里能看到前因）、弹 toast（点了有反应）、
+       * 报给崩溃面板（有现场可复制）。**不吞错、不做降级**——
+       * 该修的字段去修，别把真 bug 藏进 try/catch。
+       */
+      const onActionError = (label: string, e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[七日之前] 「${label}」抛错：`, e);
+        noteAction(`!! 「${label}」抛错 ${msg}`);
+        pushToast(t('ui.crash.actionFailed', { label }), 'bad');
+        reportCrash(e, `动作：${label}`);
+      };
+
+      /**
+       * 手写会话动作（endDay / resolveChoice 这类要读返回值再算结算的）也走同一套兜底。
+       * `note: false` 给那些**由 effect 自动触发、不是玩家点出来的**动作用——
+       * 它们会在每次 run 变化时跑一遍，全记进环形缓冲会把真正的操作挤出去。
+       */
+      const guarded = <T,>(label: string, fn: () => T, opts: { note?: boolean } = {}): T | undefined => {
+        if (!get().run) return undefined;
+        if (opts.note !== false) noteAction(label);
+        try {
+          return fn();
+        } catch (e) {
+          onActionError(label, e);
+          return undefined;
+        }
+      };
+
+      /**
+       * 所有「会话动作」的唯一入口。
+       *
+       * 三件事必须一起做到，少一件就会退化成白屏或静默：
+       * 1. 在**克隆出的** run 上跑，抛错时不 set，存档保持原样；
+       * 2. 抛错不吞：记一笔最近操作 + 弹 toast（点了有反应）+ 报给崩溃面板（有现场）；
+       * 3. 每一次调用都进最近操作环形缓冲，崩溃时报告里能看到前因。
+       */
+      const withSession = <T,>(
+        fn: (s: ReturnType<typeof createSession>) => SessionOutcome<T>,
+        label = '会话操作',
+      ) => {
         const run = get().run;
         if (!run) return undefined;
-        const next = structuredClone(run) as RunState;
-        const s = createSession(next, get().haul, get().openShop);
-        const r = fn(s);
-        if (!r.ok) {
-          if (r.reason) pushToast(r.reason, 'bad');
+        noteAction(label);
+        try {
+          const next = structuredClone(run) as RunState;
+          const s = createSession(next, get().haul, get().openShop);
+          const r = fn(s);
+          if (!r.ok) {
+            if (r.reason) pushToast(r.reason, 'bad');
+            return r;
+          }
+          set({ run: s.run, haul: s.haul, openShop: s.openShop });
+          for (const n of r.notes) pushToast(n.text, n.tone);
           return r;
+        } catch (e) {
+          onActionError(label, e);
+          return undefined;
         }
-        set({ run: s.run, haul: s.haul, openShop: s.openShop });
-        for (const n of r.notes) pushToast(n.text, n.tone);
-        return r;
       };
 
       return {
@@ -330,7 +400,7 @@ export const useGame = create<GameState>()(
         },
 
         chooseSite: (siteId) => {
-          withSession((s) => sessionChooseSite(s, siteId));
+          withSession((s) => sessionChooseSite(s, siteId), '选择据点');
         },
 
         abandonRun: () => {
@@ -339,31 +409,34 @@ export const useGame = create<GameState>()(
             set({ screen: 'menu' });
             return;
           }
-          const next = structuredClone(run) as RunState;
-          const ending = resolveEnding(next, t('ledger.cause.abandon'));
-          next.endingId = ending.id;
-          next.phase = 'ended';
-          set({ run: next, settlement: settle(next, ending, get().meta), screen: 'summary' });
+          guarded('放弃这局', () => {
+            const next = structuredClone(run) as RunState;
+            const ending = resolveEnding(next, t('ledger.cause.abandon'));
+            next.endingId = ending.id;
+            next.phase = 'ended';
+            set({ run: next, settlement: settle(next, ending, get().meta), screen: 'summary' });
+          });
         },
 
         endDay: () => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const s = createSession(next, get().haul, get().openShop);
-          const r = sessionEndDay(s);
-          if (!r.ok) {
-            if (r.reason) pushToast(r.reason, 'bad');
-            return;
-          }
-          const report = r.value!;
-          if (s.run.phase === 'ended') {
-            const ending = resolveEnding(s.run, report.cause);
-            s.run.endingId = ending.id;
-            set({ run: s.run, nightReport: report, settlement: settle(s.run, ending, get().meta) });
-          } else {
-            set({ run: s.run, nightReport: report });
-          }
+          guarded('结束这一天', () => {
+            const run = get().run!;
+            const next = structuredClone(run) as RunState;
+            const s = createSession(next, get().haul, get().openShop);
+            const r = sessionEndDay(s);
+            if (!r.ok) {
+              if (r.reason) pushToast(r.reason, 'bad');
+              return;
+            }
+            const report = r.value!;
+            if (s.run.phase === 'ended') {
+              const ending = resolveEnding(s.run, report.cause);
+              s.run.endingId = ending.id;
+              set({ run: s.run, nightReport: report, settlement: settle(s.run, ending, get().meta) });
+            } else {
+              set({ run: s.run, nightReport: report });
+            }
+          });
         },
 
         /**
@@ -372,13 +445,20 @@ export const useGame = create<GameState>()(
          * 改过内容再载入旧存档就会撞上，所以每次进入游戏前先扫一遍。
          */
         pruneQueue: () => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const dropped = pruneOrphanQueue(next);
-          // 没丢掉任何条目就不要 set：App 里有个依赖 `run` 的 effect 会再调这里，
-          // 每次 set 新引用就会死循环，点「结束这一天」后整页空白。
-          if (dropped > 0) set({ run: next });
+          guarded(
+            '清理事件队列',
+            () => {
+              const next = structuredClone(get().run!) as RunState;
+              const dropped = pruneOrphanQueue(next);
+              // 没丢掉任何条目就不要 set：App 里有个依赖 `run` 的 effect 会再调这里，
+              // 每次 set 新引用就会死循环，点「结束这一天」后整页空白。
+              if (dropped > 0) {
+                noteAction(`清理事件队列：剔掉 ${dropped} 条悬空条目`);
+                set({ run: next });
+              }
+            },
+            { note: false }, // 这个由 App 的 effect 自动调，不是玩家动作，别占缓冲
+          );
         },
 
         dismissNight: () => {
@@ -394,64 +474,67 @@ export const useGame = create<GameState>()(
          * 那种情况交给 App 的结算路由，这里不做额外处理。
          */
         devCheat: () => {
-          withSession((s) => sessionDevCheat(s));
+          const r = withSession((s) => sessionDevCheat(s), '开发者指令');
+          if (!r?.ok) return; // 失败就别清浮层，否则看起来像跳成功了其实没跳
           set({ overlay: null, openShop: null, haul: null, nightReport: null, lastChoice: null });
           useGame.setState({ screen: 'game' });
         },
 
         acknowledgeCollapse: () => {
-          withSession((s) => sessionAckCollapse(s));
+          withSession((s) => sessionAckCollapse(s), '确认崩塌');
         },
 
         claimSettlement: () => {
-          const { settlement, meta, run } = get();
-          if (!settlement || !run) {
-            set({ screen: 'menu', run: null, settlement: null });
-            return;
-          }
-          const nextMeta: MetaState = {
-            ...meta,
-            relics: meta.relics + settlement.relics,
-            unlocked: [...new Set([...meta.unlocked, ...settlement.newUnlocks])],
-            seenFamilies: [...new Set([...meta.seenFamilies, ...Object.keys(run.eventHistory)])],
-            seenVariants: [...new Set([...meta.seenVariants, ...(run.seenVariants ?? [])])],
-            seenEndings: [...new Set([...meta.seenEndings, settlement.ending.id])],
-            seenDisasters: [...new Set([...meta.seenDisasters, run.world.disaster])],
-            bestDays: Math.max(meta.bestDays, settlement.daysSurvived),
-          };
-          set({ meta: nextMeta, run: null, settlement: null, screen: 'menu' });
+          guarded('领取结算', () => {
+            const { settlement, meta, run } = get();
+            if (!settlement || !run) {
+              set({ screen: 'menu', run: null, settlement: null });
+              return;
+            }
+            const nextMeta: MetaState = {
+              ...meta,
+              relics: meta.relics + settlement.relics,
+              unlocked: [...new Set([...meta.unlocked, ...settlement.newUnlocks])],
+              seenFamilies: [...new Set([...meta.seenFamilies, ...Object.keys(run.eventHistory)])],
+              seenVariants: [...new Set([...meta.seenVariants, ...(run.seenVariants ?? [])])],
+              seenEndings: [...new Set([...meta.seenEndings, settlement.ending.id])],
+              seenDisasters: [...new Set([...meta.seenDisasters, run.world.disaster])],
+              bestDays: Math.max(meta.bestDays, settlement.daysSurvived),
+            };
+            set({ meta: nextMeta, run: null, settlement: null, screen: 'menu' });
+          });
         },
 
         // ============================================================
         resolveChoice: (familyId, variantId, choiceId) => {
-          const run = get().run;
-          if (!run) return;
-          const next = structuredClone(run) as RunState;
-          const s = createSession(next, get().haul, get().openShop);
-          const r = sessionResolveChoice(s, familyId, variantId, choiceId);
-          if (!r.ok || !r.value) return;
-          const result = r.value;
-          const last = s.run.log[s.run.log.length - 1];
-          const meta = get().meta;
-          const seenKey = `${familyId}/${variantId}`;
-          const patch: Partial<GameState> = {
-            run: s.run,
-            lastChoice: { ...result, title: last?.text ?? '' },
-            meta: {
-              ...meta,
-              seenFamilies: meta.seenFamilies.includes(familyId)
-                ? meta.seenFamilies
-                : [...meta.seenFamilies, familyId],
-              seenVariants: meta.seenVariants.includes(seenKey)
-                ? meta.seenVariants
-                : [...meta.seenVariants, seenKey],
-            },
-          };
-          if (s.run.phase === 'ended') {
-            const ending = s.run.endingId ? ENDING_BY_ID[s.run.endingId] : undefined;
-            if (ending) patch.settlement = settle(s.run, ending, get().meta);
-          }
-          set(patch);
+          guarded('处理事件选项', () => {
+            const next = structuredClone(get().run!) as RunState;
+            const s = createSession(next, get().haul, get().openShop);
+            const r = sessionResolveChoice(s, familyId, variantId, choiceId);
+            if (!r.ok || !r.value) return;
+            const result = r.value;
+            const last = s.run.log[s.run.log.length - 1];
+            const meta = get().meta;
+            const seenKey = `${familyId}/${variantId}`;
+            const patch: Partial<GameState> = {
+              run: s.run,
+              lastChoice: { ...result, title: last?.text ?? '' },
+              meta: {
+                ...meta,
+                seenFamilies: meta.seenFamilies.includes(familyId)
+                  ? meta.seenFamilies
+                  : [...meta.seenFamilies, familyId],
+                seenVariants: meta.seenVariants.includes(seenKey)
+                  ? meta.seenVariants
+                  : [...meta.seenVariants, seenKey],
+              },
+            };
+            if (s.run.phase === 'ended') {
+              const ending = s.run.endingId ? ENDING_BY_ID[s.run.endingId] : undefined;
+              if (ending) patch.settlement = settle(s.run, ending, get().meta);
+            }
+            set(patch);
+          });
         },
 
         dismissChoice: () => {
@@ -462,113 +545,113 @@ export const useGame = create<GameState>()(
 
         // ============================================================
         scavenge: (locationId, night) => {
-          withSession((s) => sessionScavenge(s, locationId, night));
+          withSession((s) => sessionScavenge(s, locationId, night), '外出搜刮');
         },
 
         takeHaul: (picked) => {
-          withSession((s) => sessionTakeHaul(s, picked));
+          withSession((s) => sessionTakeHaul(s, picked), '收下战利品');
         },
 
         discardHaul: () => {
-          withSession((s) => sessionDiscardHaul(s));
+          withSession((s) => sessionDiscardHaul(s), '丢弃战利品');
         },
 
         visitShop: (locationId) => {
-          withSession((s) => sessionVisitShop(s, locationId));
+          withSession((s) => sessionVisitShop(s, locationId), '进店');
         },
 
         closeShop: () => {
-          withSession((s) => sessionCloseShop(s));
+          withSession((s) => sessionCloseShop(s), '离开商店');
         },
 
         buy: (locationId, res, qty) => {
-          withSession((s) => sessionBuy(s, locationId, res, qty));
+          withSession((s) => sessionBuy(s, locationId, res, qty), '采购');
         },
 
         buyIodine: (locationId) => {
-          withSession((s) => sessionBuyIodine(s, locationId));
+          withSession((s) => sessionBuyIodine(s, locationId), '买碘片');
         },
 
         withdraw: (locationId, amount) => {
-          withSession((s) => sessionWithdraw(s, locationId, amount));
+          withSession((s) => sessionWithdraw(s, locationId, amount), '取款');
         },
 
         buyCoAlarm: (locationId) => {
-          withSession((s) => sessionBuyCoAlarm(s, locationId));
+          withSession((s) => sessionBuyCoAlarm(s, locationId), '买一氧化碳报警器');
         },
 
         buyCartridge: (locationId) => {
-          withSession((s) => sessionBuyCartridge(s, locationId));
+          withSession((s) => sessionBuyCartridge(s, locationId), '买备用滤芯');
         },
 
         useItem: (id) => {
-          withSession((s) => sessionUseItem(s, id));
+          withSession((s) => sessionUseItem(s, id), '使用特殊物品');
         },
 
         rest: () => {
-          withSession((s) => sessionRest(s));
+          withSession((s) => sessionRest(s), '休息');
         },
 
         build: (moduleId, path) => {
-          withSession((s) => sessionBuild(s, moduleId, path));
+          withSession((s) => sessionBuild(s, moduleId, path), '建造');
         },
 
         work: (moduleId) => {
-          withSession((s) => sessionWork(s, moduleId));
+          withSession((s) => sessionWork(s, moduleId), '施工');
         },
 
         cancelProject: (moduleId) => {
-          withSession((s) => sessionCancelProject(s, moduleId));
+          withSession((s) => sessionCancelProject(s, moduleId), '取消工程');
         },
 
         salvage: (targetId) => {
-          withSession((s) => sessionSalvage(s, targetId));
+          withSession((s) => sessionSalvage(s, targetId), '拆解');
         },
 
         maintain: (kind) => {
-          withSession((s) => sessionMaintain(s, kind));
+          withSession((s) => sessionMaintain(s, kind), '维护');
         },
 
         medicate: (conditionId) => {
-          withSession((s) => sessionMedicate(s, conditionId));
+          withSession((s) => sessionMedicate(s, conditionId), '用药');
         },
 
         verifyIntel: (intelId) => {
-          withSession((s) => sessionVerifyIntel(s, intelId));
+          withSession((s) => sessionVerifyIntel(s, intelId), '核实情报');
         },
 
-        searchChannel: () => withSession((s) => sessionSearchChannel(s)),
+        searchChannel: () => withSession((s) => sessionSearchChannel(s), '扫描频道'),
 
-        openChannel: (id) => withSession((s) => sessionOpenChannel(s, id)),
+        openChannel: (id) => withSession((s) => sessionOpenChannel(s, id), '打开频道'),
 
-        replyChannel: (id, choiceId) => withSession((s) => sessionReplyChannel(s, id, choiceId)),
+        replyChannel: (id, choiceId) => withSession((s) => sessionReplyChannel(s, id, choiceId), '回复频道'),
 
-        hailChannel: (id, choiceId) => withSession((s) => sessionHailChannel(s, id, choiceId)),
+        hailChannel: (id, choiceId) => withSession((s) => sessionHailChannel(s, id, choiceId), '主动呼叫'),
 
         // ============================================================
         setRation: (ration) => {
-          withSession((s) => sessionSetRation(s, ration));
+          withSession((s) => sessionSetRation(s, ration), '调整配给');
         },
         setWaterUse: (waterUse) => {
-          withSession((s) => sessionSetWaterUse(s, waterUse));
+          withSession((s) => sessionSetWaterUse(s, waterUse), '调整用水');
         },
         setPowerMode: (powerMode) => {
-          withSession((s) => sessionSetPowerMode(s, powerMode));
+          withSession((s) => sessionSetPowerMode(s, powerMode), '调整供电模式');
         },
         setHeatMode: (heatMode) => {
-          withSession((s) => sessionSetHeatMode(s, heatMode));
+          withSession((s) => sessionSetHeatMode(s, heatMode), '调整取暖方式');
         },
         setHeatTarget: (heatTarget) => {
-          withSession((s) => sessionSetHeatTarget(s, heatTarget));
+          withSession((s) => sessionSetHeatTarget(s, heatTarget), '调整目标温度');
         },
         setHeatMix: (elecKwh, fuelL) => {
-          withSession((s) => sessionSetHeatMix(s, elecKwh, fuelL));
+          withSession((s) => sessionSetHeatMix(s, elecKwh, fuelL), '调整热电配比');
         },
         setPowerPriority: (order) => {
-          withSession((s) => sessionSetPowerPriority(s, order));
+          withSession((s) => sessionSetPowerPriority(s, order), '调整供电优先级');
         },
         togglePowerLoad: (id, on) => {
-          withSession((s) => sessionTogglePowerLoad(s, id, on));
+          withSession((s) => sessionTogglePowerLoad(s, id, on), '启停用电设备');
         },
         setDifficulty: (difficulty) => set({ meta: { ...get().meta, difficulty } }),
 
@@ -612,8 +695,8 @@ export const useGame = create<GameState>()(
     },
     {
       name: 'seven-days-save-v1',
-      // v5：无线电频道网络（run.channels / run.channelPool）
-      version: 5,
+      // v6：`run.items` 进 ensureRunDefaults、ensureChannelDefaults 会剔除未知频道 id
+      version: 6,
       storage: createThrottledStorage(),
       migrate: (persisted) => {
         const p = (persisted ?? {}) as Partial<GameState>;
@@ -701,3 +784,32 @@ export function pruneOrphanQueue(run: RunState): number {
   addLog(run, t('ledger.run.orphan', { n: dropped }), 'neutral');
   return dropped;
 }
+
+// ============================================================
+// 崩溃报告的进度快照
+//
+// 由 store 侧注册（而不是 debug 模块反向 import store），否则成环。
+// 只读几行摘要：报告要能一眼看出「崩在哪一步」，不是把存档倒出来。
+// ============================================================
+
+setSnapshotProvider(() => {
+  const s = useGame.getState();
+  const run = s.run;
+  const where = `屏幕 ${s.screen}｜浮层 ${s.overlay ?? '-'}｜皮肤 ${s.gameUi}`;
+  if (!run) return `${where}｜没有进行中的局`;
+
+  const live = run.channels?.filter((c) => c.status === 'active').map((c) => c.id) ?? [];
+  const held = run.channels?.filter((c) => c.awaiting).map((c) => c.id) ?? [];
+  const built = Object.entries(run.modules ?? {})
+    .filter(([, lv]) => (lv ?? 0) > 0)
+    .map(([id, lv]) => `${id}${lv}`);
+
+  return [
+    where,
+    `第 ${run.day} 天 · 阶段 ${run.phase} · 据点 ${run.siteId} · 灾难 ${run.world?.disaster} · 末世等级 ${run.threat}`,
+    `AP ${run.ap}｜队列 ${run.queue?.length ?? 0} 条｜待处理 ${run.pending?.length ?? 0} 条`,
+    `已建 ${built.length ? built.join(' ') : '（无）'}`,
+    `频道 进行中 ${live.length ? live.join(' ') : '（无）'}｜等待玩家 ${held.length ? held.join(' ') : '（无）'}`,
+    `滤芯 ${run.wear?.filterLife}／备用 ${run.items?.filter ?? 0} 只`,
+  ].join('\n  ');
+});

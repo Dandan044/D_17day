@@ -1,7 +1,6 @@
 import { FAMILY_BY_ID } from '../game/content/events';
 import { RES_NAME, SKILL_NAME } from '../game/copy/names';
 import { t } from '../game/copy/t';
-import { SITE_BY_ID } from '../game/content/sites';
 import { kindName } from '../game/engine/director';
 import { checkRequirement } from '../game/engine/tags';
 import { useGame } from '../game/store';
@@ -9,6 +8,7 @@ import type { Choice, RunState } from '../game/types';
 import { cachedFacts } from './derived';
 import { Chip } from './kit';
 import { scrambleText } from './scramble';
+import { siteOf } from '../game/content/lookup';
 
 const KIND_TONE: Record<string, 'bad' | 'good' | 'info' | 'warn' | 'psyche' | 'default'> = {
   threat: 'bad',
@@ -47,7 +47,7 @@ export default function EventCard({ run }: { run: RunState }) {
 
   const facts = cachedFacts(run);
   const unreliable = run.stats.sanity < 35;
-  const hideRecruit = (SITE_BY_ID[run.siteId ?? 'apartment']?.companionCap ?? 0) <= 0;
+  const hideRecruit = (siteOf(run.siteId)?.companionCap ?? 0) <= 0;
   const visibleChoices = variant.choices.filter((c) => {
     if (!hideRecruit) return true;
     const rec =

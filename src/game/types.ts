@@ -261,6 +261,13 @@ export interface Effect {
   wear?: Partial<{ filterLife: number; generatorOil: number; batteryCharge: number }>;
   /** 特殊物品增量：备用滤芯等（负为消耗，正为获得） */
   items?: Partial<Record<'filter', number>>;
+  /**
+   * 换上备用滤芯：耗一只备用芯，滤芯耐久置满（= WEAR.FILTER_LIFE）。
+   * 走这个字段而不是手写 `items:{filter:-1} + wear:{filterLife:30}`——
+   * 后者把「满芯」写成了 30 这个魔数，调高 FILTER_LIFE 时会静默补不满。
+   * 库存为 0 时什么也不做（选项门槛应已用 `item:filter>=1` 挡住）。
+   */
+  swapFilter?: boolean;
   /** 室内温度增量（开门漏热、半夜添火） */
   indoor?: number;
   /** 事件里改取暖模式（电热坏了改烧油） */
@@ -296,6 +303,17 @@ export interface Effect {
   locations?: Array<{ id: string; stock?: number; blocked?: string | null }>;
   /** 种下延迟事件 */
   schedule?: ScheduledSeed[];
+  /**
+   * 对话后果的「今日待办」通道：把一个事件家族**直接推进 run.queue**（今天就得处理）。
+   *
+   * 刻意不走 `schedule`/pending：那条路有 MAX_PENDING_PER_DAY:2 的每日限流，会把
+   * 对话答应好的事悄悄吞掉或顺延到明天——「你说我等你」转头就没下文，比不承诺更伤。
+   * enqueue 由 applyEffect 当场执行，绕过每日上限（emitHook 的 tryInsert 是同款先例）；
+   * queue 非空会挡「结束这一天」，这正是「今日待办」的强制处理语义。
+   * variantId 缺省时由引擎用 derivedRng 当场选定（pruneOrphanQueue 会清掉指向
+   * 不存在变体的条目，所以绝不能塞一个空 variantId 进队列）。
+   */
+  enqueue?: Array<{ familyId: string; variantId?: string }>;
   /** 局外永久解锁 */
   unlock?: string[];
   /** 记忆日记里的一行 */
@@ -332,6 +350,14 @@ export interface Choice {
   requires?: Requirement;
   check?: SkillCheck;
   effect?: Effect;
+  /**
+   * 多轮对话：选完不结案，改写 queue 条目的 variantId 进入同家族的下一拍。
+   * 事件卡（两套皮肤）按 (familyId, variantId) 渲染，切换即翻页——
+   * 引擎只负责"不出队 + 换 variantId"，呈现零改动。
+   * 链末选项不写 next，走原出队结算（emitHook('choice') 只在链末发射，
+   * 否则多轮中途就会点燃 waitFor:'choice' 的 pending 链）。
+   */
+  next?: string;
 }
 
 export interface EventVariant {
@@ -553,29 +579,33 @@ export interface ChannelDef {
  *
  * 这是频道的驱动单位：**有开场、有若干轮、有明确结束**。
  *
- * 时间语义上有一条硬规矩：
- * - `at` / `afterDays` 只管**事件什么时候开始**（事件之间才看日历）。
+ * 时间语义上有两条硬规矩：
+ * - **事件不是按天到场的**（2026-09-15 重构：旧的 `at`/`afterDays` 绝对/相对锚已删除）。
+ *   事件属于「末日阶段 × 好感度」的池子，`tickChannels` 每天空闲时按三优先级抽一个：
+ *   关联关键（prereq 满足的 key）→ 关键（key，过期保留）→ 普通池随机（`derivedRng`）。
+ *   事件声明 `stage:[min,max]`（threat 区间）与 `minBond`（好感档下限）决定自己属于哪个池。
  * - 事件一旦开始，轮与轮之间**即时**推进，日历不再插手；想表达"他几天没回"，
  *   在该轮上写 `delayDays`，不要回到事件级。
- *
- * 与旧模型的关系：旧模型里"日历拍"和"轮"混在同一个 `beats[]` 里，只靠有没有 `at` 区分，
- * 于是既没有事件边界、也无法表达"这件事一共几轮"，节奏规则只能靠频道 kind 兜。
- * 分层之后这些补丁全部作废。
  */
 export interface ChannelEvent {
   id: string;
-  /** 绝对日锚：第几天开始 */
-  at?: number;
-  /** 相对锚：距上一次联系这么多天开始 */
-  afterDays?: number;
-  /** 需要已完成的事件 id */
+  /**
+   * 末日阶段区间（threat 值 1-6：恐慌/匮乏/掠夺/严冬/荒芜/死寂）。
+   * 决定本事件在哪个阶段的随机池里。key 事件必须声明（lint 强制）。
+   */
+  stage?: [number, number];
+  /** 好感度档位下限：1=陌生 2=熟悉 3=交心 4=依赖（缺省 = 不限，随池） */
+  minBond?: 1 | 2 | 3 | 4;
+  /**
+   * 关键事件标记。每组（阶段）0-1 个；进入该组后**首次抽取必先触发它**；
+   * 过期（阶段已过）的未完成 key 仍保留最高优先级之一，只是不再受 stage 窗口限制。
+   * 带 `need` 的 key ＝「关联关键事件」：前置达成且进入 stage 区间后，下一事件必触发。
+   */
+  key?: true;
+  /** 需要已完成的事件 id（关联事件 / 关联关键事件的前置） */
   need?: string[];
   minAffinity?: number;
   require?: TagQuery;
-  /** 前置不满足时改走哪个事件（旧 elseBeat 的事件级版本） */
-  elseEvent?: string;
-  /** false / 缺省＝正常事件（进不了就跳过）；true＝**条件不满足时什么也不发生**，等它自然到点重试 */
-  keepWaiting?: boolean;
 
   /** 开场白。空数组 = 由玩家先开口（见 awaitPlayerOpen） */
   opening?: ChatLine[];
@@ -636,12 +666,17 @@ export interface ChatChoice {
   id: string;
   /** 文案键 */
   label: string;
-  /** 文案键。代价说明**只写玩家真要付的东西**——发送本身不耗电，别再写"耗电 0.15 kWh" */
+  /** 文案键。代价说明**只写玩家真要付的东西**；带 `kwh` 的选项用 `{kwh}` 占位，UI 插值实际数值 */
   note?: string;
   /** 门槛：常用 modules.radio 做等级鉴定 */
   requires?: Requirement;
+  /** 发送耗电（kWh）：选择前由 note 明示（`{kwh}` 占位），蓄电不足时选项禁用 */
+  kwh?: number;
   effect?: Effect;
-  /** 好感度增减，由内容显式声明（拒绝与答应差别很大，不靠推断） */
+  /**
+   * 好感度增减，由内容显式声明。**数值对玩家不可见、选择前不可预知**——
+   * UI 只显示关系档位（陌生/熟悉/交心/依赖），note 里禁止暗示好感后果。
+   */
   affinity?: number;
   /** 发送后追加到右侧气泡的文案键 */
   say?: string;
@@ -693,10 +728,8 @@ export interface ChannelState {
   waitUntilDay?: number;
 
   missed: number;
-  repliedCount: number;
+  /** 最近一次互动的日子。`afterDays` 锚与「静默多久算失联」都从它算起 */
   lastContactDay: number;
-  /** 离线回归用：连续没有互动的起始日 */
-  offlineSinceDay?: number;
 }
 
 // ============================================================

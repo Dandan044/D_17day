@@ -20,6 +20,7 @@ export function ArtCutout({
   locked,
   poly,
   tier,
+  hitFill,
 }: {
   left: string;
   top: string;
@@ -35,6 +36,15 @@ export function ArtCutout({
   poly?: ArtPoly;
   /** 待办警戒级：本子轮廓常亮同色描边（橙/红），悬停白光晕仍会临时覆盖。 */
   tier?: 'red' | 'orange';
+  /**
+   * 整盒可点，不管图片那块是不是透明。
+   *
+   * 默认（`visiblePainted`）的语义是「只点得到画出来的像素」，对「扣下来的实物」是对的——
+   * 透明留白不该抢点击。但**窗户**是个反例：窗抠图在玻璃处是**全透明**的
+   * （实测 alpha=0，交给天气洞透出来），于是照着默认走就会发现「点玻璃没反应」，
+   * 而玻璃恰恰是玩家唯一会点的地方。所以窗户传 `hitFill`。
+   */
+  hitFill?: boolean;
 }) {
   const rawId = useId();
   const clipId = 'art-clip-' + rawId.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -59,7 +69,7 @@ export function ArtCutout({
           width="1"
           height="1"
           preserveAspectRatio="none"
-          pointerEvents="visiblePainted"
+          pointerEvents={hitFill && !poly ? 'all' : 'visiblePainted'}
           clipPath={poly ? `url(#${clipId})` : undefined}
         />
       </svg>

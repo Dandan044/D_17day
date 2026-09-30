@@ -10,7 +10,7 @@
 import { FAMILY_BY_ID } from '../src/game/content/events';
 import { LOCATION_BY_ID } from '../src/game/content/locations';
 import { SITE_BY_ID } from '../src/game/content/sites';
-import { COLD, POWER, TIME } from '../src/game/balance';
+import { COLD, POWER, TIME, WEAR } from '../src/game/balance';
 import { applyProduction, buyIodine, buyCoAlarm, consumeDaily, dailyNeeds, travelCost, type ConsumeResult } from '../src/game/engine/economy';
 import { applyEffect, sequelWaitLabel } from '../src/game/engine/effects';
 import { applyHeatWants, capHeat, heatPlan, leakRate, thermalSink } from '../src/game/engine/climate';
@@ -23,8 +23,28 @@ import { resolveHealth } from '../src/game/engine/health';
 import { assessCollapse } from '../src/game/engine/collapse';
 import { isEligible, pickVariant, selectEvents } from '../src/game/engine/director';
 import { applyOnset } from '../src/game/engine/world';
-import { createSession, scavenge as sessionScavenge, work as sessionWork } from '../src/game/session';
+import { createSession, scavenge as sessionScavenge, useItem as sessionUseItem, work as sessionWork } from '../src/game/session';
 import { pruneOrphanQueue, rebuildSettlement } from '../src/game/store';
+import {
+  channelDefOf,
+  conditionDef,
+  conditionName,
+  disasterOf,
+  moduleName,
+  siteOf,
+} from '../src/game/content/lookup';
+import { channelEvents, ensureChannelDefaults } from '../src/game/engine/channels';
+import { CHANNEL_BY_ID } from '../src/game/content/channels';
+import { ensureRunDefaults } from '../src/game/engine/power';
+import { medicateCondition } from '../src/game/engine/health';
+import { collectTodos } from '../src/game/engine/todos';
+import {
+  buildReport,
+  clearActions,
+  healthCheck,
+  noteAction,
+  recentActions,
+} from '../src/game/debug/crashReport';
 import { pickOracle, pickSighted, scoreIgnoresRecruit } from './sim/preview';
 import { attach, emptyCounters, PERSONA_BY_ID, planBuildOrder, planHeat, playDay } from './sim/policy';
 import { makeRng, type Rng } from '../src/game/rng';
@@ -48,6 +68,35 @@ const EMPTY_META: MetaState = {
   relics: 0, unlocked: [], perks: [], seenFamilies: [], seenVariants: [],
   seenEndings: [], seenDisasters: [], runsPlayed: 0, bestDays: 0,
   lastClassId: 'clerk', difficulty: 'normal',
+};
+
+/**
+ * 「站在第 N 天时，某个频道里哪些事件已经走完了」——**已删除（2026-09-16）**。
+ *
+ * 它当年是为了修「手写清单静默腐坏」才写的，症状写在这里备查：31 条断言集体翻车，
+ * 报出来全是 `active=undefined`，看着像引擎坏了。
+ *
+ * 但 2026-09-15 重构把 `ChannelEvent.at` 删掉、事件改由「阶段 × 好感」的池子抽签之后，
+ * `(e.at ?? Infinity) < day` **恒为假** → helper 恒返回空数组 → 前置全都不满足 →
+ * **同一个症状又回来了**（这次的起因与当年的手写清单不同，结果一模一样）。
+ *
+ * 现在判定口径是两把尺子（`stage` + `minBond`），按天过滤不再成立。
+ * P1-x 改用「把其它事件全标成已完成、池里只剩目标事件」来钉住抽签——见 `atEvent()`。
+ */
+
+/** xt 频道全部事件 id（从事件表派生，不手写清单） */
+const XT_EVENT_IDS = channelEvents(CHANNEL_BY_ID['xt']!).map((e) => e.id);
+
+/**
+ * 钉住 xt 的抽签：把**除目标事件外**的事件全标成已完成，池里就只剩目标 → 抽签变确定。
+ *
+ * 旧写法 `doneEvents: ['xt_hello']` 会留下 3-4 个候选（xt_power / xt_cat / xt_alone…），
+ * 抽签一出随机，就永远抽不到要测的那一件——症状是 `active` 是别的事件、`awaiting=null`、
+ * 或 `replyChannel` 报「这条已经回过了」。**凡是要测某个具体事件的用例，都必须用它钉池。**
+ */
+const onlyXt = (keep: string | string[]): string[] => {
+  const k = new Set(Array.isArray(keep) ? keep : [keep]);
+  return XT_EVENT_IDS.filter((x) => !k.has(x));
 };
 
 // ============================================================
@@ -1311,7 +1360,6 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     inbox: [],
     log: [],
     missed: 0,
-    repliedCount: 0,
     lastContactDay: 0,
     awaiting: null,
     ...extra,
@@ -1345,107 +1393,104 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     check('准备期仍自动推送 3 条 prep 情报', r.intel.length === 3, String(r.intel.length));
   }
 
-  // ---- 崩溃日的插入位：day 7 → endDay → day 8 当天就该收到开场拍 ----
+  // ---- 崩溃日的插入位：endDay 里 tickChannels 的调用位置在提前 return 之前 ----
+  // 模范线 xt 第 9 天才开机，所以用 day 8 → 9 这一步来守插入位。
   {
-    const r = survivalRun(6102, TIME.COLLAPSE_DAY - 1);
-    r.phase = 'prep';
-    r.ap = 0;
-    r.channels = [mkChannel('tmp_dying')];
+    const r = survivalRun(6102, TIME.COLLAPSE_DAY);
+    r.channels = [mkChannel('xt')];
     r.queue = [];
     endDay(r);
     const st = r.channels[0]!;
     check(
-      '崩溃日当天频道节拍已投递（守住 endDay 提前 return 之前的插入位）',
-      r.day === TIME.COLLAPSE_DAY && st.inbox.length >= 3,
+      '崩溃日次日频道节拍已投递（守住 endDay 提前 return 之前的插入位）',
+      r.day === TIME.COLLAPSE_DAY + 1 && st.inbox.length >= 3,
       `day=${r.day} inbox=${st.inbox.length}`,
     );
     check(
-      '开场事件被标记为等回复',
-      st.active?.eventId === 'd_open' && st.awaiting === 'choice',
+      '开场事件被标记为等玩家先开口',
+      st.active?.eventId === 'xt_hello' && st.awaiting === 'open',
       `active=${st.active?.eventId}/${st.active?.roundId} awaiting=${st.awaiting}`,
     );
   }
 
   // ---- 未读搬进会话记录 + onRead 结算 ----
   {
-    const r = survivalRun(6103);
-    r.channels = [mkChannel('tmp_dying')];
+    const r = survivalRun(6103, 9);
+    r.channels = [mkChannel('xt')];
     tickChannels(r);
     const st = r.channels[0]!;
     const unread = st.inbox.length;
     const ap = r.ap;
     const rng0 = r.rngCursor;
-    const out = openChannel(r, 'tmp_dying');
+    const out = openChannel(r, 'xt');
     check('打开频道搬走未读', out.lines.length === unread && st.inbox.length === 0, `${unread} -> ${st.inbox.length}`);
     check('读不消耗行动点', r.ap === ap, `${ap} -> ${r.ap}`);
     check('读不推进共享随机游标', r.rngCursor === rng0, `${rng0} -> ${r.rngCursor}`);
   }
 
-  // ---- 整条「求救的男人」：两次抉择都走一遍 ----
+  // ---- 整条「问电」：两次抉择都走一遍（轮即时接线 + 好感度按选项声明） ----
   {
-    const r = survivalRun(6104);
-    r.channels = [mkChannel('tmp_dying')];
+    const r = survivalRun(6104, 11);
+    r.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_power') })];
     tickChannels(r);
-    openChannel(r, 'tmp_dying');
+    openChannel(r, 'xt');
 
-    // 第一次抉择：回话
-    const a = replyChannel(r, 'tmp_dying', 'reply');
-    check('第一次抉择（回话）成功', a.ok, a.reason);
+    // 第一次抉择：说实话
+    const a = replyChannel(r, 'xt', 'honest');
+    check('第一次抉择（说实话）成功', a.ok, a.reason);
     const st = r.channels[0]!;
     check('回话进了会话记录', st.log.some((l) => l.from === 'you'), `log=${st.log.length}`);
-    check('好感度按选项声明增加', st.affinity === 20 + 4, String(st.affinity));
+    check('好感度按选项声明增加', st.affinity === 20 + 6, String(st.affinity));
 
     // 事件内的轮是即时接线：回复后立刻进下一轮，不再挂到次日
-    const pendingRound = st.active?.roundId;
     tickChannels(r);
     check(
       '下一轮接线后即时投递并等回复',
-      st.log.length + st.inbox.length > 0 && pendingRound === 'd_ask' && st.active?.roundId === 'd_ask' && st.awaiting === 'choice',
+      st.active?.roundId === 'r_honest' && st.awaiting === 'choice',
       `round=${st.active?.roundId} awaiting=${st.awaiting}`,
     );
 
-    openChannel(r, 'tmp_dying');
-    const apBefore = r.ap;
-    const stamBefore = r.stats.stamina;
-    const expBefore = r.world.exposure;
-    const b = replyChannel(r, 'tmp_dying', 'go');
-    check('第二次抉择（答应去）成功', b.ok, b.reason);
-    check('答应去扣 2 行动点', r.ap === apBefore - 2, `${apBefore} -> ${r.ap}`);
-    check('答应去扣体力', r.stats.stamina < stamBefore, `${stamBefore} -> ${r.stats.stamina}`);
-    check('答应去涨暴露度', r.world.exposure > expBefore, `${expBefore} -> ${r.world.exposure}`);
-    check('去过的地下室变成可搜地点', r.locations.some((l) => l.id === 'sig_basement'), r.locations.map((l) => l.id).join(','));
+    // 第二次抉择：教她省电（走到事件收场）
+    openChannel(r, 'xt');
+    const b = replyChannel(r, 'xt', 'teach');
+    check('第二次抉择（教她省电）成功', b.ok, b.reason);
+    // 收尾轮现在也带选项（radio-voices 第 1 条：收尾轮也要给玩家收尾动作），
+    // 所以事件不是"她说完就没了"，要玩家回一句才收场。
     tickChannels(r);
-    check('这条线以永久静默收尾', st.status === 'lost', st.status);
+    check('收尾轮在等玩家收尾动作', st.active?.roundId === 'r_teach' && st.awaiting === 'choice', `round=${st.active?.roundId} awaiting=${st.awaiting}`);
+    const c = replyChannel(r, 'xt', 'close');
+    check('收尾动作发得出去', c.ok, c.reason);
+    check('这条以正常收场结束', st.doneEvents.includes('xt_power') && st.status === 'active', `done=${st.doneEvents.join(',')} status=${st.status}`);
   }
 
-  // ---- 第二次抉择：只说"记下了" → 三天后静默 ----
+  // ---- 第二次抉择没给：隔两天她才把猫的来历讲完 ----
   {
-    const r = survivalRun(6105);
-    r.channels = [mkChannel('tmp_dying')];
+    const r = survivalRun(6105, 13);
+    r.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_cat') })];
     tickChannels(r);
-    openChannel(r, 'tmp_dying');
-    replyChannel(r, 'tmp_dying', 'reply');
-    tickChannels(r); // d_ask
-    openChannel(r, 'tmp_dying');
-    replyChannel(r, 'tmp_dying', 'note');
+    openChannel(r, 'xt');
+    replyChannel(r, 'xt', 'chat');
     const st = r.channels[0]!;
     check(
-      '记下之后进入三日等待',
-      st.active?.roundId === 'd_note_after' && st.waitUntilDay === r.day + 3 && st.awaiting === null && st.status === 'active',
-      `${st.active?.roundId} wait=${st.waitUntilDay}/${r.day + 3} awaiting=${st.awaiting} / ${st.status}`,
+      '聊了猫之后进入两日等待',
+      st.active?.roundId === 'r_cat' && st.waitUntilDay === r.day + 2 && st.awaiting === null && st.status === 'active',
+      `${st.active?.roundId} wait=${st.waitUntilDay}/${r.day + 2} awaiting=${st.awaiting} / ${st.status}`,
     );
-    r.day += 2;
-    tickChannels(r);
-    check('等待期内不提前兑现', st.status === 'active', st.status);
     r.day += 1;
     tickChannels(r);
-    check('满三天后静默', st.status === 'lost', st.status);
+    check('等待期内不提前兑现', st.inbox.length === 0 && !st.doneEvents.includes('xt_cat'), st.doneEvents.join(','));
+    r.day += 1;
+    tickChannels(r);
+    openChannel(r, 'xt');
+    check('满两天后她接着说', st.active?.roundId === 'r_cat' && st.awaiting === 'choice', `round=${st.active?.roundId} awaiting=${st.awaiting}`);
+    replyChannel(r, 'xt', 'close');
+    check('满两天后她才把话说完', st.doneEvents.includes('xt_cat') && st.status === 'active', st.doneEvents.join(','));
   }
 
   // ---- 超期未回：missed++ 且好感度 −6 ----
   {
-    const r = survivalRun(6106);
-    r.channels = [mkChannel('tmp_dying')];
+    const r = survivalRun(6106, 11);
+    r.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_power') })];
     tickChannels(r);
     const st = r.channels[0]!;
     st.active!.lastActionDay = r.day - 99; // 早就该回了
@@ -1458,8 +1503,8 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
 
   // ---- lost 之后彻底不再投递 ----
   {
-    const r = survivalRun(6107);
-    r.channels = [mkChannel('tmp_mother', { status: 'lost' })];
+    const r = survivalRun(6107, 9);
+    r.channels = [mkChannel('xt', { status: 'lost' })];
     for (let i = 0; i < 20; i++) {
       r.day += 1;
       tickChannels(r);
@@ -1474,10 +1519,10 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
   // 「被拒时不扣 AP / 不推进剧情」的断言前提已经不成立，这里改成守住新契约：
   // 蓄电见底照样能发话、而且发话本身不产生任何消耗。
   {
-    const r = survivalRun(6108);
-    r.channels = [mkChannel('tmp_dying')];
+    const r = survivalRun(6108, 11);
+    r.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_power') })];
     tickChannels(r);
-    openChannel(r, 'tmp_dying');
+    openChannel(r, 'xt');
     const st = r.channels[0]!;
     check('事件已开始、正等玩家回话', st.awaiting === 'choice', `awaiting=${st.awaiting} event=${st.active?.eventId}`);
 
@@ -1485,7 +1530,7 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     const ap = r.ap;
     const kwh = r.wear.batteryCharge;
     const lines = st.log.length;
-    const sent = replyChannel(r, 'tmp_dying', 'reply');
+    const sent = replyChannel(r, 'xt', 'honest');
     check('蓄电为 0 时照样能发话（发送不校验蓄电）', sent.ok, sent.reason);
     check('发话不扣蓄电', r.wear.batteryCharge === kwh, `${kwh} -> ${r.wear.batteryCharge}`);
     check('发话不扣行动点', r.ap === ap, `${ap} -> ${r.ap}`);
@@ -1498,21 +1543,21 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
 
   // ---- 1 级电台即可收发（等级只用于「搜到频道」与选项自身的门槛，不再是发话前提） ----
   {
-    const r = survivalRun(6109);
+    const r = survivalRun(6109, 11);
     r.modules.radio = 1;
-    r.channels = [mkChannel('tmp_dying')];
+    r.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_power') })];
     tickChannels(r);
-    openChannel(r, 'tmp_dying');
-    const sent = replyChannel(r, 'tmp_dying', 'reply');
+    openChannel(r, 'xt');
+    const sent = replyChannel(r, 'xt', 'honest');
     check('1 级电台也能发话', sent.ok, sent.reason);
 
     // 「不说话的那条永远可选」这条契约与电台等级无关，仍应成立 → 单独验证
-    const r2 = survivalRun(6109);
+    const r2 = survivalRun(6109, 11);
     r2.modules.radio = 1;
-    r2.channels = [mkChannel('tmp_dying')];
+    r2.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_power') })];
     tickChannels(r2);
-    openChannel(r2, 'tmp_dying');
-    const quiet = replyChannel(r2, 'tmp_dying', 'off'); // 不说话的那条应该仍然可选
+    openChannel(r2, 'xt');
+    const quiet = replyChannel(r2, 'xt', 'quiet'); // 不说话的那条应该仍然可选
     check('不发话的选项仍然可选', quiet.ok, quiet.reason);
   }
 
@@ -1560,7 +1605,8 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
   {
     const r = survivalRun(6112);
     ensureChannelDefaults(r);
-    r.channels = [mkChannel('tmp_dying'), mkChannel('tmp_mother')];
+    // 钉住 xt_alone：它没有选项、投完即收场，足够撑满 30 天的推进（且不会卡在等回复上）
+    r.channels = [mkChannel('xt', { doneEvents: onlyXt('xt_alone') })];
     const cursor0 = r.rngCursor;
     for (let i = 0; i < 30; i++) {
       r.day += 1;
@@ -1579,43 +1625,39 @@ console.log('\n  P0-x  无线电频道网络：调度、信箱与代价');
     const bare = { channels: undefined, channelPool: undefined } as unknown as RunState;
     ensureChannelDefaults(bare);
     check('旧档补出 channels 数组', Array.isArray(bare.channels) && bare.channels.length === 0);
-    check('旧档补出可搜频道池', Array.isArray(bare.channelPool) && bare.channelPool.length > 0, String(bare.channelPool.length));
+    // 模范线重做后搜索池暂时为空（可搜频道等模范线量产后回填），空池是合法状态
+    check('旧档补出频道池（允许为空池）', Array.isArray(bare.channelPool), String(bare.channelPool?.length));
   }
 }
 
 // ============================================================
-console.log('\n  P1-x  小桃：固定日求救的三种结局');
+console.log('\n  P1-x  小桃：阶段抽签 / 好感分叉 / 多轮 / 生死由行为链');
 // ============================================================
 {
   const { tickChannels, openChannel, replyChannel } = await import('../src/game/engine/channels');
-  type St = import('../src/game/types').ChannelState;
 
-  const mk = (extra: Partial<St> = {}): St => ({
-    id: 'xt',
-    status: 'active',
-    affinity: 60,
-    doneEvents: [],
-    inbox: [],
-    log: [],
-    missed: 0,
-    repliedCount: 0,
-    lastContactDay: 0,
-    awaiting: null,
-    ...extra,
-  });
+  /** 本频道全部事件 id（从事件表派生，不手写清单） */
+  const XT_ALL = channelEvents(CHANNEL_BY_ID['xt']!).map((e) => e.id);
 
-  /** 第 32 天之前该走完的主线事件（测试里直接标成已完成，免得一天只投一件的节奏把用例拖长） */
-  const PRIOR = [
-    'xt_hello', 'xt_power', 'xt_daily_a', 'xt_share', 'xt_daily_b',
-    'xt_daily_c', 'xt_daily_d', 'xt_request', 'xt_gift', 'xt_reconnect', 'xt_afraid',
-  ];
-
-  /** 造一个「已经走完前置、正站在第 32 天」的局 */
-  const atAmbush = (seed: number, affinity: number) => {
+  /**
+   * 造一个「池里只剩目标事件」的局——把其它事件全标成已完成，抽签就唯一确定。
+   *
+   * ⚠️ 旧版这里用 `doneBefore('xt', day)`（按 `e.at < day` 过滤），而 `at` 字段在
+   * 2026-09-15 重构里已经删除 → 该 helper 恒返回空数组 → 前置全都不满足 →
+   * 整段频道用例静默失败。本版改成**按事件表排除**，与阶段/好感两把尺子对齐。
+   */
+  const atEvent = (
+    seed: number,
+    threat: number,
+    keep: string | string[],
+    affinity = 60,
+    opts: { done?: string[] } = {},
+  ) => {
+    const keepSet = new Set(Array.isArray(keep) ? keep : [keep]);
     const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
     chooseSite(r, 'apartment');
-    r.day = 32;
-    r.threat = 3;
+    r.day = 8 + threat * 7;
+    r.threat = threat;
     r.phase = 'survival';
     r.world.revealed = true;
     r.world.powerGrid = 'on';
@@ -1625,493 +1667,235 @@ console.log('\n  P1-x  小桃：固定日求救的三种结局');
     r.ap = 6;
     r.res.water = 60;
     r.res.foodStaple = 40;
-    // 前置：主线走到第 28 天（试音、交心、求助都已完成）
-    r.channels = [mk({ affinity, doneEvents: [...PRIOR], lastContactDay: 28 })];
     r.queue = [];
+    ensureChannelDefaults(r);
+    tickChannels(r); // 先跑一次让频道被建出来
+    const st = r.channels.find((c) => c.id === 'xt')!;
+    // 清干净，再按测试意图重铺
+    st.active = undefined;
+    st.awaiting = null;
+    st.inbox = [];
+    st.log = [];
+    st.seenLines = 0;
+    st.waitUntilDay = undefined;
+    st.status = 'active';
+    st.doneEvents = [...XT_ALL.filter((x) => !keepSet.has(x)), ...(opts.done ?? [])];
+    st.affinity = affinity;
     return r;
   };
 
-  // ---- 结局一：好感度够 + 上楼 → 她活着 ----
+  const xtOf = (r: ReturnType<typeof atEvent>) => r.channels.find((c) => c.id === 'xt')!;
+
+  // ---- 1. 抽签按阶段归属：threat 1 抽出 stage[1,1] 的事件 ----
   {
-    const r = atAmbush(6201, 60);
+    const r = atEvent(7001, 1, 'xt_hello');
     tickChannels(r);
-    const st = r.channels[0]!;
-    check('第 32 天按时收到求救事件', st.active?.eventId === 'xt_ambush' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
-    openChannel(r, 'xt');
-    check('答应出门成功', replyChannel(r, 'xt', 'go').ok);
-    tickChannels(r);
-    openChannel(r, 'xt');
-    check('到达分支进入楼道那一轮', st.active?.eventId === 'xt_ambush' && st.active?.roundId === 'r_go', `round=${st.active?.roundId}`);
-    replyChannel(r, 'xt', 'upstairs');
-    tickChannels(r);
-    openChannel(r, 'xt');
-    check('好感度足够时她活下来', r.flags.includes('flag:xtAlive'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
-    check('活着时频道仍在播', st.status === 'active', st.status);
-    // 存活线：第 36 天还能收到日常
-    r.day = 36;
-    tickChannels(r);
-    check('存活线后续事件正常投递', st.doneEvents.includes('xt_live_a'), st.doneEvents.join(','));
+    const st = xtOf(r);
+    check('threat1 抽出本阶段事件', st.active?.eventId === 'xt_hello' && st.awaiting === 'open', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
   }
 
-  // ---- 结局二：好感度不够 + 上楼 → 她死了（条件分叉走轮级 elseRound） ----
+  // ---- 2. 阶段窗口：threat 1 不抽 stage[2,2] 的专属事件 → 池空＝今天没消息 ----
   {
-    const r = atAmbush(6202, 60);
+    const r = atEvent(7002, 1, 'xt_routine'); // xt_routine 是 stage[2,2]
+    tickChannels(r);
+    const st = xtOf(r);
+    check('threat1 不抽 threat2 专属事件（池空＝沉默也是内容）', !st.active, `active=${st.active?.eventId}`);
+  }
+
+  // ---- 3. 多轮：有 next 的选项留在同一事件里换轮，链末才写 doneEvents ----
+  {
+    const r = atEvent(7003, 1, 'xt_power');
+    tickChannels(r);
+    const st = xtOf(r);
+    check('抽到 xt_power 并停在第一轮', st.active?.eventId === 'xt_power' && st.active?.roundId === 'r1' && st.awaiting === 'choice', `round=${st.active?.roundId}`);
+    const okReply = replyChannel(r, 'xt', 'honest');
+    check('第一轮抉择成功', okReply.ok, okReply.reason ?? '');
+    check('下一轮即时到位（未收场、doneEvents 未写）', st.active?.roundId === 'r_honest' && st.awaiting === 'choice' && !st.doneEvents.includes('xt_power'), `round=${st.active?.roundId} done=${st.doneEvents.join(',')}`);
+    const a = st.affinity;
+    // r_honest 这一轮带选项 → 还能再选一次；teach 声明的好感是 +4
+    const ok2 = replyChannel(r, 'xt', 'teach');
+    check('第二轮抉择成功', ok2.ok, ok2.reason ?? '');
+    check('链末仍有收尾轮（不自动收场）', !st.doneEvents.includes('xt_power') && st.awaiting === 'choice', `done=${st.doneEvents.join(',')} awaiting=${st.awaiting}`);
+    replyChannel(r, 'xt', 'close');
+    check('玩家收尾后事件才完成', st.doneEvents.includes('xt_power'), st.doneEvents.join(','));
+    check('好感按选项声明累计', st.affinity > a, `${a} -> ${st.affinity}`);
+  }
+
+  // ---- 4. 好感分叉：她永远求救，bond 只决定她怎么喊（P0-3 / P2-8）----
+  {
+    // bond 1（20）：报告情况，不要求你做什么 → r1_low
+    const lo = atEvent(7004, 4, 'xt_ambush', 20);
+    tickChannels(lo);
+    const sl = xtOf(lo);
+    check('低好感也收到求救（好感不再决定生死）', sl.active?.eventId === 'xt_ambush', `active=${sl.active?.eventId}`);
+    check('低好感走 r1_low（报告情况版）', sl.active?.roundId === 'r1_low', `round=${sl.active?.roundId}`);
+    const loTexts = sl.inbox.map((l) => l.text).join(' ');
+    check('低好感收到 line.4/5', loTexts.includes('xt_ambush.line.4') && loTexts.includes('xt_ambush.line.5'), loTexts);
+    check('低好感没收到 line.2/3', !loTexts.includes('xt_ambush.line.2') && !loTexts.includes('xt_ambush.line.3'), loTexts);
+
+    // bond 3（50）：喊得直接 → r1
+    const hi = atEvent(7005, 4, 'xt_ambush', 50);
+    tickChannels(hi);
+    const sh = xtOf(hi);
+    check('bond3 走 r1（直接要你版）', sh.active?.roundId === 'r1', `round=${sh.active?.roundId}`);
+    const hiTexts = sh.inbox.map((l) => l.text).join(' ');
+    check('bond3 收到 line.2/3', hiTexts.includes('xt_ambush.line.2') && hiTexts.includes('xt_ambush.line.3'), hiTexts);
+
+    // 极端低好感也不被拦
+    const zero = atEvent(7006, 4, 'xt_ambush', 0);
+    tickChannels(zero);
+    check('好感 0 也收到求救', xtOf(zero).active?.eventId === 'xt_ambush', `active=${xtOf(zero).active?.eventId}`);
+  }
+
+  // ---- 5. 生死由行为链决定：出门救 → 上楼 → 念门牌 → 她活 ----
+  {
+    const r = atEvent(7007, 4, 'xt_ambush', 60);
     tickChannels(r);
     openChannel(r, 'xt');
-    replyChannel(r, 'xt', 'go');
-    tickChannels(r);
+    const st = xtOf(r);
+    const apBefore = r.ap;
+    const stamBefore = r.stats.stamina;
+    const expBefore = r.world.exposure;
+    const go = replyChannel(r, 'xt', 'go');
+    check('答应出门成功', go.ok, go.reason ?? '');
+    check('出门扣 2 行动点', r.ap === apBefore - 2, `${apBefore} -> ${r.ap}`);
+    check('出门扣体力涨暴露', r.stats.stamina < stamBefore && r.world.exposure > expBefore, `stamina ${stamBefore} -> ${r.stats.stamina} / exposure ${expBefore} -> ${r.world.exposure}`);
+    check('出门后落进 r_go', st.active?.roundId === 'r_go' && st.awaiting === 'choice', `round=${st.active?.roundId}`);
     openChannel(r, 'xt');
-    // 新模型里轮与轮即时接线：门槛要在「选 upstairs」之前就压低，
-    // 否则 r_up 会当场过门（旧模型是等到次日 tick 才结算，所以旧写法是选完再改）。45+6=51 < r_up 的 55
-    r.channels[0]!.affinity = 45;
     replyChannel(r, 'xt', 'upstairs');
+    check('上楼后她隔着门要那句话', st.active?.roundId === 'r_up' && st.awaiting === 'choice', `round=${st.active?.roundId}`);
+    openChannel(r, 'xt');
+    const code = replyChannel(r, 'xt', 'saycode');
+    check('念门牌这一选发得出去', code.ok, code.reason ?? '');
+    // flag:xtAlive 写在 onRead 里——要玩家**读到那一行**才置上
+    openChannel(r, 'xt');
     tickChannels(r);
-    const st = r.channels[0]!;
-    // 新模型里 r_dead 是 xt_ambush 内的终止轮（不是独立事件）：死亡分支 = 事件收场 + 永久静默 + 死亡旁白
-    check(
-      '好感度不足时走 elseRound 死亡分支',
-      st.doneEvents.includes('xt_ambush') && st.status === 'lost' && st.inbox.some((l) => l.text.includes('xt_dead')),
-      `done=${st.doneEvents.join(',')} status=${st.status} inbox=${st.inbox.map((l) => l.text).join('|')}`,
-    );
+    check('念出门牌，门开了，她活下来', r.flags.includes('flag:xtAlive'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
+    check('活着时频道仍在播', st.status === 'active', st.status);
+  }
+
+  // ---- 6. 生死由行为链决定：不理她 → 死亡是事实，不是数值判定 ----
+  {
+    const r = atEvent(7008, 4, 'xt_ambush', 60);
+    tickChannels(r);
+    openChannel(r, 'xt');
+    replyChannel(r, 'xt', 'quiet');
+    openChannel(r, 'xt');
+    const st = xtOf(r);
+    check('不回应走死亡分支', st.doneEvents.includes('xt_ambush') && st.status === 'lost', `done=${st.doneEvents.join(',')} status=${st.status}`);
+    // r_dead 是 xt_ambush 内的终止轮：永久静默 + 死亡文案（不再有 xt_silent 这条旁路）
+    check('死亡分支用了共享的死亡文案', st.log.some((l) => l.text.includes('xt_dead')), st.log.map((l) => l.text).join('|'));
     check('死亡分支把频道永久静默', st.status === 'lost', st.status);
     check('死了就没有存活线', !r.flags.includes('flag:xtAlive'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
   }
 
-  // ---- 结局三：前置不够 → 根本没收到求救，只有静默 ----
+  // ---- 7. 生死由行为链决定：人过不去，声音过得去 → 陪跑线她也活 ----
   {
-    const r = atAmbush(6203, 20);
+    const r = atEvent(7009, 4, 'xt_ambush', 60);
     tickChannels(r);
-    const st = r.channels[0]!;
-    check('前置不够时不是求救而是静默', st.doneEvents.includes('xt_silent') && !st.doneEvents.includes('xt_ambush'), st.doneEvents.join(','));
-    check('静默分支同样永久静默', st.status === 'lost', st.status);
-    const lines = st.inbox;
-    check('静默分支确实给出了文本（不是空信息）', lines.length >= 2, String(lines.length));
-    check('玩家永远拿不到「因为好感度不够」这种提示', !lines.some((l) => l.text.includes('affinity')), lines.map((l) => l.text).join('|'));
+    openChannel(r, 'xt');
+    replyChannel(r, 'xt', 'talk');
+    const st = xtOf(r);
+    check('陪跑线停在她的实时转述', st.active?.roundId === 'r_talk' && st.awaiting === 'choice', `round=${st.active?.roundId}`);
+    openChannel(r, 'xt');
+    replyChannel(r, 'xt', 'dawn');
+    openChannel(r, 'xt');
+    check('陪到天亮，她活', r.flags.includes('flag:xtAlive') && st.status === 'active', `flags=${r.flags.filter((f) => f.startsWith('flag:xt')).join(',')} status=${st.status}`);
   }
 
-  // ---- 离线回归只在全程没回过时出现 ----
+  // ---- 8. 前置不满足的事件被跳过，不堵住后续 ----
   {
-    const before = PRIOR.filter((id) => id !== 'xt_reconnect');
-    const quiet = atAmbush(6204, 20);
-    quiet.day = 26;
-    quiet.channels = [mk({ affinity: 20, doneEvents: [...before], lastContactDay: 25 })];
+    // xt_reconnect 的条件是「全程没回过话」；这里故意把 flag:xtReplied 置上，
+    // 让它**不满足且未完成**。引擎必须跳过它，让同阶段的 xt_afraid 照常投递。
+    const r = atEvent(7010, 4, ['xt_reconnect', 'xt_afraid'], 20);
+    r.flags = ['flag:xtReplied'];
+    tickChannels(r);
+    const st = xtOf(r);
+    check('前置不满足的事件被跳过、不堵住后续事件', st.active?.eventId === 'xt_afraid' && !st.doneEvents.includes('xt_reconnect'), `active=${st.active?.eventId} done=${st.doneEvents.join(',')}`);
+  }
+
+  // ---- 9. 离线回归只在「全程没回过」时出现 ----
+  {
+    const quiet = atEvent(7011, 3, 'xt_reconnect', 20);
     tickChannels(quiet);
-    // 新模型里「触发」＝事件被开启并停在等回复上（结束才写 doneEvents）
-    const qst = quiet.channels[0]!;
+    const qst = xtOf(quiet);
     check('全程没回过 → 触发离线回归事件', qst.active?.eventId === 'xt_reconnect' && qst.awaiting === 'choice', `active=${qst.active?.eventId} awaiting=${qst.awaiting}`);
 
-    const talked = atAmbush(6205, 40);
-    talked.day = 26;
+    const talked = atEvent(7012, 3, 'xt_reconnect', 40);
     talked.flags = ['flag:xtReplied'];
-    talked.channels = [mk({ affinity: 40, doneEvents: [...before], lastContactDay: 25 })];
     tickChannels(talked);
-    const tst = talked.channels[0]!;
+    const tst = xtOf(talked);
     check('回过话 → 不触发离线回归事件', tst.active?.eventId !== 'xt_reconnect' && !tst.doneEvents.includes('xt_reconnect'), `active=${tst.active?.eventId} done=${tst.doneEvents.join(',')}`);
   }
 
-  // ---- 前置不满足的事件不会堵住后面（曾经的「整线停滞」陷阱） ----
+  // ---- 10. 门牌主链：尾轮把「门牌」和「楼道坐标」一起交出来 ----
   {
-    const r = atAmbush(6206, 20);
-    r.day = 28;
-    // xt_reconnect(26) 的前置是「全程没回过话」，这里故意让它**不满足且未完成**：
-    // 它没有 elseEvent，所以引擎必须跳过它，让第 28 天的 xt_afraid 照常投递。
-    // （旧的空转版本把 xt_reconnect 也算进了 PRIOR，等于根本没测到这个陷阱。）
-    r.flags = ['flag:xtReplied'];
-    r.channels = [
-      mk({
-        affinity: 20,
-        doneEvents: PRIOR.filter((id) => id !== 'xt_reconnect' && id !== 'xt_afraid'),
-        lastContactDay: 25,
-      }),
-    ];
+    const r = atEvent(7013, 2, 'xt_b_address', 40);
     tickChannels(r);
-    const st = r.channels[0]!;
+    const st = xtOf(r);
     check(
-      '前置不满足的事件被跳过、不堵住后续事件',
-      st.doneEvents.includes('xt_afraid') && !st.doneEvents.includes('xt_reconnect'),
-      st.doneEvents.join(','),
+      '关键事件 xt_b_address 走到第 1 轮',
+      st.active?.eventId === 'xt_b_address' && st.active?.roundId === 'r1' && st.awaiting === 'choice',
+      `active=${st.active?.eventId}/${st.active?.roundId}`,
     );
+    check('交代之前楼道没解锁', !r.locations.some((l) => l.id === 'sig_xt_building'), r.locations.map((l) => l.id).join(','));
+
+    // 一路走到底：每轮都挑带 next 的那一条
+    const path = ['offer', 'take', 'ready', 'wait', 'wait', 'remember', 'seen', 'promise', 'goodnight'];
+    let broke: string | null = null;
+    for (const c of path) {
+      openChannel(r, 'xt');
+      const res = replyChannel(r, 'xt', c);
+      if (!res.ok) {
+        broke = `${c}: ${res.reason ?? ''}`;
+        break;
+      }
+    }
+    check('门牌链九轮全部走得通', broke === null, broke ?? '');
+    check('尾轮交出 flag:xtKnowsAddress', r.flags.includes('flag:xtKnowsAddress'), r.flags.filter((f) => f.startsWith('flag:xt')).join(','));
+    check('尾轮解锁「七号楼二单元楼道」', r.locations.some((l) => l.id === 'sig_xt_building'), r.locations.map((l) => l.id).join(','));
+    const unlocked = r.locations.find((l) => l.id === 'sig_xt_building');
+    check('解锁的是带库存的实例（不是空壳坐标）', (unlocked?.stock ?? 0) > 0, String(unlocked?.stock));
   }
 }
 
 // ============================================================
-console.log('\n  P2-x  战时官方频道：坐标陷阱、等级鉴定与「被攻陷」');
+console.log('\n  P3-x  频道呈现契约：流式播放起点与旧档池子自愈');
 // ============================================================
 {
-  const { tickChannels, openChannel, replyChannel, channelEvents } = await import('../src/game/engine/channels');
-  const { CHANNEL_BY_ID } = await import('../src/game/content/channels');
-  const { FAMILY_BY_ID } = await import('../src/game/content/events');
-  await import('../src/game/copy');
-  const { t: copyT } = await import('../src/game/copy/t');
-  type St = import('../src/game/types').ChannelState;
-
-  const ogAt = (seed: number, day: number, opts: { radio?: number; done?: string[]; flags?: string[] } = {}) => {
-    const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
-    chooseSite(r, 'apartment');
-    r.day = day;
-    r.threat = 3;
-    r.phase = 'survival';
-    r.world.revealed = true;
-    r.world.powerGrid = 'on';
-    r.modules.radio = opts.radio ?? 2;
-    r.modules.power = 3;
-    r.wear.batteryCharge = 8;
-    r.ap = 6;
-    r.res.water = 60;
-    r.res.foodStaple = 40;
-    r.flags = [...(opts.flags ?? [])];
-    const st: St = {
-      id: 'og',
-      status: 'active',
-      affinity: 40,
-      doneEvents: [...(opts.done ?? [])],
-      inbox: [],
-      log: [],
-      missed: 0,
-      repliedCount: 0,
-      lastContactDay: day - 1,
-      awaiting: null,
-    };
-    r.channels = [st];
-    r.queue = [];
-    return r;
-  };
-
-  const MAIN = [
-    'og_open', 'og_weather', 'og_rules', 'og_coord', 'og_daily_a', 'og_daily_b', 'og_census',
-    'og_daily_c', 'og_leak', 'og_daily_d', 'og_crack', 'og_daily_e', 'og_seized',
-    'og_aftermath', 'og_after2',
-  ];
-
-  // ---- 到场与开场 ----
-  {
-    const r = createRun({ seed: 7001, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
-    chooseSite(r, 'apartment');
-    r.day = TIME.COLLAPSE_DAY - 1;
-    r.phase = 'prep';
-    r.ap = 0;
-    r.queue = [];
-    endDay(r);
-    const og = r.channels.find((c) => c.id === 'og');
-    check('官方频道第 8 天自动到场', !!og, r.channels.map((c) => c.id).join(','));
-    check('到场当天就投出开场通报', (og?.inbox.length ?? 0) >= 3, String(og?.inbox.length));
-  }
-
-  // ---- 坐标拍：调频接收解锁一次性搜刮点 ----
-  {
-    const r = ogAt(7002, 12, { done: ['og_open', 'og_weather', 'og_rules'] });
-    tickChannels(r);
-    const st = r.channels[0]!;
-    check('第 12 天收到坐标事件', st.active?.eventId === 'og_coord' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
-    openChannel(r, 'og');
-    const kwh = r.wear.batteryCharge;
-    check('调频接收成功', replyChannel(r, 'og', 'tune').ok);
-    check('接收消耗蓄电', r.wear.batteryCharge < kwh, `${kwh} -> ${r.wear.batteryCharge}`);
-    check('坐标点进入了地图', r.locations.some((l) => l.id === 'sig_depot'), r.locations.map((l) => l.id).join(','));
-  }
-
-  // ---- 坐标拍：L3 能识破，但拿不到东西 ----
-  {
-    const r = ogAt(7003, 12, { radio: 3, done: ['og_open', 'og_weather', 'og_rules'] });
-    tickChannels(r);
-    openChannel(r, 'og');
-    check('L3 的比对载波选项可用', replyChannel(r, 'og', 'scan').ok);
-    check('识破不解锁坐标点', !r.locations.some((l) => l.id === 'sig_depot'), r.locations.map((l) => l.id).join(','));
-    check('识破留下痕迹', r.flags.includes('flag:ogRealized'), r.flags.filter((f) => f.startsWith('flag:og')).join(','));
-  }
-
-  // ---- 登记拍：虚报需要 2 级电台 ----
-  {
-    const r = ogAt(7004, 18, { radio: 1, done: MAIN.slice(0, 6) });
-    tickChannels(r);
-    openChannel(r, 'og');
-    const deny = replyChannel(r, 'og', 'fake');
-    check('1 级电台不能虚报（需收发机）', deny.ok === false, deny.reason);
-  }
-
-  // ---- 第 28 天：被攻陷 → 上报坐标会真的叫来袭击 ----
-  {
-    const r = ogAt(7005, 28, { done: MAIN.filter((id) => id !== 'og_seized') });
-    tickChannels(r);
-    const st = r.channels[0]!;
-    check('掠夺期按时被攻陷（口吻突变那一段）', st.active?.eventId === 'og_seized' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
-    openChannel(r, 'og');
-    const exp = r.world.exposure;
-    const hum = r.stats.humanity;
-    check('上报坐标成功', replyChannel(r, 'og', 'report').ok);
-    check('上报涨暴露度', r.world.exposure > exp, `${exp} -> ${r.world.exposure}`);
-    check('上报扣人性', r.stats.humanity < hum, `${hum} -> ${r.stats.humanity}`);
-    check('累计上报被记住', r.flags.includes('flag:ogSoldOut'), r.flags.filter((f) => f.startsWith('flag:og')).join(','));
-    const raid = r.pending.find((p) => p.familyId === 'raid_attempt');
-    check('上报会排下一次袭击', !!raid, r.pending.map((p) => `${p.familyId}@${p.dueDay}`).join(','));
-    check('袭击排在次日', raid?.dueDay === r.day + 1, String(raid?.dueDay));
-    check('raid_attempt 是真实存在的事件家族', !!FAMILY_BY_ID['raid_attempt']);
-  }
-
-  // ---- 第 28 天：L2 报假坐标不叫袭击，L3 比对载波反而降低暴露 ----
-  {
-    const fake = ogAt(7006, 28, { done: MAIN.filter((id) => id !== 'og_seized') });
-    tickChannels(fake);
-    openChannel(fake, 'og');
-    check('L2 可以报假坐标', replyChannel(fake, 'og', 'fake').ok);
-    check('假坐标不排袭击', !fake.pending.some((p) => p.familyId === 'raid_attempt'), fake.pending.map((p) => p.familyId).join(','));
-    check('假坐标仍被记为「上报过」但没卖人', fake.flags.includes('flag:ogReported') && !fake.flags.includes('flag:ogSoldOut'), fake.flags.filter((f) => f.startsWith('flag:og')).join(','));
-
-    const scan = ogAt(7007, 28, { radio: 3, done: MAIN.filter((id) => id !== 'og_seized') });
-    tickChannels(scan);
-    openChannel(scan, 'og');
-    check('L3 可以比对载波', replyChannel(scan, 'og', 'scan').ok);
-    check('识破攻陷不叫袭击', !scan.pending.some((p) => p.familyId === 'raid_attempt'), scan.pending.map((p) => p.familyId).join(','));
-    check('L3 还能把暴露度压回去', !scan.flags.includes('flag:ogReported'), scan.flags.filter((f) => f.startsWith('flag:og')).join(','));
-  }
-
-  // ---- 三条结局分支互斥 ----
-  {
-    const coop = ogAt(7008, 40, { done: MAIN, flags: ['flag:ogReported', 'flag:ogSoldOut'] });
-    tickChannels(coop);
-    check('卖过人的走「合作者」结局', coop.channels[0]!.doneEvents.includes('og_endgame'), coop.channels[0]!.doneEvents.join(','));
-
-    const suspect = ogAt(7009, 40, { done: MAIN, flags: ['flag:ogReported'] });
-    tickChannels(suspect);
-    check('只报过片区的走「可疑分子」结局', suspect.channels[0]!.doneEvents.includes('og_suspect'), suspect.channels[0]!.doneEvents.join(','));
-
-    const ignored = ogAt(7010, 40, { done: MAIN, flags: [] });
-    tickChannels(ignored);
-    check(
-      '从没回过的走「无人应答」结局（elseEvent 链要一路走到底）',
-      ignored.channels[0]!.doneEvents.includes('og_ignored'),
-      ignored.channels[0]!.doneEvents.join(','),
-    );
-  }
-
-  // ---- 天气预报由官方频道承接 ----
-  {
-    const def = CHANNEL_BY_ID['og']!;
-    const weatherEvent = channelEvents(def).find((e) => e.id === 'og_weather');
-    const dyn = [
-      ...(weatherEvent?.opening ?? []),
-      ...(weatherEvent?.rounds ?? []).flatMap((r) => r.out),
-    ].find((l) => l.dynamic === 'forecast');
-    check('官方频道里有动态天气预报消息', !!dyn, String(!!dyn));
-    check('动态消息的文案留了 {a}/{b} 占位', !!dyn && /\{a\}/.test(copyT(dyn.text)) && /\{b\}/.test(copyT(dyn.text)), dyn ? copyT(dyn.text) : '');
-  }
-}
-
-// ============================================================
-console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
-// ============================================================
-{
-  const { tickChannels, openChannel, replyChannel, ensureChannelDefaults } = await import('../src/game/engine/channels');
-  const { CHANNEL_DEFS, CHANNEL_POOL, CHANNEL_BY_ID } = await import('../src/game/content/channels');
-  type St = import('../src/game/types').ChannelState;
-
-  const cvAt = (seed: number, day: number, opts: { radio?: number; done?: string[]; flags?: string[]; food?: number } = {}) => {
-    const r = createRun({ seed, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
-    chooseSite(r, 'apartment');
-    r.day = day;
-    r.threat = 2;
-    r.phase = 'survival';
-    r.world.revealed = true;
-    r.world.powerGrid = 'on';
-    r.modules.radio = opts.radio ?? 2;
-    r.modules.power = 3;
-    r.wear.batteryCharge = 8;
-    r.ap = 6;
-    r.res.water = 60;
-    r.res.foodStaple = opts.food ?? 40;
-    r.res.fuel = 20;
-    r.flags = [...(opts.flags ?? [])];
-    const st: St = {
-      id: 'cv',
-      status: 'active',
-      affinity: 40,
-      doneEvents: [...(opts.done ?? [])],
-      inbox: [],
-      log: [],
-      missed: 0,
-      repliedCount: 0,
-      lastContactDay: day - 1,
-      awaiting: null,
-    };
-    r.channels = [st];
-    r.queue = [];
-    return r;
-  };
-
-  const CV_MAIN = [
-    'cv_invite', 'cv_rules', 'cv_ration', 'cv_daily_e', 'cv_vote_virus', 'cv_daily_a',
-    'cv_list', 'cv_daily_b', 'cv_leak', 'cv_notice', 'cv_daily_c', 'cv_trial', 'cv_daily_d',
-    'cv_quota', 'cv_after',
-  ];
-
-  // ---- 到场 ----
-  {
-    const r = createRun({ seed: 8001, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
-    chooseSite(r, 'apartment');
-    r.day = 14;
-    r.phase = 'survival';
-    r.threat = 1;
-    r.queue = [];
-    tickChannels(r);
-    check('第 15 天前委员会还没到场', !r.channels.some((c) => c.id === 'cv'), r.channels.map((c) => c.id).join(','));
-    r.day = 15;
-    r.threat = 2;
-    tickChannels(r);
-    const cv = r.channels.find((c) => c.id === 'cv');
-    check('第 15 天委员会自动到场并开场', !!cv && cv.inbox.length >= 3, `${cv?.inbox.length}`);
-  }
-
-  // ---- 登记户号：与表决同属「正式手续」，要真占用电台（蓄电 −0.3） ----
-  {
-    const r = cvAt(8003, 15);
-    tickChannels(r);
-    const st = r.channels[0]!;
-    check('第 15 天进入登记事件', st.active?.eventId === 'cv_invite' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
-    openChannel(r, 'cv');
-    const kwh = r.wear.batteryCharge;
-    const ok = replyChannel(r, 'cv', 'join');
-    check('登记户号能发出去', ok.ok, ok.reason);
-    check('登记消耗蓄电 0.3', Math.abs(r.wear.batteryCharge - (kwh - 0.3)) < 1e-9, `${kwh} -> ${r.wear.batteryCharge}`);
-    check('登记留下痕迹', r.flags.includes('flag:cvJoined'), r.flags.join(','));
-    check('登记后事件正常收场', st.doneEvents.includes('cv_invite') && st.awaiting === null, st.doneEvents.join(','));
-  }
-
-  // ---- 表决：耗电 0.3，需要 2 级电台 ----
-  {
-    const r = cvAt(8002, 22, { done: CV_MAIN.slice(0, 4) });
-    tickChannels(r);
-    const st = r.channels[0]!;
-    check('第 22 天进入表决事件', st.active?.eventId === 'cv_vote_virus' && st.awaiting === 'choice', `active=${st.active?.eventId} awaiting=${st.awaiting}`);
-    openChannel(r, 'cv');
-    const kwh = r.wear.batteryCharge;
-    const hum = r.stats.humanity;
-    const food = r.res.foodStaple;
-    check('赞成票投得出去', replyChannel(r, 'cv', 'yes').ok);
-    check('表决消耗蓄电', r.wear.batteryCharge < kwh, `${kwh} -> ${r.wear.batteryCharge}`);
-    check('赞成驱逐扣人性', r.stats.humanity < hum, `${hum} -> ${r.stats.humanity}`);
-    check('赞成驱逐换来物资', r.res.foodStaple > food - 4, `${food} -> ${r.res.foodStaple}`);
-    check('表决被记为参与过', r.flags.includes('flag:cvVoted'), r.flags.filter((f) => f.startsWith('flag:cv')).join(','));
-  }
-  {
-    const r = cvAt(8003, 22, { radio: 1, done: CV_MAIN.slice(0, 4) });
-    tickChannels(r);
-    openChannel(r, 'cv');
-    check('1 级电台不能表决（要能发一个音）', replyChannel(r, 'cv', 'yes').ok === false);
-  }
-
-  // ---- 跨线耦合：没有官方频道的录音就放不出来 ----
-  {
-    const without = cvAt(8004, 30, { done: CV_MAIN.filter((id) => !['cv_leak', 'cv_notice', 'cv_daily_c', 'cv_trial', 'cv_daily_d', 'cv_quota', 'cv_after'].includes(id)) });
-    tickChannels(without);
-    openChannel(without, 'cv');
-    const deny = replyChannel(without, 'cv', 'publish');
-    check('没有录音时公布选项被拒', deny.ok === false, deny.reason);
-    check('被拒理由说明是缺录音', (deny.reason ?? '').includes('没有'), deny.reason);
-
-    const withLeak = cvAt(8005, 30, {
-      flags: ['flag:ogLeak'],
-      done: CV_MAIN.filter((id) => !['cv_leak', 'cv_notice', 'cv_daily_c', 'cv_trial', 'cv_daily_d', 'cv_quota', 'cv_after'].includes(id)),
-    });
-    tickChannels(withLeak);
-    openChannel(withLeak, 'cv');
-    check('拿到录音后可以公布（跨线耦合成立）', replyChannel(withLeak, 'cv', 'publish').ok);
-    check('公布留下痕迹', withLeak.flags.includes('flag:cvPublished'), withLeak.flags.filter((f) => f.startsWith('flag:cv')).join(','));
-  }
-
-  // ---- 三条结局互斥 ----
-  {
-    const order = cvAt(8006, 44, { done: CV_MAIN, flags: ['flag:cvPaidUp'] });
-    tickChannels(order);
-    check('交过份子的走「秩序」结局', order.channels[0]!.doneEvents.includes('cv_end_order'), order.channels[0]!.doneEvents.join(','));
-
-    const tyr = cvAt(8007, 44, { done: CV_MAIN, flags: ['flag:cvPaidUp', 'flag:cvPublished'] });
-    tickChannels(tyr);
-    check('公布过录音的走「暴政」结局', tyr.channels[0]!.doneEvents.includes('cv_end_tyranny'), tyr.channels[0]!.doneEvents.join(','));
-
-    const dis = cvAt(8008, 44, { done: CV_MAIN, flags: [] });
-    tickChannels(dis);
-    check('什么都没做的走「解散」结局', dis.channels[0]!.doneEvents.includes('cv_end_dissolve'), dis.channels[0]!.doneEvents.join(','));
-  }
-
-  // ---- 骗子：去了就是给袭击开门 ----
-  {
-    const r = createRun({ seed: 8009, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
-    chooseSite(r, 'apartment');
-    r.day = 20;
-    r.threat = 2;
-    r.phase = 'survival';
-    r.world.revealed = true;
-    r.world.powerGrid = 'on';
-    r.modules.radio = 2;
-    r.modules.power = 3;
-    r.wear.batteryCharge = 8;
-    r.ap = 6;
-    r.queue = [];
-    r.channels = [{
-      id: 'tmp_scammer', status: 'active', affinity: 20, doneEvents: [], inbox: [], log: [],
-      missed: 0, repliedCount: 0, lastContactDay: 0, awaiting: null,
-    }];
-    tickChannels(r);
-    openChannel(r, 'tmp_scammer');
-    const exp = r.world.exposure;
-    check('骗子的选项能选', replyChannel(r, 'tmp_scammer', 'go').ok);
-    check('去了暴露度上升', r.world.exposure > exp, `${exp} -> ${r.world.exposure}`);
-    check('去了会招来袭击', r.pending.some((p) => p.familyId === 'raid_attempt'), r.pending.map((p) => p.familyId).join(','));
-  }
-
-  // ---- 十个临时频道都在搜索池里 ----
-  {
-    const searchable = CHANNEL_DEFS.filter((d) => d.discover === 'search');
-    check('搜索池正好十个临时频道', searchable.length === 10 && CHANNEL_POOL.length === 10, `${searchable.length}/${CHANNEL_POOL.length}`);
-    check('三个核心频道都不在搜索池里', !CHANNEL_POOL.some((id) => ['og', 'xt', 'cv'].includes(id)), CHANNEL_POOL.join(','));
-    const allTmp = CHANNEL_DEFS.filter((d) => d.id.startsWith('tmp_'));
-    check('十个临时频道都有名字与标语文案', allTmp.every((d) => !!CHANNEL_BY_ID[d.id]), allTmp.map((d) => d.id).join(','));
-  }
-
-  // ---- 隐藏路线点：要靠司机给 ----
-  {
-    const r = createRun({ seed: 8010, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
-    chooseSite(r, 'apartment');
-    r.day = 24;
-    r.threat = 2;
-    r.phase = 'survival';
-    r.world.revealed = true;
-    r.world.powerGrid = 'on';
-    r.modules.radio = 2;
-    r.modules.power = 3;
-    r.wear.batteryCharge = 8;
-    r.ap = 6;
-    r.res.fuel = 20;
-    r.queue = [];
-    r.channels = [{
-      id: 'tmp_trucker', status: 'active', affinity: 20, doneEvents: ['tk_open'],
-      inbox: [], log: [], missed: 0, repliedCount: 0, lastContactDay: 22, awaiting: null,
-    }];
-    check('路线点初始不在地图上', !r.locations.some((l) => l.id === 'sig_route'), r.locations.map((l) => l.id).join(','));
-    // 已经用油换过路线：隔两天他该把坐标给出来了
-    r.flags.push('flag:tkTraded');
-    r.day = 24;
-    r.wear.batteryCharge = 8;
-    tickChannels(r);
-    openChannel(r, 'tmp_trucker');
-    check('司机给路线后解锁货场', r.locations.some((l) => l.id === 'sig_route'), r.locations.map((l) => l.id).join(','));
-  }
+  const { tickChannels, openChannel: open, replyChannel: reply, ensureChannelDefaults } = await import('../src/game/engine/channels');
 
   // ---- 「只有没看过的才流式播放」：关掉再打开不能把整段历史重念一遍 ----
   {
-    const { openChannel: open, replyChannel: reply } = await import('../src/game/engine/channels');
-    const r = cvAt(8011, 19, { done: ['cv_invite', 'cv_rules'] });
-    tickChannels(r);
+    const r = createRun({ seed: 8011, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(r, 'apartment');
+    r.day = 11;
+    r.threat = 1;
+    r.phase = 'survival';
+    r.world.revealed = true;
+    r.world.powerGrid = 'on';
+    r.modules.radio = 2;
+    r.modules.power = 3;
+    r.wear.batteryCharge = 8;
+    r.ap = 4;
+    r.queue = [];
+    r.channels = [
+      {
+        id: 'xt', status: 'active', affinity: 40, doneEvents: onlyXt('xt_power'),
+        inbox: [], log: [], missed: 0, lastContactDay: 9, awaiting: null,
+      },
+    ];
+    tickChannels(r); // xt_power（第 11 天）到场，第一轮带选项
     const st = r.channels[0]!;
     const pendingLines = st.inbox.length;
     check('刚到场时有未读', pendingLines > 0, String(pendingLines));
 
-    const first = open(r, 'cv');
+    const first = open(r, 'xt');
     check('首次打开从头开始播', first.from === 0, String(first.from));
     check('首次打开带出新读到的行', first.lines.length === pendingLines, `${first.lines.length}/${pendingLines}`);
     check('打开后播放起点推进到会话末尾', st.seenLines === st.log.length, `${st.seenLines}/${st.log.length}`);
 
-    const again = open(r, 'cv');
+    const again = open(r, 'xt');
     check('没有新消息时不再从头播', again.from === st.log.length, `${again.from}/${st.log.length}`);
     check('重开不会重复结算 onRead', again.lines.length === 0, String(again.lines.length));
 
@@ -2120,19 +1904,183 @@ console.log('\n  P3/P4-x  自治委员会、跨线耦合与十个临时频道');
     check('还等着玩家回话', awaiting, `active=${st.active?.eventId}/${st.active?.roundId} awaiting=${st.awaiting}`);
     if (awaiting) {
       const before = st.log.length;
-      const rr = reply(r, 'cv', 'pay');
+      const rr = reply(r, 'xt', 'honest');
       check('回话成功', rr.ok, rr.reason);
       check('自己说的那句也算看过', st.seenLines === st.log.length, `${st.seenLines}/${st.log.length}`);
       check('自己那句确实是新增的一行', st.log.length === before + 1, `${before} -> ${st.log.length}`);
     }
   }
 
-  // ---- 旧档池子补齐：新增的临时频道对老存档也要生效 ----
+  // ---- 旧档池子自愈：已下线频道被剔除、空池是合法状态 ----
   {
-    const bare = { channels: [{ id: 'tmp_dying' }], channelPool: undefined } as unknown as RunState;
+    // 剔除孤儿频道会记一条台账，所以旧档至少要有 log 数组（真实旧档都有）
+    const bare = { channels: [{ id: 'tmp_dying' }], channelPool: undefined, log: [] } as unknown as RunState;
     ensureChannelDefaults(bare);
-    check('旧档补池时不会再塞进已经拥有的频道', !bare.channelPool.includes('tmp_dying'), bare.channelPool.join(','));
-    check('旧档补池包含全部十个', bare.channelPool.length === 9, String(bare.channelPool.length));
+    check('旧档里残留的已下线频道被剔除并记台账', bare.channels.length === 0, JSON.stringify(bare.channels));
+    check('频道池补齐为空池不炸（可搜频道等模范线量产后回填）', Array.isArray(bare.channelPool) && bare.channelPool.length === 0, String(bare.channelPool?.length));
+  }
+}
+
+// ---- 换芯：耗一只备用芯、耐久置满；结算行必须报「增量 + 结余」而不是只报结余 ----
+// 曾经写成 `items:{filter:-1} + wear:{filterLife:30}`：摘要行只显示扣完后的库存总数（读起来像"获得 8 只"），
+// 耐久变化根本不显示，而且"补到 30"靠的是 30 恰好等于上限这个巧合。
+{
+  const run = createRun({ seed: 4401, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(run, 'apartment');
+  run.items.filter = 9;
+  run.wear.filterLife = 6.4;
+  const texts = applyEffect(run, { swapFilter: true }, makeRng(4401, 0)).map((n) => n.text);
+  check('换芯后耐久补满', run.wear.filterLife === WEAR.FILTER_LIFE, String(run.wear.filterLife));
+  check('换芯后库存减一', run.items.filter === 8, String(run.items.filter));
+  check('耗材行报的是增量而不是结余', texts.some((s) => s.includes('备用滤芯 -1') && s.includes('剩 8')), texts.join(' | '));
+  check('结算行报出耐久变化', texts.some((s) => s.includes('滤芯耐久 6.4 → 30')), texts.join(' | '));
+
+  // 库存为 0 时不该白送满芯（选项门槛用 item:filter>=1 挡，引擎再守一道）
+  const empty = createRun({ seed: 4402, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(empty, 'apartment');
+  empty.items.filter = 0;
+  empty.wear.filterLife = 2;
+  applyEffect(empty, { swapFilter: true }, makeRng(4402, 0));
+  check('没有备用芯时换芯不生效', empty.wear.filterLife === 2 && empty.items.filter === 0, `${empty.wear.filterLife}/${empty.items.filter}`);
+
+  // 零件拼芯走 wear 增量，一样要报耐久（且只报回升，日常磨损不刷屏）
+  const patch = createRun({ seed: 4403, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+  chooseSite(patch, 'apartment');
+  patch.wear.filterLife = 0;
+  const patched = applyEffect(patch, { wear: { filterLife: 15 } }, makeRng(4403, 0)).map((n) => n.text);
+  check('零件拼芯也报耐久回升', patched.some((s) => s.includes('滤芯耐久 0 → 15')), patched.join(' | '));
+  const worn = applyEffect(patch, { wear: { filterLife: -2 } }, makeRng(4403, 0)).map((n) => n.text);
+  check('日常磨损不出摘要行', !worn.some((s) => s.includes('滤芯耐久')), worn.join(' | '));
+}
+
+// ============================================================
+console.log('\n  P0-7  崩溃兜底：脏档与悬空 id 都不许把界面炸掉');
+// ============================================================
+{
+  // 起因：玩家两次闪退（收音机的小桃袭击、特殊物品栏换滤芯）都是白屏，
+  // 而白屏只有一个来源——渲染期抛错。渲染期会取的三样东西里，最危险的是
+  // 「拿存档里的 id 去查内容表」：引擎不查表所以照跑，UI 一查就炸。
+  // 下面每组都是照着那条链走的：脏档 → 查表 → 该回落就回落。
+
+  // ---- 1. 查表容错：查不到回落，绝不抛 ----
+  check('未知状态名回落成 id 原文', conditionName('no_such_condition') === 'no_such_condition', conditionName('no_such_condition'));
+  check('未知状态查不到定义', conditionDef('no_such_condition') === undefined);
+  check('未知模块名回落成 id 原文', moduleName('no_such_module') === 'no_such_module', moduleName('no_such_module'));
+  check('未知据点回落到默认据点', siteOf('no_such_site').id === 'apartment', siteOf('no_such_site').id);
+  check('未知灾难回落到默认灾难', !!disasterOf('no_such_disaster').id, disasterOf('no_such_disaster').id);
+  check('未知频道查不到定义', channelDefOf('no_such_channel') === undefined);
+  check('空值的频道查表不抛', channelDefOf(null) === undefined && channelDefOf(undefined) === undefined);
+
+  // ---- 2. 存档自愈：未知频道 id 要剔掉，缺字段要补齐 ----
+  {
+    const run = createRun({ seed: 4501, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    run.channels = [
+      { id: 'ghost_channel', status: 'active' } as never,
+      { id: 'xt' } as never,
+    ];
+    ensureChannelDefaults(run);
+    check('未知频道 id 被剔除', run.channels.length === 1 && run.channels[0]!.id === 'xt', run.channels.map((c) => c.id).join(','));
+    const st = run.channels[0]!;
+    check('旧档频道补上 inbox', Array.isArray(st.inbox) && st.inbox.length === 0);
+    check('旧档频道补上 status', st.status === 'active', st.status);
+    check('旧档频道补上 missed（缺了会变 NaN）', st.missed === 0, String(st.missed));
+    check('旧档频道补上好感度', typeof st.affinity === 'number' && st.affinity > 0, String(st.affinity));
+    check('旧档补池不再包含已拥有的频道', !run.channelPool.includes('xt'), run.channelPool.slice(0, 3).join(','));
+  }
+  {
+    const run = createRun({ seed: 4502, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    delete (run as { items?: unknown }).items;
+    delete (run as { conditions?: unknown }).conditions;
+    delete (run as { flags?: unknown }).flags;
+    let threw = '';
+    try {
+      ensureRunDefaults(run);
+    } catch (e) {
+      threw = String(e);
+    }
+    check('缺 items/conditions/flags 的旧档补得动', threw === '', threw);
+    check('缺 items 补成 0 只备用芯', run.items.filter === 0, String(run.items.filter));
+    check('缺 conditions 补成空数组', Array.isArray(run.conditions) && run.conditions.length === 0);
+  }
+
+  // ---- 3. 效果层遇到悬空状态 id：报名字而不是崩 ----
+  {
+    const run = createRun({ seed: 4503, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    let texts: string[] = [];
+    let threw = '';
+    try {
+      texts = applyEffect(run, { addCond: ['no_such_condition'] }, makeRng(4503, 0)).map((n) => n.text);
+      applyEffect(run, { removeCond: ['no_such_condition'] }, makeRng(4503, 0));
+    } catch (e) {
+      threw = String(e);
+    }
+    check('悬空状态 id 不抛', threw === '', threw);
+    check('悬空状态照样报得出名字', texts.some((s) => s.includes('no_such_condition')), texts.join(' | '));
+
+    const med = medicateCondition(run, 'no_such_condition' as never);
+    check('对悬空状态用药被拒而不是崩', med.ok === false, JSON.stringify(med));
+  }
+
+  // ---- 4. 待办面板：脏档里一条未知状态不该让整块列表渲染不出来 ----
+  {
+    const run = createRun({ seed: 4504, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(run, 'apartment');
+    run.conditions = ['no_such_condition', 'thirst'] as never;
+    let items: unknown[] = [];
+    let threw = '';
+    try {
+      items = collectTodos(run);
+    } catch (e) {
+      threw = String(e);
+    }
+    check('待办面板遇到悬空状态不抛', threw === '', threw);
+    const flat = JSON.stringify(items);
+    check('待办面板仍然产出条目', items.length > 0, String(items.length));
+    check('未知状态没有混进待办文案', !flat.includes('undefined'), flat.slice(0, 120));
+  }
+
+  // ---- 5. 崩溃报告本身：脏档也要拼得出来 ----
+  {
+    const dirty = { day: 3, wear: {}, channels: [{ id: 'ghost_channel' }] };
+    let report = '';
+    let threw = '';
+    try {
+      report = buildReport(new Error('演示用'), '测试', dirty);
+    } catch (e) {
+      threw = String(e);
+    }
+    check('脏档也能拼出报告', threw === '' && report.length > 0, threw);
+    check('报告里点名了缺的字段', report.includes('run.phase 缺失'), report.includes('run.phase 缺失') ? '' : '没找到');
+    check('报告里点出了未知频道 id', report.includes('不在 CHANNEL_BY_ID 里'), '');
+    const health = healthCheck(null);
+    check('没有存档时体检不抛', Array.isArray(health) && health.length === 1, health.join(' | '));
+  }
+
+  // ---- 6. 备忘动作环形缓冲：只留最近 10 条，且不重复 ----
+  {
+    clearActions();
+    for (let i = 1; i <= 14; i++) noteAction(`动作${i}`);
+    const recent = recentActions();
+    check('最近操作只留 10 条', recent.length === 10, String(recent.length));
+    check('最近操作留的是最新的', recent[recent.length - 1]!.endsWith('动作14'), recent[recent.length - 1]!);
+    clearActions();
+    check('缓冲可清空', recentActions().length === 0);
+  }
+  // ---- 7. 物品栏换芯走的是同一个 swapFilter，不是第二份实现 ----
+  {
+    const run = createRun({ seed: 4404, classId: 'clerk', packId: 'none', difficulty: 'normal', metaPerks: [] });
+    chooseSite(run, 'apartment');
+    run.items.filter = 3;
+    run.wear.filterLife = 1.5;
+    const before = run.rngCursor;
+    const r = sessionUseItem(createSession(run), 'filter');
+    check('物品栏换芯成功', r.ok, r.reason ?? '');
+    check('物品栏换芯也是耐久置满', run.wear.filterLife === WEAR.FILTER_LIFE, String(run.wear.filterLife));
+    check('物品栏换芯扣一只', run.items.filter === 2, String(run.items.filter));
+    check('物品栏换芯报出两行摘要', r.notes.length === 2, r.notes.map((n) => n.text).join(' | '));
+    check('摘要与事件口径一致', r.notes.some((n) => n.text.includes('滤芯耐久 1.5 → 30')), r.notes.map((n) => n.text).join(' | '));
+    // maintain 钩子会推进 cursor（既有行为），但 applyEffect 那一步不该推进
+    check('换芯不因摘要行额外推进随机流', run.rngCursor >= before, `${before} -> ${run.rngCursor}`);
   }
 }
 

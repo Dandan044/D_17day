@@ -4,8 +4,8 @@
  */
 
 import { COLD } from '../balance';
-import { SITE_BY_ID } from '../content/sites';
 import type { HeatMode, IndoorBand, RunState, WeatherId } from '../types';
+import { siteOf } from '../content/lookup';
 
 /** 产水天气：雨雪与黑雨。落灰不算。 */
 export const PRECIP_WEATHER: WeatherId[] = ['rain', 'storm', 'flooding', 'snow', 'blizzard', 'blackRain'];
@@ -54,14 +54,14 @@ export function insulateLevel(run: RunState): number {
 
 export function leakRate(run: RunState): number {
   let k = COLD.LEAK[insulateLevel(run)] ?? COLD.LEAK[0]!;
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   if (site.tags.includes('site:drafty')) k += COLD.DRAFTY_LEAK;
   if (site.tags.includes('site:elevated')) k += COLD.ELEVATED_LEAK;
   return Math.min(0.95, k);
 }
 
 export function thermalSink(run: RunState, outdoor: number): number {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   if (site.tags.includes('site:underground')) return COLD.GROUND_TEMP;
   return outdoor;
 }

@@ -10,7 +10,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { CHANNEL } from '../game/balance';
-import { CHANNEL_BY_ID } from '../game/content/channels';
+import { CHANNEL_BY_ID, CHANNEL_POOL } from '../game/content/channels';
 import { t } from '../game/copy/t';
 import { activeEvent, activeRound, bondOf, channelUnread } from '../game/engine/channels';
 import { checkRequirement, deriveFacts, effectiveModule } from '../game/engine/tags';
@@ -68,7 +68,16 @@ export function RadioPanel({ run }: { run: RunState }) {
   const [playFrom, setPlayFrom] = useState(0);
   const [playKey, setPlayKey] = useState(0);
 
-  const channels = run.channels;
+  /**
+   * 只渲染**查得到定义**的频道。
+   *
+   * `run.channels` 是存档里的数组：内容侧删掉一个频道后，旧档会留下一条
+   * `CHANNEL_BY_ID` 查不到的记录。下面两处 `CHANNEL_BY_ID[id]` 都在渲染期，
+   * 一旦 undefined 取 `.kind` 就是整页白屏。`ensureChannelDefaults` 会在动作入口
+   * 清掉它们，但从载入到第一次动作之间仍有窗口，所以渲染侧再兜一层。
+   * 用 useMemo 稳住引用：这个数组是下面那个 effect 的依赖，每次新建会白跑一遍。
+   */
+  const channels = useMemo(() => run.channels.filter((c) => c && CHANNEL_BY_ID[c.id]), [run.channels]);
   const active = channels.find((c) => c.id === sel) ?? channels[0] ?? null;
 
   // 首次打开时落到「有未读的那个」频段——第一眼应该是有人在跟你说话。
@@ -233,12 +242,16 @@ const ChannelList = memo(function ChannelList({
           <ChannelRow key={c.id} st={c} def={CHANNEL_BY_ID[c.id]!} on={c.id === sel} onClick={() => onPick(c.id)} />
         ))}
       </div>
-      <div className="border-t border-line p-2.5">
-        <button className="btn btn-ghost w-full py-1.5 text-[12px]" disabled={notice !== null} onClick={onSearch}>
-          {t('channels.ui.search')}
-        </button>
-        <div className="mt-1.5 text-center text-[10.5px] text-faint">{notice ?? t('channels.ui.searchCost')}</div>
-      </div>
+      {/* 频道池为空时整块隐藏：白扣 0.4 kWh 的空转搜索不给玩家。
+          模范线定稿后按标杆量产出可搜频道，池子非空这里自动回来 */}
+      {CHANNEL_POOL.length > 0 && (
+        <div className="border-t border-line p-2.5">
+          <button className="btn btn-ghost w-full py-1.5 text-[12px]" disabled={notice !== null} onClick={onSearch}>
+            {t('channels.ui.search')}
+          </button>
+          <div className="mt-1.5 text-center text-[10.5px] text-faint">{notice ?? t('channels.ui.searchCost')}</div>
+        </div>
+      )}
     </div>
   );
 });
@@ -339,11 +352,14 @@ function ChatSession({
               const req = checkRequirement(c.requires, run, facts);
               // requires.reason 在频道内容里是文案键（没走事件层 hydrate），要过 t()
               // 1 级电台已能收发、发送也不再耗电——这里只剩「内容自身的高等级门槛」。
-              const reason = !req.ok ? t(req.reason ?? '') : null;
+              // 电量门槛走 kwh 字段（选择前明示、不足禁选），与引擎 replyChannel 的闸同源。
+              const kwhShort = c.kwh !== undefined && c.kwh > 0 && (run.wear.batteryCharge ?? 0) < c.kwh;
+              const reason = !req.ok ? t(req.reason ?? '') : kwhShort ? t('channels.err.noPower') : null;
+              const noteVars = c.kwh !== undefined && c.kwh > 0 ? { kwh: String(c.kwh) } : undefined;
               return (
                 <button key={c.id} className="ch-opt" disabled={reason !== null} onClick={() => onPick(c.id)}>
                   <span>{t(c.label)}</span>
-                  <span className="ch-opt-cost">{reason ?? (c.note ? t(c.note) : '')}</span>
+                  <span className="ch-opt-cost">{reason ?? (c.note ? t(c.note, noteVars) : '')}</span>
                 </button>
               );
             })}
@@ -444,7 +460,8 @@ function ChatLog({
   return (
     <div ref={boxRef} className="min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
       <StaticLog lines={lines.slice(0, done)} vars={vars} />
-      {partial && <Bubble line={lines[partial.i]!} text={partial.text} typing />}
+      {/* 带下标访问要验一下：会话行数被封顶裁剪过，流式途中的下标可能已经越界 */}
+      {partial && lines[partial.i] && <Bubble line={lines[partial.i]} text={partial.text} typing />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { NUCLEAR_WINTER, RAD, TIME } from '../../game/balance';
+import { RAD, TIME } from '../../game/balance';
 import { TIER_NAMES } from '../../game/copy/names';
 import { t } from '../../game/copy/t';
 import { exposureTier } from '../../game/engine/exposure';
@@ -15,7 +15,7 @@ import { cachedPower } from '../derived';
 import { Chip } from '../kit';
 import { ArtCutout, ArtSceneFrame } from './ArtHotspot';
 import { ArtStatusHud } from './ArtStatusHud';
-import { ART, CUT_HOME, HOME_POLY, HUD_BOX, HUD_SILL, SHELF_BOX, SHELF_POLY, WIN_PANES, hideBrokenImg, shelfStateSrc, shelfTier, windowArt, type WindowStage } from './skin';
+import { ART, CUT_HOME, HOME_POLY, HUD_BOX, HUD_SILL, SHELF_BOX, SHELF_POLY, WIN_PANES, hideBrokenImg, shelfStateSrc, shelfTier, windowArt, windowStageOf } from './skin';
 import './art.css';
 
 type View = 'desk' | 'side';
@@ -81,11 +81,13 @@ export default function ArtGame() {
   if (!run) return null;
 
   const isPrep = run.day < TIME.COLLAPSE_DAY;
-  // 窗景阶段：灾前 / 灾变早期（threat 1-3）/ 核冬天（threat ≥ NUCLEAR_WINTER.THREAT_PHASE）。
-  const winStage: WindowStage = isPrep ? 'prep' : run.threat >= NUCLEAR_WINTER.THREAT_PHASE ? 'winter' : 'early';
+  // 窗景阶段：灾前 / 灾变早期（threat 1-3）/ 核冬天（threat ≥ THREAT_PHASE）。
+  // 与「窗户」浮层的景深底共用同一个函数——浮层里是同一扇窗看到的同一片天。
+  const winStage = windowStageOf(run);
+  // 暴露度档位：窗口热点的光晕色、待办标签、窗台那颗 chip 三处共用，算一次。
+  const expTier = exposureTier(run.world.exposure);
   const mustRead = run.queue.length > 0;
-  // 准备期没有频道，这个数在准备期恒为 0（浮层也仍走情报板）
-  const radioUnread = isPrep ? 0 : run.channels.reduce((n, c) => n + c.inbox.length, 0);
+  // 灾后电台入口已下线，未读数不再用于渲染（2026-09-18）。
   const noAp = run.ap <= 0;
   const indoorNow = currentIndoor(run);
   const power = cachedPower(run);
@@ -181,10 +183,20 @@ export default function ArtGame() {
               </div>
             ))}
           </div>
-          {/* 窗抠图是纯装饰层（天气洞的遮罩），无交互：不作为 button 渲染，不出光晕轮廓。 */}
-          <div className="art-decor" style={CUT_HOME.window} aria-hidden>
-            <img src={ART.cutHWindow} alt="" decoding="async" onError={hideBrokenImg} />
-          </div>
+          {/* 窗户：那个「天气洞」的遮罩同时也是暴露度面板的入口。
+              不传 poly —— HOME_POLY 里没有 window 这一环，走矩形命中兜底；
+              再加 hitFill，因为抠图在玻璃处是透明的，默认的 visiblePainted 会让点玻璃没反应。 */}
+          <ArtCutout
+            {...CUT_HOME.window}
+            src={ART.cutHWindow}
+            hitFill
+            label={t('ui.window.title')}
+            sub={isPrep ? t('ui.window.subPrep') : TIER_NAMES[expTier]}
+            pulse={!locked && expTier >= 2}
+            tier={expTier >= 4 ? 'red' : expTier >= 2 ? 'orange' : undefined}
+            locked={locked}
+            onClick={() => act(() => setOverlay('window'))}
+          />
           <ArtCutout
             {...CUT_HOME.blueprint}
             poly={HOME_POLY.blueprint}
@@ -225,17 +237,18 @@ export default function ArtGame() {
               ))}
             </div>
           </div>
-          <ArtCutout
-            {...CUT_HOME.radio}
-            poly={HOME_POLY.radio}
-            src={ART.cutHRadio}
-            label={isPrep ? t('ui.game.intelPrep') : t('ui.game.intelLive')}
-            sub={radioUnread > 0 ? t('ui.game.intelUnread', { n: radioUnread }) : undefined}
-            // 频道有未读就脉冲：否则玩家永远不知道那一头有人在说话
-            pulse={radioUnread > 0}
-            locked={locked}
-            onClick={() => act(() => setOverlay('intel'))}
-          />
+          {/* 灾后电台功能整体下线（2026-09-18）：灾后不再渲染这台收音机的热点。
+              准备期保留——那是七天倒计时里的基础功能（听广播）。 */}
+          {isPrep && (
+            <ArtCutout
+              {...CUT_HOME.radio}
+              poly={HOME_POLY.radio}
+              src={ART.cutHRadio}
+              label={t('ui.game.intelPrep')}
+              locked={locked}
+              onClick={() => act(() => setOverlay('intel'))}
+            />
+          )}
           <div className="art-hud art-hud-sill" style={HUD_SILL}>
             <span>
               {WEATHER_NAME[run.world.weather]} · {t('ui.game.outdoor', { out: run.world.temperature, in: indoorNow })}
@@ -244,9 +257,8 @@ export default function ArtGame() {
             {(!isPrep || run.world.exposure > 0) && (
               <span className="art-hud-sill-chips">
                 {run.world.exposure > 0 && (
-                  <Chip tone={EXPOSURE_TONES[exposureTier(run.world.exposure)]}>
-                    {t('ui.game.exposure')} {Math.round(run.world.exposure)} ·{' '}
-                    {TIER_NAMES[exposureTier(run.world.exposure)]}
+                  <Chip tone={EXPOSURE_TONES[expTier]}>
+                    {t('ui.game.exposure')} {Math.round(run.world.exposure)} · {TIER_NAMES[expTier]}
                   </Chip>
                 )}
                 <Chip>{t('ui.common.threatLv', { n: run.threat })}</Chip>

@@ -1,12 +1,9 @@
 import { memo, useEffect, useState, type CSSProperties } from 'react';
 
 import { COLD, CURE, RAD, TIME } from '../game/balance';
-import { CONDITION_BY_ID } from '../game/content/conditions';
-import { DISASTER_BY_ID } from '../game/content/disasters';
 import { RES_NAME, RES_UNIT } from '../game/copy/names';
 import { t } from '../game/copy/t';
 import { MODULES } from '../game/content/modules';
-import { SITE_BY_ID } from '../game/content/sites';
 import { canElectricHeat, canFuelHeat, comfortTemp, currentIndoor, heatCostMult, heatSliderMax, survivalTemp } from '../game/engine/climate';
 import { dailyNeeds } from '../game/engine/economy';
 import { dailyExposure, exposureTier, TIER_DESC, TIER_NAMES } from '../game/engine/exposure';
@@ -20,6 +17,7 @@ import type { ModuleId, ResourceId, RunState } from '../game/types';
 import EventCard from './EventCard';
 import { cachedPower, cachedTonightHeat } from './derived';
 import { Bar, Chip, Gauge, HelpHint, Panel, SectionLabel, Stat } from './kit';
+import { conditionDef, conditionName, disasterOf, moduleDef, siteOf } from '../game/content/lookup';
 
 /** 暴露度分档配色（0 无人注意 → 4 被猎捕），与经典侧 ExposurePanel 保持一致 */
 const EXPOSURE_TONES = ['good', 'info', 'warn', 'bad', 'bad'] as const;
@@ -73,9 +71,9 @@ export default memo(function Game() {
 
 function DayHeader({ run }: { run: RunState }) {
   const isPrep = run.day < TIME.COLLAPSE_DAY;
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const indoorNow = currentIndoor(run);
-  const disaster = DISASTER_BY_ID[run.world.disaster];
+  const disaster = disasterOf(run.world.disaster);
   const shield = radiationShield(run);
   const tol = RAD.SHIELD_TOLERANCE[shield] ?? RAD.SHIELD_TOLERANCE[0]!;
   const power = cachedPower(run);
@@ -232,7 +230,11 @@ export function BodyPanel({ run }: { run: RunState }) {
           </div>
           <div className="space-y-1.5">
             {run.conditions.map((c) => {
-              const def = CONDITION_BY_ID[c];
+              // 这一块在顶栏里，**每次渲染都要过一遍**，而 run.conditions 是存档里的字符串。
+              // 旧档里留着一条已被删掉的状态 id 时，下面第一行 `def.needsMedbay` 就会抛错，
+              // React 会卸掉整棵树 —— 玩家看到的就是白屏。所以查不到就跳过这一条。
+              const def = conditionDef(c);
+              if (!def) return null;
               const immune = isImmuneNow(run, c);
               const chance = cureChanceOf(run, c); // null = 条件型
               const medicated = run.medicated?.includes(c) ?? false;
@@ -245,10 +247,10 @@ export function BodyPanel({ run }: { run: RunState }) {
               const worsenHint =
                 worsenAt !== undefined
                   ? age >= worsenAt
-                    ? t('ui.game.worsenNow', {
-                        age,
-                        name: CONDITION_BY_ID[def.worsen!.into]?.name ?? def.worsen!.into,
-                      })
+                      ? t('ui.game.worsenNow', {
+                          age,
+                          name: conditionName(def.worsen!.into),
+                        })
                     : t('ui.game.worsenLater', { age, left: worsenAt - age })
                   : '';
               const debuffParts: string[] = [];
@@ -597,8 +599,7 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
     run.projects.length > 0 ||
     (run.wear.filterLife <= 0 && (run.modules.filter > 0 || run.modules.airFilter > 0));
 
-  // 准备期没有频道，所以这个数在准备期恒为 0（浮层也仍走情报板）
-  const radioUnread = isPrep ? 0 : run.channels.reduce((n, c) => n + c.inbox.length, 0);
+  // 灾后电台入口已下线，未读数不再用于渲染（2026-09-18）。
 
   const actions = [
     {
@@ -616,19 +617,19 @@ function ActionsPanel({ run, isPrep }: { run: RunState; isPrep: boolean }) {
       onClick: () => setOverlay('shelter'),
       pulse: shelterNeedsAttention,
     },
-    {
-      id: 'intel',
-      title: isPrep ? t('ui.game.intelPrep') : t('ui.game.intelLive'),
-      desc: isPrep
-        ? t('ui.game.intelPrepDesc')
-        : radioUnread > 0
-          ? t('ui.game.intelLiveUnread', { n: radioUnread })
-          : t('ui.game.intelLiveDesc'),
-      ap: 0,
-      onClick: () => setOverlay('intel'),
-      // 频道有未读时脉冲提醒：否则玩家永远不知道那一头有人在说话
-      pulse: radioUnread > 0,
-    },
+    // 灾后电台功能整体下线（2026-09-18）：入口按钮不再出现。
+    // 底层的频道数据仍在静默推进（见 construction.ts 同批注释），只是玩家到不了。
+    ...(isPrep
+      ? [
+          {
+            id: 'intel',
+            title: t('ui.game.intelPrep'),
+            desc: t('ui.game.intelPrepDesc'),
+            ap: 0,
+            onClick: () => setOverlay('intel'),
+          },
+        ]
+      : []),
     {
       id: 'rest',
       title: t('ui.game.rest'),
@@ -810,7 +811,11 @@ function ShelterSummary({ run }: { run: RunState }) {
         <div className="mt-3 border-t border-line pt-2">
           <SectionLabel>{t('ui.game.queue')}</SectionLabel>
           {run.projects.map((p) => {
-            const def = MODULES.find((m) => m.id === p.moduleId)!;
+            // 工程列表是**存档里的数据**：内容侧换过模块 id 之后，旧档里会留下
+            // 查不到的 moduleId。这里原本是 `find(...)!` + `def.name`，
+            // 一个 undefined 就能把整个建造面板连根拔掉（React 卸树 = 白屏）。
+            const def = moduleDef(p.moduleId);
+            if (!def) return null;
             const pct = p.laborTotal > 0 ? (p.laborDone / p.laborTotal) * 100 : 0;
             return (
               <div key={p.moduleId} className="mb-1.5">

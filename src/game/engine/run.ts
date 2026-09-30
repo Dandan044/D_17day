@@ -6,7 +6,6 @@ import { AP, BANK, COLD, DIRECTOR, INTEL, POWER, START_RES, START_STATS, TIME, W
 import { t } from '../copy/t';
 import { CHANNEL_POOL } from '../content/channels';
 import { CLASS_BY_ID, PACK_BY_ID } from '../content/classes';
-import { DISASTER_BY_ID } from '../content/disasters';
 import { FAMILY_BY_ID } from '../content/events';
 import { INTEL_POOL } from '../content/intel';
 import { LOCATIONS } from '../content/locations';
@@ -45,6 +44,7 @@ import {
   tickPrepEconomy,
   tickSurvivalPressures,
 } from './world';
+import { disasterOf } from '../content/lookup';
 
 export type { LedgerNote, LedgerTone } from './ledger';
 export { ledger } from './ledger';
@@ -444,7 +444,7 @@ export function endDay(run: RunState): NightReport {
 export function acknowledgeCollapse(run: RunState): void {
   const rng = makeRng(run.seed, run.rngCursor);
   run.phase = 'survival';
-  const def = DISASTER_BY_ID[run.world.disaster];
+  const def = disasterOf(run.world.disaster);
   addLog(run, def.reveal.split('\n')[0] ?? def.revealTitle, 'grim');
 
   const forced: string[] = [];
@@ -562,6 +562,25 @@ export function resolveChoice(
   // 救助-袭击联动：门口确实打了一架且已击退，'修门框'收尾照常出现（waitFor 含 raidRepelled）
   if (familyId === 'raid_aided_repel') {
     emitHook(run, 'raidRepelled', rng);
+  }
+
+  // 多轮对话：选完不结案，改写队列条目的 variantId 进入同家族下一拍。
+  // 事件卡按 (familyId, variantId) 渲染，切换即翻页，呈现零改动。
+  // emitHook('choice') 与 recordBeat 只在链末发射——多轮中途发射会提前点燃
+  // waitFor:'choice' 的 pending 链、并把节奏记重。单轮内容没有 next，行为零变化。
+  if (choice.next) {
+    const nextVariant = family.variants.find((v) => v.id === choice.next);
+    const entry = nextVariant
+      ? run.queue.find((q) => q.familyId === familyId && q.variantId === variantId)
+      : undefined;
+    if (nextVariant && entry) {
+      entry.variantId = choice.next;
+      clampResources(run);
+      run.rngCursor = rng.cursor();
+      return out;
+    }
+    // next 指向不存在的变体 / 队列条目已不在：按内容错误处理，走正常出队，
+    // 不让玩家的局面卡死在一张翻不了页的事件卡上（audit-ids 会在内容期抓这个）。
   }
 
   recordBeat(run, familyId);

@@ -8,13 +8,13 @@
 import { DIFFICULTY, EXPOSURE, RAID } from '../balance';
 import { MODULE_NAME, TIER_DESC, TIER_NAMES } from '../copy/names';
 import { t } from '../copy/t';
-import { SITE_BY_ID } from '../content/sites';
 import type { Rng } from '../rng';
 import type { ResourceId, RunState } from '../types';
 import type { HaulItem } from './economy';
 import { hypoStageOf } from './climate';
 import { deriveFacts, effectiveModule, matchQuery } from './tags';
 import { computePower, loadOnline } from './power';
+import { siteOf } from '../content/lookup';
 
 export { TIER_NAMES, TIER_DESC };
 
@@ -34,7 +34,7 @@ export interface ExposureBreakdown {
 
 /** 今日会累积多少暴露度，以及各来源的明细（直接显示给玩家） */
 export function dailyExposure(run: RunState): ExposureBreakdown {
-  const site = SITE_BY_ID[run.siteId ?? 'apartment'];
+  const site = siteOf(run.siteId);
   const parts: Array<{ label: string; value: number }> = [];
 
   parts.push({ label: t('ledger.exposure.siteBase', { site: site.name }), value: site.exposureBase * 0.25 });

@@ -10,10 +10,15 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint:content": "tsx scripts/lint-content.ts",
+    "check:copy": "tsx scripts/check-ui-copy.ts",
+    "audit:ids": "tsx scripts/audit-ids.ts",
     "dump-copy": "tsx scripts/dump-copy.ts",
     "sim": "tsx scripts/simulate.ts",
     "verify": "tsx scripts/verify.ts",
-    "probe:channels": "tsx scripts/channel-probe.ts"
+    "stress:channels": "tsx scripts/stress-channels.ts",
+    "probe:channels": "tsx scripts/channel-probe.ts",
+    "mk:save": "tsx scripts/mk-save.ts",
+    "preview:body": "esbuild scripts/preview-bodymap.tsx --bundle --platform=node --format=cjs --jsx=automatic --loader:.css=empty --outfile=.preview/body/_bundle.cjs --log-level=warning && node .preview/body/_bundle.cjs && node scripts/shot-file.mjs .preview/body/body.html .preview/body/body.png 1200 1500"
   },
   "license": "ISC",
   "dependencies": {

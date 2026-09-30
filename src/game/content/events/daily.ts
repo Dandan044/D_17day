@@ -242,8 +242,7 @@ beat({
 
             requires: { tags: { all: ['item:filter>=1'] }, reason: '需要一只备用滤芯' },
             effect: {
-              items: { filter: -1 },
-              wear: { filterLife: 30 },
+              swapFilter: true,
 
               tone: 'good',
             },
@@ -1208,7 +1207,7 @@ beat({
           {
             id: 'grim',
 
-            requires: { tags: { all: ['humanity:low'] }, reason: '你还做不到这一步' },
+            requires: { tags: { all: ['humanity:low'] }, reason: '我还做不到这一步' },
             effect: {
               res: { foodFresh: 6 },
               stats: { sanity: -25, humanity: -20 },

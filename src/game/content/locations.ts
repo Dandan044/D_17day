@@ -213,6 +213,24 @@ export const LOCATIONS: Location[] = [
   },
   // ============ 信号点：hidden，靠频道/事件给出坐标后才出现，整局限一次 ============
   {
+    // 小桃家的单元（7 号楼 2 单元）。解锁链：xt_b_address 尾轮念对门牌
+    // → `Effect.locations` 放出这个坐标 + setFlags flag:xtKnowsAddress。
+    // 上楼之后 `visited:sig_xt_building` 进 facts，供后续「交接」类事件取用。
+    id: 'sig_xt_building',
+    name: '七号楼二单元楼道',
+    desc: '她说过的那个单元。门牌上的数字是拿漆自己描过的，描了三遍。',
+    descSurvival: '声控灯早就死了，一路摸着墙上去。四楼那扇门关着，门缝底下没光。门口的旧垫子底下压着一样东西，边角露在外面。',
+    hidden: true,
+    distance: 1,
+    danger: 10,
+    stock: 40,
+    tags: ['loc:ruin'],
+    loot: [
+      { res: 'foodStaple', min: 1, max: 3, chance: 0.5, weight: RES_WEIGHT.foodStaple },
+      { res: 'parts', min: 1, max: 3, chance: 0.4, weight: RES_WEIGHT.parts },
+    ],
+  },
+  {
     id: 'sig_basement',
     name: '七号楼地下室',
     desc: '有人把这里当家住过一阵，然后没能走出去。',

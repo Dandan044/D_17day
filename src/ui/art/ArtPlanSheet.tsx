@@ -13,6 +13,7 @@ import {
 } from '../../game/engine/climate';
 import { dailyNeeds, stockDays } from '../../game/engine/economy';
 import { waterCapacity } from '../../game/engine/tags';
+import { LineFig, SCALE_MAX, SCALE_MIN, THERMO_TICKS, scalePct } from './LineFig';
 import LINEFIG from './linefigLayout.json';
 import {
   LOAD_NAME,
@@ -40,24 +41,9 @@ import { ART } from './skin';
  * 逻辑上必须与经典版逐项等价——尤其滑杆的 draft/commit 防抖与负荷排序的换位基准。
  */
 
-// 温度计刻度**固化**成 -40..+40，但**不再线性**：0~+40 是天天用到的区间（舒适 16°/生存 4°/灾前 18°），
-// 给它最大的间距；0~-40 只在后期核冬天才到，越往下越挤（刻度越密）。于是 0° 被抬到管腔 35% 处，
-// 下半段用一个幂函数压扁。填色 / 刻度线 / 刻度数字 / 生存舒适线 / 两根针**全部**经这一支函数，
-// 天然对齐——不会出现"线、色、针各走各的"。
-const SCALE_MIN = -40;
-const SCALE_MAX = 40;
-const ZERO_PCT = 35; // 0° 落在管腔 35% 高度
-const COLD_POW = 13 / 7; // ≈1.857：使 0° 处上下两段导数相等（1.625 %/°），视觉上不断折
-
-function scalePct(temp: number): number {
-  const t = Math.max(SCALE_MIN, Math.min(SCALE_MAX, temp));
-  if (t >= 0) return ZERO_PCT + (t / SCALE_MAX) * (100 - ZERO_PCT);
-  // (t+40)/40 ∈ [0,1]：0=极寒、1=冰点。指数 >1 → 越靠冰点间距越大、越靠 -40 越密
-  return ZERO_PCT * Math.pow((t - SCALE_MIN) / (0 - SCALE_MIN), COLD_POW);
-}
-
-/** 刻度尺要画的温度点（每 5°），整 10° 为长刻度 */
-const THERMO_TICKS = Array.from({ length: 17 }, (_, i) => SCALE_MIN + i * 5);
+// 温度刻度（SCALE_MIN / SCALE_MAX / scalePct / THERMO_TICKS）与手绘线稿组件都搬去了 ./LineFig：
+// 「清点单」与「过夜温差图」要复用同一套刻度与色块引擎，留在这里就只有本文件能用。
+// 两处温差刻度必须是同一支函数算出来的，否则同一晚的温度在计划表与结算纸上会落在不同高度。
 
 function disasterFactorLabel(id: DisasterId): string | null {
   if (id === 'nuclear') return t('ui.power.factorNuclear');
@@ -65,45 +51,6 @@ function disasterFactorLabel(id: DisasterId): string | null {
   if (id === 'flood') return t('ui.power.factorFlood');
   if (id === 'chemSpill') return t('ui.power.factorChem');
   return null;
-}
-
-/** 线稿 + 「背后垫色块」表示比例。
- *  填充层在下、线稿在上；色块被 mask 裁进形状内部（不裁的话白底让轮廓之外也透明，
- *  颜色会从形状外面渗出来糊成一片）。**父层不带 z-index**——那会形成隔离组让 mask 失效（踩过）。 */
-function LineFig({
-  line,
-  mask,
-  aspect,
-  fills,
-}: {
-  line: string;
-  mask: string;
-  aspect: number;
-  fills: Array<{ from: number; to: number; color: string; clip?: string }>;
-}) {
-  return (
-    <span className="art-pl-linefig" style={{ aspectRatio: String(aspect) }}>
-      {fills.map((f, i) => (
-        <span
-          key={i}
-          className="art-pl-fill"
-          style={
-            {
-              maskImage: `url(${mask})`,
-              WebkitMaskImage: `url(${mask})`,
-              clipPath: f.clip,
-              '--fill-b': `${Math.max(0, Math.min(1, Math.min(f.from, f.to))) * 100}%`,
-              '--fill-h': `${Math.max(0, Math.min(1, Math.abs(f.to - f.from))) * 100}%`,
-              '--fill-c': f.color,
-            } as CSSProperties
-          }
-        >
-          <i />
-        </span>
-      ))}
-      <img className="art-pl-linefig-line" src={line} alt="" />
-    </span>
-  );
 }
 
 /** 供电那两张形状（发电机 / 蓄电池）共用一张线稿，按量出的分割线各填一半，底下各自标名。 */
